@@ -1,112 +1,128 @@
-import { useEffect, useState } from 'react';
-import { Stage, Container, Graphics } from '@pixi/react';
-import { GameBoard } from './components/GameBoard';
-import { SCREEN_WIDTH, SCREEN_HEIGHT, COLORS } from './constants';
+import React, { useEffect, useState } from 'react';
 
 export default function App() {
-  const [scale, setScale] = useState(1);
   const [logs, setLogs] = useState<string[]>([]);
 
-  // --- デバッグログのオーバーライド ---
+  // --- デバッグ機能: Consoleジャック & エラー捕捉 ---
   useEffect(() => {
+    // 既存のコンソール関数を保存
     const originalLog = console.log;
     const originalError = console.error;
 
-    const formatArgs = (args: any[]) => {
-      return args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ');
+    // ログを画面表示用に整形して保存するヘルパー
+    const captureLog = (type: string, args: any[]) => {
+      try {
+        const message = args.map(arg => {
+          if (arg instanceof Error) return `${arg.name}: ${arg.message}\n${arg.stack}`;
+          if (typeof arg === 'object') return JSON.stringify(arg);
+          return String(arg);
+        }).join(' ');
+
+        setLogs(prev => [`[${type}] ${message}`, ...prev].slice(0, 100));
+      } catch (e) {
+        // JSON.stringify等で失敗した場合のフォールバック
+        setLogs(prev => [`[INTERNAL_ERR] Log capture failed`, ...prev]);
+      }
     };
 
+    // console.log を上書き
     console.log = (...args) => {
       originalLog(...args);
-      setLogs(prev => [`[LOG] ${formatArgs(args)}`, ...prev].slice(0, 50));
+      captureLog('LOG', args);
     };
 
+    // console.error を上書き
     console.error = (...args) => {
       originalError(...args);
-      setLogs(prev => [`[ERR] ${formatArgs(args)}`, ...prev].slice(0, 50));
+      captureLog('ERR', args);
     };
 
-    // 初期ログ
-    console.log('App initialized. PixiJS environment ready.');
+    // グローバルな未補足エラーをキャッチ (window.onerror)
+    const handleError = (event: ErrorEvent) => {
+      captureLog('WIN_ERR', [`${event.message} at ${event.filename}:${event.lineno}`]);
+    };
+    window.addEventListener('error', handleError);
+
+    // 起動確認ログ
+    console.log('--- SYSTEM RECOVERY MODE STARTED ---');
+    console.log(`User Agent: ${navigator.userAgent}`);
+    console.log(`Screen Size: ${window.innerWidth}x${window.innerHeight}`);
 
     return () => {
+      // クリーンアップ
       console.log = originalLog;
       console.error = originalError;
+      window.removeEventListener('error', handleError);
     };
-  }, []);
-
-  // --- レスポンシブスケール計算 ---
-  useEffect(() => {
-    const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const ratio = Math.min(w / SCREEN_WIDTH, h / SCREEN_HEIGHT);
-      setScale(ratio);
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   return (
-    <>
-      {/* PixiJS Stage */}
-      <Stage
-        width={SCREEN_WIDTH * scale}
-        height={SCREEN_HEIGHT * scale}
-        options={{
-          background: COLORS.BACKGROUND,
-          antialias: true,
-          resolution: window.devicePixelRatio || 1,
-          autoDensity: true,
-        }}
-      >
-        <Container scale={scale}>
-          {/* 背景描画 */}
-          <Graphics
-            draw={(g) => {
-              g.clear();
-              g.beginFill(COLORS.BACKGROUND);
-              g.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-              g.endFill();
-            }}
-          />
-          {/* ゲームボードコンポーネント */}
-          <GameBoard />
-        </Container>
-      </Stage>
-
-      {/* デバッグオーバーレイ (HTML) */}
+    <div style={{
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: '#000000',
+      color: '#ffffff',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      fontFamily: 'sans-serif',
+      position: 'fixed', // iPhoneでのスクロールバウンス防止
+      top: 0,
+      left: 0
+    }}>
+      {/* メイン表示エリア */}
       <div style={{
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        width: '200px',
-        maxHeight: '150px',
-        overflowY: 'auto',
-        background: 'rgba(0, 0, 0, 0.7)',
-        color: '#0f0',
-        fontSize: '10px',
-        fontFamily: 'monospace',
-        padding: '4px',
-        pointerEvents: 'none', // ゲーム操作を邪魔しないように
-        zIndex: 9999,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all'
+        textAlign: 'center',
+        marginBottom: '20px',
+        padding: '20px',
+        border: '2px solid #fff'
       }}>
-        <div style={{ borderBottom: '1px solid #444', marginBottom: '2px', fontWeight: 'bold' }}>
-          Debug Console
-        </div>
-        {logs.map((log, i) => (
-          <div key={i} style={{ marginBottom: '2px', color: log.startsWith('[ERR]') ? '#f44' : '#0f0' }}>
-            {log}
-          </div>
-        ))}
+        <h1 style={{ margin: 0, fontSize: '24px', color: '#00ff00' }}>
+          SYSTEM RECOVERY MODE
+        </h1>
+        <p style={{ marginTop: '10px', color: '#cccccc' }}>
+          PixiJS and external modules are disabled.
+        </p>
       </div>
-    </>
+
+      {/* 簡易コンソールログ表示エリア */}
+      <div style={{
+        width: '90%',
+        flex: 1,
+        backgroundColor: '#111',
+        border: '1px solid #333',
+        borderRadius: '4px',
+        padding: '10px',
+        overflowY: 'auto',
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all',
+        marginBottom: '20px',
+        boxShadow: 'inset 0 0 10px #000'
+      }}>
+        {logs.length === 0 ? (
+          <div style={{ color: '#555' }}>Waiting for logs...</div>
+        ) : (
+          logs.map((log, index) => {
+            const isError = log.startsWith('[ERR]') || log.startsWith('[WIN_ERR]');
+            return (
+              <div 
+                key={index} 
+                style={{ 
+                  marginBottom: '4px', 
+                  color: isError ? '#ff4444' : '#00ff00',
+                  borderBottom: '1px solid #222'
+                }}
+              >
+                {log}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
