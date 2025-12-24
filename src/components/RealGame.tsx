@@ -1,80 +1,75 @@
 import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
-import { COLORS } from '../constants';
 
-// --- 1. 定数定義 (仕様書 v1.2 準拠) ---
-const LOGICAL_WIDTH = 390;
-const LOGICAL_HEIGHT = 844;
-const CENTER_X = LOGICAL_WIDTH / 2;
+// --- 定数・カラー定義 ---
+const SAFE_AREA_TOP = 44; // iPhone等のノッチ回避
 
-// カードサイズ (固定)
-const STD_W = 46.7;
-const STD_H = 63.3;
-const DON_W = 32.0;
-const DON_H = 43.3; // 修正: Cost/Donエリアで使用する高さ
+const COLORS = {
+  OPPONENT_BG: 0xFFEEEE, // 薄いピンク
+  CONTROL_BG:  0xF0F0F0, // 薄いグレー
+  PLAYER_BG:   0xE6F7FF, // 薄いブルー
+  
+  ZONE_BORDER: 0xAAAAAA,
+  ZONE_FILL:   0xFFFFFF,
+  
+  TEXT_MAIN:   0x333333,
+  BADGE_BG:    0xFF0000,
+  BADGE_TEXT:  0xFFFFFF,
+  
+  PLAYER_ZONE: 0x4488FF,
+  ENEMY_ZONE:  0xFF4444,
+};
 
-// 余白設定
-const GAP_S = 5;
-const GAP_M = 10;
-
-// 色定義
-const THEME = {
-  BG: COLORS?.BACKGROUND || 0x2E8B57,
-  ZONE_BORDER: 0xFFFFFF,
-  ZONE_BG: 0x000000,
-  TEXT: 0xFFFFFF,
-  BADGE_BG: 0xFF0000,
-  BADGE_TEXT: 0xFFFFFF,
-  PLAYER_TINT: 0xAAAAFF, // 自分側 (青系)
-  ENEMY_TINT: 0xFFAAAA,  // 相手側 (赤系)
-  DON_TINT: 0xDDDDDD,
+// ゾーン識別ラベル
+const LABELS = {
+  LEADER: "Leader",
+  STAGE: "Stage",
+  DECK: "Deck",
+  TRASH: "Trash",
+  LIFE: "Life",
+  DON: "Don",
+  COST: "Cost",
 };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const intervalRef = useRef<number | null>(null);
-
-  // レスポンシブ計算用ステート
-  const [dimensions, setDimensions] = useState({ 
-    scale: 1, 
-    left: 0, 
-    top: 0 
+  
+  // 画面リサイズ検知用のState
+  const [windowSize, setWindowSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight
   });
 
-  // --- 2. レスポンシブ計算 (論理座標 390x844 を画面にフィット) ---
+  // --- 1. リサイズ監視 ---
   useEffect(() => {
     const handleResize = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      
-      const scaleW = w / LOGICAL_WIDTH;
-      const scaleH = h / LOGICAL_HEIGHT;
-      const scale = Math.min(scaleW, scaleH);
-
-      const left = (w - LOGICAL_WIDTH * scale) / 2;
-      const top = (h - LOGICAL_HEIGHT * scale) / 2;
-
-      setDimensions({ scale, left, top });
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+      // Pixiのレンダラーもリサイズ
+      if (appRef.current) {
+        appRef.current.renderer.resize(window.innerWidth, window.innerHeight);
+        drawLayout(appRef.current); // レイアウト再描画
+      }
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize();
-
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- 3. PixiJS 初期化 & 盤面構築 ---
+  // --- 2. PixiJS 初期化 ---
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
 
     try {
-      console.log('[PixiJS] Initializing v1.2 Compliant Layout...');
+      console.log('[PixiJS] Initializing Responsive Layout...');
 
       const app = new PIXI.Application({
-        width: LOGICAL_WIDTH,
-        height: LOGICAL_HEIGHT,
-        backgroundColor: THEME.BG,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        backgroundColor: 0xFFFFFF,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
         antialias: true,
@@ -83,268 +78,293 @@ export const RealGame = () => {
       containerRef.current.appendChild(app.view as HTMLCanvasElement);
       appRef.current = app;
 
-      // ---------------------------------------------------------
-      // 🛠 ヘルパー関数
-      // ---------------------------------------------------------
-
-      const createZone = (
-        x: number, 
-        y: number, 
-        w: number, 
-        h: number, 
-        options: { label?: string, tint?: number, alpha?: number } = {}
-      ) => {
-        const container = new PIXI.Container();
-        container.position.set(x, y);
-
-        // 背景と枠線
-        const g = new PIXI.Graphics();
-        const color = options.tint || THEME.ZONE_BORDER;
-        const alpha = options.alpha || 0.2;
-        
-        g.lineStyle(1, color, 0.6);
-        g.beginFill(THEME.ZONE_BG, alpha);
-        g.drawRoundedRect(0, 0, w, h, 4);
-        g.endFill();
-        container.addChild(g);
-
-        // ラベル
-        if (options.label) {
-          const text = new PIXI.Text(options.label, {
-            fontFamily: 'Arial',
-            fontSize: 9, // 少し小さく
-            fill: color,
-            align: 'center',
-          });
-          text.alpha = 0.6;
-          text.anchor.set(0.5);
-          text.position.set(w / 2, h / 2);
-          container.addChild(text);
-        }
-
-        app.stage.addChild(container);
-        return container;
-      };
-
-      const createBadge = (parent: PIXI.Container, count: number, w: number, h: number) => {
-        const badge = new PIXI.Container();
-        const r = 9;
-        badge.position.set(w - r/2 - 2, h - r/2 - 2);
-
-        const bg = new PIXI.Graphics();
-        bg.beginFill(THEME.BADGE_BG);
-        bg.drawCircle(0, 0, r);
-        bg.endFill();
-        badge.addChild(bg);
-
-        const text = new PIXI.Text(count.toString(), {
-          fontFamily: 'Arial',
-          fontSize: 10,
-          fontWeight: 'bold',
-          fill: THEME.BADGE_TEXT,
-        });
-        text.anchor.set(0.5);
-        badge.addChild(text);
-
-        parent.addChild(badge);
-      };
-
-      // ---------------------------------------------------------
-      // 🎨 盤面レイアウト実装 (指示書 v1.2 完全準拠)
-      // ---------------------------------------------------------
-
-      // === Y座標計算 ===
-      // [Player] 下から積み上げ
-      const P_HAND_Y   = LOGICAL_HEIGHT - STD_H - GAP_M; // Row 3 (Bottom)
-      const P_MAIN_Y   = P_HAND_Y - GAP_M - STD_H;       // Row 2 (Leader)
-      const P_BATTLE_Y = P_MAIN_Y - GAP_M - STD_H;       // Row 1 (Battle)
-
-      // [Opponent] 上から配置 (順序修正: Hand -> Main -> Battle)
-      const E_HAND_Y   = GAP_M;                          // Row 1 (Top)
-      const E_MAIN_Y   = E_HAND_Y + STD_H + GAP_M;       // Row 2 (Leader)
-      const E_BATTLE_Y = E_MAIN_Y + STD_H + GAP_M;       // Row 3 (Battle)
-
-      // === X座標計算 (メイン列 - Player基準) ===
-      const LEADER_X = CENTER_X - STD_W / 2;
-      
-      // Player Side X
-      const P_STAGE_X  = LEADER_X + STD_W + GAP_S;
-      const P_DECK_X   = P_STAGE_X + STD_W + GAP_S;
-      const P_TRASH_X  = P_DECK_X + STD_W + GAP_S;
-      
-      const P_LIFE_X     = LEADER_X - STD_W - GAP_S;
-      const P_DON_DECK_X = P_LIFE_X - DON_W - GAP_S;
-      const P_COST_X     = P_DON_DECK_X - DON_W - GAP_S;
-
-      // Opponent Side X (点対称配置 = 左右反転)
-      const E_STAGE_X = LEADER_X - STD_W - GAP_S;
-      const E_DECK_X  = E_STAGE_X - STD_W - GAP_S;
-      const E_TRASH_X = E_DECK_X - STD_W - GAP_S;
-
-      const E_LIFE_X     = LEADER_X + STD_W + GAP_S;
-      const E_DON_DECK_X = E_LIFE_X + STD_W + GAP_S;
-      const E_COST_X     = E_DON_DECK_X + DON_W + GAP_S;
-
-
-      // ==========================================
-      // 🟢 PLAYER SIDE (自分)
-      // ==========================================
-      
-      // 1. Hand Area (7枚並べる)
-      for (let i = 0; i < 7; i++) {
-        createZone(
-          GAP_S + i * (STD_W + GAP_S), 
-          P_HAND_Y, 
-          STD_W, 
-          STD_H, 
-          { label: `Hand ${i+1}`, tint: THEME.PLAYER_TINT }
-        );
-      }
-
-      // 2. Main Row
-      // Cost & Don Deck (小さいカード: DON_Hを使用し、下揃えにする)
-      const OFFSET_Y = STD_H - DON_H;
-
-      // Cost
-      const costZone = createZone(P_COST_X, P_MAIN_Y + OFFSET_Y, DON_W, DON_H, { label: "Cost", tint: THEME.DON_TINT });
-      createBadge(costZone, 0, DON_W, DON_H);
-      
-      // Don Deck
-      const donDeckZone = createZone(P_DON_DECK_X, P_MAIN_Y + OFFSET_Y, DON_W, DON_H, { label: "Don", tint: THEME.DON_TINT });
-      createBadge(donDeckZone, 10, DON_W, DON_H);
-      
-      // Life (Standard Height)
-      const lifeZone = createZone(P_LIFE_X, P_MAIN_Y, STD_W, STD_H, { label: "Life", tint: THEME.PLAYER_TINT });
-      createBadge(lifeZone, 5, STD_W, STD_H);
-      // Leader
-      createZone(LEADER_X, P_MAIN_Y, STD_W, STD_H, { label: "Leader", tint: 0x00FF00 });
-      // Stage
-      createZone(P_STAGE_X, P_MAIN_Y, STD_W, STD_H, { label: "Stage", tint: THEME.PLAYER_TINT });
-      // Deck
-      const deckZone = createZone(P_DECK_X, P_MAIN_Y, STD_W, STD_H, { label: "Deck", tint: THEME.PLAYER_TINT });
-      createBadge(deckZone, 40, STD_W, STD_H);
-      // Trash
-      const trashZone = createZone(P_TRASH_X, P_MAIN_Y, STD_W, STD_H, { label: "Trash", tint: THEME.PLAYER_TINT });
-      createBadge(trashZone, 0, STD_W, STD_H);
-
-      // 3. Battle Area (Characters)
-      const BATTLE_ROW_W = (STD_W * 5) + (GAP_S * 4);
-      const BATTLE_START_X = CENTER_X - BATTLE_ROW_W / 2;
-      
-      for (let i = 0; i < 5; i++) {
-        createZone(
-          BATTLE_START_X + i * (STD_W + GAP_S), 
-          P_BATTLE_Y, 
-          STD_W, 
-          STD_H, 
-          { label: `Chr ${i+1}`, tint: THEME.PLAYER_TINT }
-        );
-      }
-
-
-      // ==========================================
-      // 🔴 OPPONENT SIDE (相手) - 点対称配置
-      // ==========================================
-      
-      // 1. Hand Area
-      for (let i = 0; i < 7; i++) {
-        createZone(
-          GAP_S + i * (STD_W + GAP_S), 
-          E_HAND_Y, 
-          STD_W, 
-          STD_H, 
-          { label: `Opp ${i+1}`, tint: THEME.ENEMY_TINT }
-        );
-      }
-
-      // 2. Main Row
-      // Leader (Center)
-      createZone(LEADER_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Ldr", tint: 0xFF0000 });
-      
-      // E.Trash
-      const eTrash = createZone(E_TRASH_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Trs", tint: THEME.ENEMY_TINT });
-      createBadge(eTrash, 0, STD_W, STD_H);
-      // E.Deck
-      const eDeck = createZone(E_DECK_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Deck", tint: THEME.ENEMY_TINT });
-      createBadge(eDeck, 40, STD_W, STD_H);
-      // E.Stage
-      createZone(E_STAGE_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Stg", tint: THEME.ENEMY_TINT });
-
-      // Right Side: Life -> Don -> Cost
-      // E.Life
-      const eLife = createZone(E_LIFE_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Life", tint: THEME.ENEMY_TINT });
-      createBadge(eLife, 5, STD_W, STD_H);
-      
-      // E.Don (Top Aligned relative to screen = Bottom aligned relative to Opponent Hand)
-      // 小さいカードは行の上端 (E_MAIN_Y) に合わせる
-      const eDon = createZone(E_DON_DECK_X, E_MAIN_Y, DON_W, DON_H, { label: "E.Don", tint: THEME.DON_TINT });
-      createBadge(eDon, 10, DON_W, DON_H);
-      
-      // E.Cost
-      createZone(E_COST_X, E_MAIN_Y, DON_W, DON_H, { label: "E.Cost", tint: THEME.DON_TINT });
-
-      // 3. Battle Area (Characters)
-      for (let i = 0; i < 5; i++) {
-        createZone(
-          BATTLE_START_X + i * (STD_W + GAP_S), 
-          E_BATTLE_Y, 
-          STD_W, 
-          STD_H, 
-          { label: `E.Chr ${i+1}`, tint: THEME.ENEMY_TINT }
-        );
-      }
-
-      console.log('[PixiJS] Layout v1.2 Complete.');
-
-      // --- 4. API Polling (Mock) ---
-      const fetchGameState = async () => {
-        try {
-          // const res = await fetch('...');
-          // const data = await res.json();
-          // updateBoard(app, data);
-        } catch (err) {
-          console.error("Fetch error:", err);
-        }
-      };
-
-      intervalRef.current = window.setInterval(fetchGameState, 2000);
+      // 初回描画
+      drawLayout(app);
 
     } catch (e: any) {
-      console.error("PIXI LAYOUT ERROR:", e);
+      console.error("PIXI INIT ERROR:", e);
       if (containerRef.current) {
-        containerRef.current.innerHTML = `
-          <div style="color: red; padding: 20px; font-family: monospace;">
-            <h3>LAYOUT ERROR</h3>
-            <pre>${e.message}</pre>
-          </div>
-        `;
+        containerRef.current.innerHTML = `<div style="color:red; padding:20px;">Init Error: ${e.message}</div>`;
       }
     }
 
-    // --- クリーンアップ ---
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
       if (appRef.current) {
-        console.log('[PixiJS] Destroying...');
         appRef.current.destroy(true, { children: true, texture: true, baseTexture: true });
         appRef.current = null;
       }
     };
-  }, []);
+  }, []); // 初回のみ実行 (リサイズは上のuseEffectで処理)
+
+
+  // =========================================================
+  // 🎨 レイアウト描画ロジック (再描画ごとに全クリアして再配置)
+  // =========================================================
+  const drawLayout = (app: PIXI.Application) => {
+    try {
+      // 画面クリア
+      app.stage.removeChildren();
+
+      const W = app.renderer.width / app.renderer.resolution;
+      const H = app.renderer.height / app.renderer.resolution;
+      
+      const AVAILABLE_H = H - SAFE_AREA_TOP;
+
+      // --- 3. エリア高さ計算 ---
+      const H_OPP = AVAILABLE_H * 0.42;
+      const H_CTRL = AVAILABLE_H * 0.16;
+      const H_PLAYER = AVAILABLE_H - H_OPP - H_CTRL; // 残り全部
+
+      const Y_OPP = SAFE_AREA_TOP;
+      const Y_CTRL = SAFE_AREA_TOP + H_OPP;
+      const Y_PLAYER = SAFE_AREA_TOP + H_OPP + H_CTRL;
+
+      // --- 4. 背景描画 (3色エリア) ---
+      const bg = new PIXI.Graphics();
+      
+      // Opponent Area (Pink)
+      bg.beginFill(COLORS.OPPONENT_BG);
+      bg.drawRect(0, Y_OPP, W, H_OPP);
+      bg.endFill();
+
+      // Control Area (Gray)
+      bg.beginFill(COLORS.CONTROL_BG);
+      bg.drawRect(0, Y_CTRL, W, H_CTRL);
+      bg.endFill();
+
+      // Player Area (Blue)
+      bg.beginFill(COLORS.PLAYER_BG);
+      bg.drawRect(0, Y_PLAYER, W, H_PLAYER);
+      bg.endFill();
+
+      // Safe Area (White or Black)
+      bg.beginFill(0x000000);
+      bg.drawRect(0, 0, W, SAFE_AREA_TOP);
+      bg.endFill();
+
+      app.stage.addChild(bg);
+
+      // --- 5. カードサイズ計算 ---
+      // 画面幅を7.5等分したものをスロット幅とする
+      const SLOT_W = W / 7.5;
+      const CW = SLOT_W * 0.90;   // マージン考慮
+      const CH = CW * 1.4;        // アスペクト比 1:1.4
+      
+      // ドン!!カード用 (少し小さく)
+      const DON_W = CW * 0.8;
+      const DON_H = CH * 0.8;
+
+      // グリッド配置ヘルパー
+      // index: 0~6 (横7列), rowY: 配置するY座標(中心), isDon: ドンサイズかどうか
+      const getSlotX = (index: number) => {
+        // 全体(7スロット)を画面中央に寄せるためのオフセット
+        const totalW = SLOT_W * 7;
+        const startX = (W - totalW) / 2 + SLOT_W / 2;
+        return startX + SLOT_W * index;
+      };
+
+      // ---------------------------------------------
+      // 🛠 ゾーン生成関数
+      // ---------------------------------------------
+      const createZone = (
+        cx: number, cy: number, 
+        w: number, h: number, 
+        label: string, 
+        tint: number,
+        badgeCount?: number
+      ) => {
+        const container = new PIXI.Container();
+        container.position.set(cx, cy);
+
+        // 枠線と背景
+        const g = new PIXI.Graphics();
+        g.lineStyle(2, tint, 0.8);
+        g.beginFill(COLORS.ZONE_FILL, 0.5);
+        // 中心基準で描画
+        g.drawRoundedRect(-w/2, -h/2, w, h, 6);
+        g.endFill();
+        container.addChild(g);
+
+        // ラベル
+        const text = new PIXI.Text(label, {
+          fontFamily: 'Arial',
+          fontSize: Math.min(12, w * 0.3),
+          fill: COLORS.TEXT_MAIN,
+          fontWeight: 'bold',
+        });
+        text.anchor.set(0.5);
+        container.addChild(text);
+
+        // バッジ (枚数表示)
+        if (badgeCount !== undefined) {
+          const badge = new PIXI.Container();
+          badge.position.set(w/2 - 5, h/2 - 5); // 右下
+
+          const bg = new PIXI.Graphics();
+          bg.beginFill(COLORS.BADGE_BG);
+          bg.drawCircle(0, 0, 10);
+          bg.endFill();
+          badge.addChild(bg);
+
+          const num = new PIXI.Text(badgeCount.toString(), {
+            fontFamily: 'Arial', fontSize: 10, fill: COLORS.BADGE_TEXT, fontWeight: 'bold'
+          });
+          num.anchor.set(0.5);
+          badge.addChild(num);
+          
+          container.addChild(badge);
+        }
+
+        return container;
+      };
+
+      // ============================================
+      // 🔴 相手側 (OPPONENT) - 上エリア & 180度回転
+      // ============================================
+      const oppContainer = new PIXI.Container();
+      // コンテナの基準点を「エリアの右下」に設定し、180度回転させる
+      // これにより、コンテナ内座標系は [x: 左へ, y: 上へ] となる (正の値で扱える)
+      oppContainer.position.set(W, Y_CTRL); 
+      oppContainer.rotation = Math.PI;
+      app.stage.addChild(oppContainer);
+
+      // --- Opponent Rows (コンテナ内座標: y=0がエリア下辺(画面中央), y=Maxがエリア上辺(画面上)) ---
+      
+      // Row 3: Character (エリア最下部 = 画面中央寄り = yが小さい)
+      const OPP_ROW3_Y = H_OPP * 0.25; 
+      for (let i = 0; i < 5; i++) {
+        // 中央5枠 (index 1~5)
+        const z = createZone(getSlotX(i + 1), OPP_ROW3_Y, CW, CH, "Char", COLORS.ENEMY_ZONE);
+        oppContainer.addChild(z);
+      }
+
+      // Row 2: Main Row (エリア中央)
+      const OPP_ROW2_Y = H_OPP * 0.55; 
+      // 左から(画面上では右から): Trash, Deck, Stage, Leader, Life, Don, Cost
+      // ※回転しているので、配列順序に注意。
+      // x=0 (画面右) -> x=W (画面左)。
+      // 画面左(相手の右手)にあるべきなのは Trash/Deck。
+      // コンテナ内座標では xが大きい方(Wに近い方) に配置する。
+      
+      // 配置マップ: slot index 0..6
+      // 0: Cost, 1: Don, 2: Life, 3: Leader, 4: Stage, 5: Deck, 6: Trash
+      // (回転しているので、index 0 は画面右端＝相手の左手＝Cost)
+      
+      oppContainer.addChild(createZone(getSlotX(6), OPP_ROW2_Y, CW, CH, LABELS.TRASH, COLORS.ENEMY_ZONE, 0));
+      oppContainer.addChild(createZone(getSlotX(5), OPP_ROW2_Y, CW, CH, LABELS.DECK, COLORS.ENEMY_ZONE, 40));
+      oppContainer.addChild(createZone(getSlotX(4), OPP_ROW2_Y, CW, CH, LABELS.STAGE, COLORS.ENEMY_ZONE));
+      
+      // Leader (中央)
+      oppContainer.addChild(createZone(getSlotX(3), OPP_ROW2_Y, CW, CH, LABELS.LEADER, COLORS.ENEMY_ZONE));
+      
+      oppContainer.addChild(createZone(getSlotX(2), OPP_ROW2_Y, CW, CH, LABELS.LIFE, COLORS.ENEMY_ZONE, 5));
+      oppContainer.addChild(createZone(getSlotX(1), OPP_ROW2_Y, DON_W, DON_H, LABELS.DON, COLORS.ZONE_BORDER, 10)); // Donは小さく
+      oppContainer.addChild(createZone(getSlotX(0), OPP_ROW2_Y, DON_W, DON_H, LABELS.COST, COLORS.ZONE_BORDER));
+
+      // Row 1: Hand (エリア最上部 = 画面上端 = yが大きい)
+      const OPP_ROW1_Y = H_OPP * 0.85; // 上端近く
+      for (let i = 0; i < 7; i++) {
+        const z = createZone(getSlotX(i), OPP_ROW1_Y, CW, CH, "Hand", COLORS.ENEMY_ZONE);
+        oppContainer.addChild(z);
+      }
+
+
+      // ============================================
+      // 🔵 自分側 (PLAYER) - 下エリア
+      // ============================================
+      const playerContainer = new PIXI.Container();
+      playerContainer.position.set(0, Y_PLAYER);
+      app.stage.addChild(playerContainer);
+
+      // --- Player Rows ---
+
+      // Row 1: Character (エリア最上部 = 画面中央寄り)
+      const PL_ROW1_Y = H_PLAYER * 0.25;
+      for (let i = 0; i < 5; i++) {
+        // 中央5枠 (index 1~5)
+        const z = createZone(getSlotX(i + 1), PL_ROW1_Y, CW, CH, "Char", COLORS.PLAYER_ZONE);
+        playerContainer.addChild(z);
+      }
+
+      // Row 2: Main Row (エリア中央)
+      const PL_ROW2_Y = H_PLAYER * 0.55;
+      // 左から: Cost, Don, Life, Leader, Stage, Deck, Trash
+      // index: 0..6
+      playerContainer.addChild(createZone(getSlotX(0), PL_ROW2_Y, DON_W, DON_H, LABELS.COST, COLORS.ZONE_BORDER, 0));
+      playerContainer.addChild(createZone(getSlotX(1), PL_ROW2_Y, DON_W, DON_H, LABELS.DON, COLORS.ZONE_BORDER, 10));
+      playerContainer.addChild(createZone(getSlotX(2), PL_ROW2_Y, CW, CH, LABELS.LIFE, COLORS.PLAYER_ZONE, 5));
+      
+      // Leader
+      playerContainer.addChild(createZone(getSlotX(3), PL_ROW2_Y, CW, CH, LABELS.LEADER, 0x00FF00));
+      
+      playerContainer.addChild(createZone(getSlotX(4), PL_ROW2_Y, CW, CH, LABELS.STAGE, COLORS.PLAYER_ZONE));
+      playerContainer.addChild(createZone(getSlotX(5), PL_ROW2_Y, CW, CH, LABELS.DECK, COLORS.PLAYER_ZONE, 40));
+      playerContainer.addChild(createZone(getSlotX(6), PL_ROW2_Y, CW, CH, LABELS.TRASH, COLORS.PLAYER_ZONE, 0));
+
+      // Row 3: Hand (エリア最下部)
+      const PL_ROW3_Y = H_PLAYER * 0.85;
+      for (let i = 0; i < 7; i++) {
+        const z = createZone(getSlotX(i), PL_ROW3_Y, CW, CH, "Hand", COLORS.PLAYER_ZONE);
+        playerContainer.addChild(z);
+      }
+
+      // ============================================
+      // ⚪ Control Area - 中央
+      // ============================================
+      const ctrlContainer = new PIXI.Container();
+      ctrlContainer.position.set(0, Y_CTRL);
+      app.stage.addChild(ctrlContainer);
+
+      // ボタン例
+      const btnW = 80;
+      const btnH = 30;
+      const drawBtn = (label: string, x: number) => {
+        const btn = new PIXI.Container();
+        btn.position.set(x, H_CTRL / 2);
+        
+        const g = new PIXI.Graphics();
+        g.beginFill(0xFFFFFF);
+        g.lineStyle(1, 0x999999);
+        g.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 4);
+        g.endFill();
+        btn.addChild(g);
+
+        const t = new PIXI.Text(label, { fontSize: 14, fill: 0x333333 });
+        t.anchor.set(0.5);
+        btn.addChild(t);
+
+        return btn;
+      };
+
+      ctrlContainer.addChild(drawBtn("Reset", W/2 - 50));
+      ctrlContainer.addChild(drawBtn("Close", W/2 + 50));
+
+
+    } catch (e: any) {
+      console.error("LAYOUT DRAW ERROR:", e);
+      // エラーを画面に表示
+      const errText = new PIXI.Text(`Error: ${e.message}`, {
+        fill: 0xFF0000,
+        fontSize: 20,
+        wordWrap: true,
+        wordWrapWidth: app.renderer.width,
+      });
+      errText.position.set(20, app.renderer.height / 2);
+      app.stage.addChild(errText);
+    }
+  };
 
   return (
     <div 
       ref={containerRef}
       style={{
-        position: 'absolute',
-        transformOrigin: '0 0',
-        transform: `translate(${dimensions.left}px, ${dimensions.top}px) scale(${dimensions.scale})`,
-        width: LOGICAL_WIDTH,
-        height: LOGICAL_HEIGHT,
-        boxShadow: '0 0 50px rgba(0,0,0,0.8)',
-        overflow: 'hidden'
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        background: '#000'
       }}
     />
   );
