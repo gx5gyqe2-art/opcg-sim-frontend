@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 
 // --- 定数・カラー定義 ---
-const SAFE_AREA_TOP = 44; // レイアウト計算上のノッチ回避用（背景は塗る）
+const SAFE_AREA_TOP = 44; // レイアウト計算上のノッチ回避用
 const LOG_AREA_WIDTH = 220; // 右上のデバッグログ回避用マージン
 
 const COLORS = {
@@ -105,7 +105,6 @@ export const RealGame = () => {
       const H_CTRL = 60;
       
       // 残りのエリアを分割
-      // 相手エリアは上部 SAFE_AREA も含めて描画するが、配置は避ける
       const REMAINING_H = H - H_CTRL;
       // 相手エリア比率 (少し広めに)
       const H_OPP_TOTAL = REMAINING_H * 0.45;
@@ -118,9 +117,9 @@ export const RealGame = () => {
       // --- 3. 背景描画 (全画面塗る) ---
       const bg = new PIXI.Graphics();
       
-      // Opponent Area (Top to Ctrl) - 黒帯なしで最上部から塗る
+      // Opponent Area (Top to Ctrl)
       bg.beginFill(COLORS.OPPONENT_BG);
-      bg.drawRect(0, 0, W, H_OPP_TOTAL);
+      bg.drawRect(0, Y_OPP_START, W, H_OPP_TOTAL); // 修正: 0 -> Y_OPP_START
       bg.endFill();
 
       // Control Area (Middle)
@@ -139,9 +138,7 @@ export const RealGame = () => {
       // --- 4. サイズ計算 ---
       // 画面幅を基準にカードサイズを決定 (Gap込みで8枚分程度と仮定)
       const GAP_BASE = W * 0.015; // 1.5% Gap
-      // 横に7枚並べることを想定: 7*CW + 8*GAP = W
-      // CW = (W - 8*GAP) / 7
-      const SLOT_W = (W - (GAP_BASE * 8)) / 7.2; // 少し余裕を持たせる
+      const SLOT_W = (W - (GAP_BASE * 8)) / 7.2; 
       
       const CW = SLOT_W;
       const CH = CW * 1.4; // アスペクト比 1:1.4 固定
@@ -174,7 +171,7 @@ export const RealGame = () => {
         g.beginFill(fillColor, isBack ? 1.0 : 0.5);
         g.drawRoundedRect(-w/2, -h/2, w, h, 6);
         
-        // 裏面の場合は模様などを描画しても良いが、今回はシンプルに
+        // 裏面の場合は模様などを描画
         if (isBack) {
            g.lineStyle(1, 0x999999, 0.3);
            g.moveTo(-w/2 + 5, -h/2 + 5);
@@ -201,11 +198,11 @@ export const RealGame = () => {
           const badge = new PIXI.Container();
           badge.position.set(w/2 - 6, h/2 - 6);
 
-          const bg = new PIXI.Graphics();
-          bg.beginFill(COLORS.BADGE_BG);
-          bg.drawCircle(0, 0, 10);
-          bg.endFill();
-          badge.addChild(bg);
+          const badgeBg = new PIXI.Graphics();
+          badgeBg.beginFill(COLORS.BADGE_BG);
+          badgeBg.drawCircle(0, 0, 10);
+          badgeBg.endFill();
+          badge.addChild(badgeBg);
 
           const num = new PIXI.Text(options.badge.toString(), {
             fontFamily: 'Arial', fontSize: 10, fill: COLORS.BADGE_TEXT, fontWeight: 'bold'
@@ -229,28 +226,19 @@ export const RealGame = () => {
       oppContainer.rotation = Math.PI;
       app.stage.addChild(oppContainer);
 
-      // 配置可能エリアの高さ (背景は0から塗ったが、配置はSAFE_AREAを避ける)
-      // コンテナ内では y=0 が画面中央側、y=Max が画面上部側
+      // 配置可能エリアの高さ
       const OPP_AVAIL_H = H_OPP_TOTAL - SAFE_AREA_TOP;
       
       // 行のY座標 (コンテナ内)
-      // Row 3 (Bottom/Char): 画面中央寄り (y小)
-      const O_ROW3_Y = OPP_AVAIL_H * 0.2 + SAFE_AREA_TOP * 0.2;
-      // Row 2 (Middle/Main):
-      const O_ROW2_Y = OPP_AVAIL_H * 0.55 + SAFE_AREA_TOP * 0.5;
-      // Row 1 (Top/Hand): 画面上部寄り (y大)
-      const O_ROW1_Y = OPP_AVAIL_H * 0.90 + SAFE_AREA_TOP; 
+      const O_ROW3_Y = OPP_AVAIL_H * 0.2 + SAFE_AREA_TOP * 0.2; // Char
+      const O_ROW2_Y = OPP_AVAIL_H * 0.55 + SAFE_AREA_TOP * 0.5; // Main
+      const O_ROW1_Y = OPP_AVAIL_H * 0.90 + SAFE_AREA_TOP; // Hand
 
-      // X座標計算ヘルパー (右寄せ・左寄せ)
-      // 相手コンテナは回転しているので、 x=0 が画面右端。
-      // デバッグログ回避のため、画面右上(コンテナ内x=0付近)にマージンを入れる
-      
-      const getSlotX = (index: number, count: number, isRightAligned = false, extraMargin = 0) => {
+      // X座標計算ヘルパー
+      // 修正: 未使用の isRightAligned 引数を削除
+      const getSlotX = (index: number, count: number, extraMargin = 0) => {
         const totalW = count * CW + (count - 1) * GAP_BASE;
-        const startX = (W - totalW) / 2; // 中央揃え基準
-        
-        // デバッグログ回避: 右端(x=0)に近い要素を左(x大)にずらす
-        // ここでは単純に全体中央揃えにしつつ、特定エリアのみずらすアプローチ
+        const startX = (W - totalW) / 2;
         
         let x = startX + index * (CW + GAP_BASE) + CW/2;
         if (extraMargin > 0) {
@@ -267,16 +255,13 @@ export const RealGame = () => {
       }
 
       // --- Row 2: Main (Trash, Deck, Stage, Leader, Life, Don, Cost) ---
-      // 回転しているので、配列順序注意:
-      // x=0(画面右) [Cost][Don][Life][Leader][Stage][Deck][Trash] x=W(画面左)
-      
       const O_MAIN_ELEMENTS = [
         { label: LABELS.COST, w: DON_W, h: DON_H, tint: COLORS.DON_TINT },
         { label: LABELS.DON,  w: DON_W, h: DON_H, tint: COLORS.DON_TINT, badge: 10 },
-        { label: LABELS.LIFE, w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 5, isBack: true }, // Lifeは裏
+        { label: LABELS.LIFE, w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 5, isBack: true },
         { label: LABELS.LEADER, w: CW, h: CH, tint: COLORS.ENEMY_TINT },
         { label: LABELS.STAGE, w: CW, h: CH, tint: COLORS.ENEMY_TINT },
-        { label: LABELS.DECK,  w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 40, isBack: true }, // Deckは裏
+        { label: LABELS.DECK,  w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 40, isBack: true },
         { label: LABELS.TRASH, w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 0 },
       ];
 
@@ -286,28 +271,19 @@ export const RealGame = () => {
       oMainW -= GAP_BASE;
       
       let currentOX = (W - oMainW) / 2 + O_MAIN_ELEMENTS[0].w / 2;
-      
-      // デバッグログ回避: 画面右上（コンテナ内 x=0側）にCost/Donが来る。
-      // x=0付近に要素が来ないように、全体を少し左(xプラス方向)にずらす必要があるか？
-      // -> x=0 は画面右端。デバッグログは右上に幅200px程度ある。
-      // Main列は画面中央(y=Middle)なのでデバッグログ(y=Top)とは被らないはず。
-      // 被るのは Row 1 (Hand) のみ。
 
       O_MAIN_ELEMENTS.forEach((el) => {
         oppContainer.addChild(createZone(
           currentOX, O_ROW2_Y, el.w, el.h, el.label, el.tint, 
           { isFaceDown: el.isBack, badge: el.badge }
         ));
-        currentOX += (el.w / 2) + GAP_BASE + (el.w / 2); // 次の要素へ（幅が違うので都度計算）
+        currentOX += (el.w / 2) + GAP_BASE + (el.w / 2); // 次の要素へ
       });
 
 
       // --- Row 1: Hand (7枚, 裏面) ---
-      // 画面最上部。ここがデバッグログと被る。
-      // コンテナ内 x=0〜LOG_AREA_WIDTH のエリアを避ける。
-      
+      // 画面最上部。デバッグログエリアを避ける
       const handCount = 7;
-      // 配置開始位置をログエリア分ずらす
       const handStartX = LOG_AREA_WIDTH + GAP_BASE + CW/2; 
       
       for (let i = 0; i < handCount; i++) {
@@ -345,7 +321,7 @@ export const RealGame = () => {
       const P_MAIN_ELEMENTS = [
         { label: LABELS.COST, w: DON_W, h: DON_H, tint: COLORS.DON_TINT },
         { label: LABELS.DON,  w: DON_W, h: DON_H, tint: COLORS.DON_TINT, badge: 10 },
-        { label: LABELS.LIFE, w: CW, h: CH, tint: COLORS.PLAYER_TINT, badge: 5 }, // 自分のライフは表
+        { label: LABELS.LIFE, w: CW, h: CH, tint: COLORS.PLAYER_TINT, badge: 5 },
         { label: LABELS.LEADER, w: CW, h: CH, tint: 0x00FF00 },
         { label: LABELS.STAGE, w: CW, h: CH, tint: COLORS.PLAYER_TINT },
         { label: LABELS.DECK,  w: CW, h: CH, tint: COLORS.PLAYER_TINT, badge: 40, isBack: true },
@@ -363,14 +339,7 @@ export const RealGame = () => {
           currentPX, P_ROW2_Y, el.w, el.h, el.label, el.tint, 
           { isFaceDown: el.isBack, badge: el.badge }
         ));
-        // 次の中心位置: 現在の半径 + Gap + 次の半径
-        // ここで次の要素幅を知る必要があるが、ループ内なので工夫する
-        // 簡易的に「次の要素」を先読みせず、描画後に加算する方式だとずれるため、
-        // 「現在の幅の半分」を追加して位置確定 -> 「次の幅の半分」は次のループで...
-        // 正確には: 
-        //  currentPX は「要素の中心」。
-        //  次の要素の中心 = currentPX + (currentW/2) + GAP + (nextW/2)
-        // 最後の要素でない場合のみ加算
+        
         const myIndex = P_MAIN_ELEMENTS.indexOf(el);
         if (myIndex < P_MAIN_ELEMENTS.length - 1) {
           const nextEl = P_MAIN_ELEMENTS[myIndex + 1];
@@ -396,7 +365,7 @@ export const RealGame = () => {
       const buttons = ["Close", "Settings", "Reset", "Back", "View", "NextTurn"];
       const btnCount = buttons.length;
       const btnGap = 10;
-      const btnW = (W - (btnGap * (btnCount + 1))) / btnCount; // 均等割
+      const btnW = (W - (btnGap * (btnCount + 1))) / btnCount;
       const btnH = H_CTRL * 0.6;
       const btnY = H_CTRL / 2;
 
@@ -405,12 +374,12 @@ export const RealGame = () => {
         const bx = btnGap + i * (btnW + btnGap) + btnW/2;
         btn.position.set(bx, btnY);
 
-        const bg = new PIXI.Graphics();
-        bg.beginFill(0xFFFFFF);
-        bg.lineStyle(1, 0xCCCCCC);
-        bg.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 8);
-        bg.endFill();
-        btn.addChild(bg);
+        const btnBg = new PIXI.Graphics();
+        btnBg.beginFill(0xFFFFFF);
+        btnBg.lineStyle(1, 0xCCCCCC);
+        btnBg.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 8);
+        btnBg.endFill();
+        btn.addChild(btnBg);
 
         const t = new PIXI.Text(label, {
           fontFamily: 'Arial',
@@ -420,7 +389,6 @@ export const RealGame = () => {
         t.anchor.set(0.5);
         btn.addChild(t);
         
-        // インタラクティブ設定（仮）
         btn.eventMode = 'static';
         btn.cursor = 'pointer';
         
