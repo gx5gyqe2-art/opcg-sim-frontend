@@ -66,17 +66,16 @@ export const RealGame = () => {
 
       const AVAILABLE_H_HALF = (H - H_CTRL - MARGIN_TOP - MARGIN_BOTTOM) / 2;
       
-      // レスポンシブサイズ計算: 4行分+ラベル+隙間が収まる高さを算出
       const CW_MAX = W / 8;
-      const CH_MAX = AVAILABLE_H_HALF / 4.8; // ラベルとパディング分を考慮
+      const CH_MAX = AVAILABLE_H_HALF / 4.8;
       const CH = Math.min(CH_MAX, CW_MAX * 1.4);
       const CW = CH / 1.4;
       const GAP_X = (W - (CW * 7.5)) / 8;
       const PADDING_Y = (AVAILABLE_H_HALF - (CH * 4)) / 5;
 
-      const Y_OPP_AREA_END = MARGIN_TOP + AVAILABLE_H_HALF;
-      const Y_CTRL_START = Y_OPP_AREA_END;
-      const Y_PLAYER_AREA_START = Y_CTRL_START + H_CTRL;
+      // 座標定数の定義
+      const Y_CTRL_START = MARGIN_TOP + AVAILABLE_H_HALF;
+      const Y_PLAYER_START = Y_CTRL_START + H_CTRL;
 
       // 背景描画
       const bg = new PIXI.Graphics();
@@ -146,15 +145,11 @@ export const RealGame = () => {
       app.stage.addChild(oSide);
       const oy = (row: number) => PADDING_Y * row + CH * (row - 0.5);
 
-      // Row 4: Char (中央寄り)
       for (let i = 0; i < 5; i++) oSide.addChild(Object.assign(createCardZone("Char", { isOpponent: true }), { x: getX(i + 1, 7), y: oy(1) }));
-      // Row 3: Resource 2
       const oRes3 = [{l:"Deck", f:true, b:40}, {l:"Stage"}, {l:"Leader", p:"POWER 7000", n:"KAIDO"}, {l:"Life", f:true, b:5}];
       oRes3.forEach((el, i) => oSide.addChild(Object.assign(createCardZone(el.l, { isBack: el.f, badge: el.b, power: el.p, name: el.n, isOpponent: true }), { x: getX(i + 1.5, 7), y: oy(2) })));
-      // Row 2: Resource 1
       const oRes2 = [{l:"Trash", b:0}, {l:"DonRest", r:true}, {l:"DonActive", b:0}, {l:"DonDeck", b:10}];
       oRes2.forEach((el, i) => oSide.addChild(Object.assign(createCardZone(el.l, { isRest: el.r, badge: el.b, isOpponent: true }), { x: getX(i + 1.5, 7), y: oy(3) })));
-      // Row 1: Hand (最上段)
       for (let i = 0; i < 7; i++) oSide.addChild(Object.assign(createCardZone("Hand", { isBack: true, isOpponent: true, name: "OPPONENT" }), { x: getX(i, 7), y: oy(4) }));
 
       // --- 自分側 ---
@@ -163,15 +158,11 @@ export const RealGame = () => {
       app.stage.addChild(pSide);
       const py = (row: number) => PADDING_Y * row + CH * (row - 0.5);
 
-      // Row 4: Char (中央寄り)
       for (let i = 0; i < 5; i++) pSide.addChild(Object.assign(createCardZone("Char"), { x: getX(i + 1, 7), y: py(1) }));
-      // Row 3: Resource 2
       const pRes3 = [{l:"Life", b:5}, {l:"Leader", p:"POWER 5000", n:"LUFFY"}, {l:"Stage"}, {l:"Deck", f:true, b:40}];
       pRes3.forEach((el, i) => pSide.addChild(Object.assign(createCardZone(el.l, { isBack: el.f, badge: el.b, power: el.p, name: el.n }), { x: getX(i + 1.5, 7), y: py(2) })));
-      // Row 2: Resource 1
       const pRes2 = [{l:"DonDeck", b:10}, {l:"DonActive", b:0}, {l:"DonRest", r:true}, {l:"Trash", b:0}];
       pRes2.forEach((el, i) => pSide.addChild(Object.assign(createCardZone(el.l, { isRest: el.r, badge: el.b }), { x: getX(i + 1.5, 7), y: py(3) })));
-      // Row 1: Hand (最下段)
       for (let i = 0; i < 7; i++) pSide.addChild(Object.assign(createCardZone("Hand", { name: "PLAYER" }), { x: getX(i, 7), y: py(4) }));
 
       // 操作バー
