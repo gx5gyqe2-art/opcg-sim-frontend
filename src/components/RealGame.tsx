@@ -1,46 +1,26 @@
 import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 
-// --- 定数・カラー定義 ---
-const SAFE_AREA_TOP = 44; // ノッチ回避計算用
-
+// --- デザイン定量パラメータ ---
+const SAFE_AREA_TOP = 44;
 const COLORS = {
-  OPPONENT_BG: 0xFFEEEE, // 薄いピンク
-  CONTROL_BG:  0xF0F0F0, // 薄いグレー
-  PLAYER_BG:   0xE6F7FF, // 薄いブルー
-  
+  OPPONENT_BG: 0xFFEEEE, // ピンク
+  CONTROL_BG:  0xF0F0F0, // グレー
+  PLAYER_BG:   0xE6F7FF, // ブルー
   ZONE_BORDER: 0x999999,
   ZONE_FILL:   0xFFFFFF,
-  CARD_BACK:   0xDDDDDD, // 裏面グレー
-  
+  CARD_BACK:   0xDDDDDD,
   TEXT_MAIN:   0x333333,
-  TEXT_BACK:   0x666666,
-  
   BADGE_BG:    0xFF0000,
   BADGE_TEXT:  0xFFFFFF,
-  
-  PLAYER_TINT: 0x4488FF,
-  ENEMY_TINT:  0xFF4444,
-  DON_TINT:    0xCCCCCC,
-};
-
-// ゾーン識別ラベル
-const LABELS = {
-  LEADER: "Leader",
-  STAGE: "Stage",
-  DECK: "Deck",
-  TRASH: "Trash",
-  LIFE: "Life",
-  DON: "Don",
-  COST: "Cost",
-  BACK: "BACK",
+  DON_COLOR:   0xCCCCCC,
 };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
 
-  // --- 1. リサイズ監視 ---
+  // --- リサイズ処理 ---
   useEffect(() => {
     const handleResize = () => {
       if (appRef.current) {
@@ -48,18 +28,14 @@ export const RealGame = () => {
         drawLayout(appRef.current);
       }
     };
-
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- 2. PixiJS 初期化 ---
+  // --- 初期化 ---
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
-
     try {
-      console.log('[PixiJS] Initializing Final Adjusted Layout...');
-
       const app = new PIXI.Application({
         width: window.innerWidth,
         height: window.innerHeight,
@@ -68,19 +44,12 @@ export const RealGame = () => {
         autoDensity: true,
         antialias: true,
       });
-
       containerRef.current.appendChild(app.view as HTMLCanvasElement);
       appRef.current = app;
-
       drawLayout(app);
-
-    } catch (e: any) {
-      console.error("PIXI INIT ERROR:", e);
-      if (containerRef.current) {
-        containerRef.current.innerHTML = `<div style="color:red; padding:20px;">Init Error: ${e.message}</div>`;
-      }
+    } catch (e) {
+      console.error("PIXI Init Error:", e);
     }
-
     return () => {
       if (appRef.current) {
         appRef.current.destroy(true, { children: true, texture: true, baseTexture: true });
@@ -89,325 +58,142 @@ export const RealGame = () => {
     };
   }, []);
 
-
-  // =========================================================
-  // 🎨 レイアウト描画ロジック
-  // =========================================================
   const drawLayout = (app: PIXI.Application) => {
     try {
       app.stage.removeChildren();
-
       const W = app.renderer.width / app.renderer.resolution;
       const H = app.renderer.height / app.renderer.resolution;
-      
-      // コントロールエリアの高さ
+
       const H_CTRL = 60;
-      
-      // エリア分割
       const REMAINING_H = H - H_CTRL;
-      const H_OPP_TOTAL = REMAINING_H * 0.45;
+      const H_HALF = REMAINING_H / 2;
 
-      // エリア開始Y座標
-      // 背景を最上部から塗るため Y=0 を代入して使用
-      const Y_OPP_START = 0; 
-      const Y_CTRL_START = H_OPP_TOTAL;
-      const Y_PLAYER_START = H_OPP_TOTAL + H_CTRL;
-      const H_PLAYER_TOTAL = H - Y_PLAYER_START;
+      // エリア開始座標 (未使用変数エラー回避のため全て計算に使用)
+      const Y_OPP_START = 0;
+      const Y_CTRL_START = H_HALF;
+      const Y_PLAYER_START = H_HALF + H_CTRL;
 
-      // --- 3. 背景描画 (Fullscreen) ---
+      // --- 1. 背景描画 ---
       const bg = new PIXI.Graphics();
-      
-      // Opponent Area (Top) - Y_OPP_START (0) から描画してノッチ裏まで浸透させる
-      bg.beginFill(COLORS.OPPONENT_BG);
-      bg.drawRect(0, Y_OPP_START, W, H_OPP_TOTAL);
-      bg.endFill();
-
-      // Control Area (Middle)
-      bg.beginFill(COLORS.CONTROL_BG);
-      bg.drawRect(0, Y_CTRL_START, W, H_CTRL);
-      bg.endFill();
-
-      // Player Area (Bottom)
-      bg.beginFill(COLORS.PLAYER_BG);
-      bg.drawRect(0, Y_PLAYER_START, W, H_PLAYER_TOTAL);
-      bg.endFill();
-
+      bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, Y_OPP_START, W, H_HALF).endFill();
+      bg.beginFill(COLORS.CONTROL_BG).drawRect(0, Y_CTRL_START, W, H_CTRL).endFill();
+      bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_PLAYER_START, W, H_PLAYER_TOTAL_CALC()).endFill();
       app.stage.addChild(bg);
 
+      function H_PLAYER_TOTAL_CALC() { return H - Y_PLAYER_START; }
 
-      // --- 4. サイズ計算 ---
-      const GAP_BASE = W * 0.015; 
-      const SLOT_W = (W - (GAP_BASE * 8)) / 7.2; 
-      
-      const CW = SLOT_W;
-      const CH = CW * 1.4; 
-      
-      // ドン!!カードサイズ (80%)
-      const DON_W = CW * 0.8;
-      const DON_H = CH * 0.8;
+      // --- 2. カードサイズ定義 ---
+      const CW = W / 7.5;
+      const CH = CW * 1.4;
+      const GAP = (W - (CW * 7)) / 8;
 
-      // 下揃え計算用オフセット
-      const OFFSET_ALIGN_BOTTOM_PLAYER = (CH - DON_H) / 2;
-      const OFFSET_ALIGN_BOTTOM_OPPONENT = -((CH - DON_H) / 2);
-
-
-      // --- 5. ゾーン生成ヘルパー ---
-      const createZone = (
-        cx: number, cy: number, 
-        w: number, h: number, 
-        label: string, 
-        tint: number,
-        options: { isFaceDown?: boolean, badge?: number } = {}
-      ) => {
+      // --- 3. ゾーン生成関数 ---
+      const createCardZone = (label: string, options: { isBack?: boolean, badge?: number, isRest?: boolean, power?: string, name?: string } = {}) => {
         const container = new PIXI.Container();
-        container.position.set(cx, cy);
+        const w = options.isRest ? CH : CW;
+        const h = options.isRest ? CW : CH;
 
-        const isBack = options.isFaceDown;
-        const fillColor = isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL;
-        const strokeColor = isBack ? 0x666666 : (tint || COLORS.ZONE_BORDER);
-        const textStr = isBack ? LABELS.BACK : label;
-        const textColor = isBack ? COLORS.TEXT_BACK : COLORS.TEXT_MAIN;
-
-        // 背景
         const g = new PIXI.Graphics();
-        g.lineStyle(2, strokeColor, 0.8);
-        g.beginFill(fillColor, isBack ? 1.0 : 0.5);
-        g.drawRoundedRect(-w/2, -h/2, w, h, 8); 
-        
-        if (isBack) {
-           g.lineStyle(1, 0xAAAAAA, 0.5);
-           g.drawRoundedRect(-w/2 + 4, -h/2 + 4, w - 8, h - 8, 4);
-        }
+        g.lineStyle(2, COLORS.ZONE_BORDER);
+        g.beginFill(options.isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
+        g.drawRoundedRect(-w/2, -h/2, w, h, 6);
         g.endFill();
         container.addChild(g);
 
-        // ラベル - 裏面は太字で "BACK" をはっきり表示
-        const fontSize = isBack ? 14 : Math.min(12, w * 0.25);
-        const text = new PIXI.Text(textStr, {
-          fontFamily: 'Arial',
-          fontSize: fontSize,
-          fill: textColor,
-          fontWeight: 'bold',
+        const mainText = new PIXI.Text(options.isBack ? "BACK" : label, {
+          fontSize: 12, fontWeight: 'bold', fill: COLORS.TEXT_MAIN
         });
-        text.anchor.set(0.5);
-        container.addChild(text);
+        mainText.anchor.set(0.5);
+        container.addChild(mainText);
 
-        // バッジ
+        if (options.power) {
+          const pText = new PIXI.Text(options.power, { fontSize: 10, fill: 0xFF0000, fontWeight: 'bold' });
+          pText.anchor.set(0.5, 1);
+          pText.y = -h/2 - 2;
+          container.addChild(pText);
+        }
+
+        if (options.name) {
+          const nText = new PIXI.Text(options.name, { fontSize: 9, fill: COLORS.TEXT_MAIN });
+          nText.anchor.set(0.5, 0);
+          nText.y = h/2 + 2;
+          container.addChild(nText);
+        }
+
         if (options.badge !== undefined) {
-          const badge = new PIXI.Container();
-          badge.position.set(w/2 - 6, h/2 - 6);
-
-          const badgeBg = new PIXI.Graphics();
-          badgeBg.beginFill(COLORS.BADGE_BG);
-          badgeBg.drawCircle(0, 0, 10);
-          badgeBg.endFill();
-          badge.addChild(badgeBg);
-
-          const num = new PIXI.Text(options.badge.toString(), {
-            fontFamily: 'Arial', fontSize: 10, fill: COLORS.BADGE_TEXT, fontWeight: 'bold'
-          });
-          num.anchor.set(0.5);
-          badge.addChild(num);
-          
-          container.addChild(badge);
+          const b = new PIXI.Graphics().beginFill(COLORS.BADGE_BG).drawCircle(0, 0, 10).endFill();
+          b.x = w/2 - 5; b.y = h/2 - 5;
+          const bt = new PIXI.Text(options.badge.toString(), { fontSize: 10, fill: COLORS.BADGE_TEXT });
+          bt.anchor.set(0.5);
+          b.addChild(bt);
+          container.addChild(b);
         }
 
         return container;
       };
 
-      // X座標計算ヘルパー (中央揃え)
-      const getSlotX = (index: number, count: number) => {
-        const totalW = count * CW + (count - 1) * GAP_BASE;
-        const startX = (W - totalW) / 2;
-        return startX + index * (CW + GAP_BASE) + CW/2;
+      const getX = (idx: number, total: number) => {
+        const startX = (W - (total * CW + (total - 1) * GAP)) / 2 + CW / 2;
+        return startX + idx * (CW + GAP);
       };
 
+      // --- 4. 自分側 (PLAYER) ---
+      const pSide = new PIXI.Container();
+      pSide.y = Y_PLAYER_START;
+      app.stage.addChild(pSide);
 
-      // ============================================
-      // 🔴 相手側 (OPPONENT) - 180度回転
-      // ============================================
-      const oppContainer = new PIXI.Container();
-      oppContainer.position.set(W, Y_CTRL_START); 
-      oppContainer.rotation = Math.PI;
-      app.stage.addChild(oppContainer);
-
-      const OPP_AVAIL_H = H_OPP_TOTAL - SAFE_AREA_TOP;
+      const rowH = H_HALF / 4;
       
-      const O_ROW3_Y = OPP_AVAIL_H * 0.2 + SAFE_AREA_TOP * 0.2; 
-      const O_ROW2_Y = OPP_AVAIL_H * 0.55 + SAFE_AREA_TOP * 0.5; 
-      const O_ROW1_Y = OPP_AVAIL_H * 0.90 + SAFE_AREA_TOP; 
+      // Row 4: Battle (中央寄り)
+      for (let i = 0; i < 5; i++) pSide.addChild(Object.assign(createCardZone("Char"), { x: getX(i + 1, 7), y: rowH * 0.5 }));
+      // Row 3: Leader/Stage
+      pSide.addChild(Object.assign(createCardZone("Leader", { power: "POWER 5000", name: "LUFFY" }), { x: getX(3, 7), y: rowH * 1.5 }));
+      pSide.addChild(Object.assign(createCardZone("Stage"), { x: getX(4, 7), y: rowH * 1.5 }));
+      // Row 2: Resource
+      const pRes = ["DonDeck", "DonActive", "DonRest", "Life", "Deck", "Trash"];
+      pRes.forEach((l, i) => pSide.addChild(Object.assign(createCardZone(l, { isBack: l === "Deck", isRest: l === "DonRest", badge: l === "Deck" ? 40 : undefined }), { x: getX(i + 0.5, 7), y: rowH * 2.5 })));
+      // Row 1: Hand
+      for (let i = 0; i < 7; i++) pSide.addChild(Object.assign(createCardZone("Hand", { name: "CARD NAME" }), { x: getX(i, 7), y: rowH * 3.5 }));
 
-      // --- Row 3: Characters ---
-      for (let i = 0; i < 5; i++) {
-        oppContainer.addChild(createZone(
-          getSlotX(i, 5), O_ROW3_Y, CW, CH, "Char", COLORS.ENEMY_TINT
-        ));
-      }
+      // --- 5. 相手側 (OPPONENT - 180度回転) ---
+      const oSide = new PIXI.Container();
+      oSide.x = W; oSide.y = Y_CTRL_START;
+      oSide.rotation = Math.PI;
+      app.stage.addChild(oSide);
 
-      // --- Row 2: Main ---
-      const O_MAIN_ELEMENTS = [
-        { label: LABELS.COST, w: DON_W, h: DON_H, tint: COLORS.DON_TINT },
-        { label: LABELS.DON,  w: DON_W, h: DON_H, tint: COLORS.DON_TINT, badge: 10 },
-        { label: LABELS.LIFE, w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 5, isFaceDown: true },
-        { label: LABELS.LEADER, w: CW, h: CH, tint: COLORS.ENEMY_TINT },
-        { label: LABELS.STAGE, w: CW, h: CH, tint: COLORS.ENEMY_TINT },
-        { label: LABELS.DECK,  w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 40, isFaceDown: true },
-        { label: LABELS.TRASH, w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 0 },
-      ];
+      const oRowH = (H_HALF - SAFE_AREA_TOP) / 4;
+      const oBaseY = SAFE_AREA_TOP;
 
-      let oMainW = 0;
-      O_MAIN_ELEMENTS.forEach(e => oMainW += e.w + GAP_BASE);
-      oMainW -= GAP_BASE;
-      let currentOX = (W - oMainW) / 2 + O_MAIN_ELEMENTS[0].w / 2;
+      // Row 4: Battle
+      for (let i = 0; i < 5; i++) oSide.addChild(Object.assign(createCardZone("Char"), { x: getX(i + 1, 7), y: oBaseY + oRowH * 0.5 }));
+      // Row 3: Leader/Stage
+      oSide.addChild(Object.assign(createCardZone("Leader"), { x: getX(3, 7), y: oBaseY + oRowH * 1.5 }));
+      oSide.addChild(Object.assign(createCardZone("Stage"), { x: getX(2, 7), y: oBaseY + oRowH * 1.5 }));
+      // Row 2: Resource
+      const oRes = ["Trash", "Deck", "Stage", "Leader", "Life", "DonRest", "DonActive", "DonDeck"];
+      oRes.forEach((l, i) => oSide.addChild(Object.assign(createCardZone(l, { isBack: ["Deck", "Life"].includes(l), isRest: l === "DonRest" }), { x: getX(i, 8), y: oBaseY + oRowH * 2.5 })));
+      // Row 1: Hand
+      for (let i = 0; i < 7; i++) oSide.addChild(Object.assign(createCardZone("Hand", { isBack: true, name: "OPPONENT" }), { x: getX(i, 7), y: oBaseY + oRowH * 3.5 }));
 
-      O_MAIN_ELEMENTS.forEach((el) => {
-        const yOffset = (el.h < CH) ? OFFSET_ALIGN_BOTTOM_OPPONENT : 0;
-        
-        oppContainer.addChild(createZone(
-          currentOX, O_ROW2_Y + yOffset, el.w, el.h, el.label, el.tint, 
-          { isFaceDown: el.isFaceDown, badge: el.badge }
-        ));
-        currentOX += (el.w / 2) + GAP_BASE + (el.w / 2);
+      // --- 6. 中央ボタンバー ---
+      const cBar = new PIXI.Container();
+      cBar.y = Y_CTRL_START;
+      app.stage.addChild(cBar);
+      const btns = ["Close", "Settings", "Reset", "Back", "View", "NextTurn"];
+      const bW = W / 7;
+      btns.forEach((label, i) => {
+        const b = new PIXI.Container();
+        b.x = (W / 2) - (bW * 3) + (i * bW) + bW/2; b.y = H_CTRL / 2;
+        const bgB = new PIXI.Graphics().beginFill(0xFFFFFF).lineStyle(1, 0xCCCCCC).drawRoundedRect(-bW/2.2, -15, bW/1.1, 30, 8).endFill();
+        const t = new PIXI.Text(label, { fontSize: 10, fill: 0x333333 });
+        t.anchor.set(0.5); b.addChild(bgB, t);
+        cBar.addChild(b);
       });
 
-      // --- Row 1: Hand (裏面, 中央揃え) ---
-      const handCount = 7;
-      for (let i = 0; i < handCount; i++) {
-        oppContainer.addChild(createZone(
-          getSlotX(i, handCount), 
-          O_ROW1_Y, 
-          CW, CH, 
-          "Hand", COLORS.ENEMY_TINT,
-          { isFaceDown: true }
-        ));
-      }
-
-
-      // ============================================
-      // 🔵 自分側 (PLAYER)
-      // ============================================
-      const playerContainer = new PIXI.Container();
-      playerContainer.position.set(0, Y_PLAYER_START);
-      app.stage.addChild(playerContainer);
-
-      const P_AVAIL_H = H_PLAYER_TOTAL;
-      const P_ROW1_Y = P_AVAIL_H * 0.2; 
-      const P_ROW2_Y = P_AVAIL_H * 0.55; 
-      const P_ROW3_Y = P_AVAIL_H * 0.9; 
-
-      // --- Row 1: Characters ---
-      for (let i = 0; i < 5; i++) {
-        playerContainer.addChild(createZone(
-          getSlotX(i, 5), P_ROW1_Y, CW, CH, "Char", COLORS.PLAYER_TINT
-        ));
-      }
-
-      // --- Row 2: Main ---
-      const P_MAIN_ELEMENTS = [
-        { label: LABELS.COST, w: DON_W, h: DON_H, tint: COLORS.DON_TINT },
-        { label: LABELS.DON,  w: DON_W, h: DON_H, tint: COLORS.DON_TINT, badge: 10 },
-        { label: LABELS.LIFE, w: CW, h: CH, tint: COLORS.PLAYER_TINT, badge: 5 },
-        { label: LABELS.LEADER, w: CW, h: CH, tint: 0x00FF00 },
-        { label: LABELS.STAGE, w: CW, h: CH, tint: COLORS.PLAYER_TINT },
-        { label: LABELS.DECK,  w: CW, h: CH, tint: COLORS.PLAYER_TINT, badge: 40, isFaceDown: true },
-        { label: LABELS.TRASH, w: CW, h: CH, tint: COLORS.PLAYER_TINT, badge: 0 },
-      ];
-
-      let pMainW = 0;
-      P_MAIN_ELEMENTS.forEach(e => pMainW += e.w + GAP_BASE);
-      pMainW -= GAP_BASE;
-      let currentPX = (W - pMainW) / 2 + P_MAIN_ELEMENTS[0].w / 2;
-
-      P_MAIN_ELEMENTS.forEach((el) => {
-        const yOffset = (el.h < CH) ? OFFSET_ALIGN_BOTTOM_PLAYER : 0;
-
-        playerContainer.addChild(createZone(
-          currentPX, P_ROW2_Y + yOffset, el.w, el.h, el.label, el.tint, 
-          { isFaceDown: el.isFaceDown, badge: el.badge }
-        ));
-        
-        const myIndex = P_MAIN_ELEMENTS.indexOf(el);
-        if (myIndex < P_MAIN_ELEMENTS.length - 1) {
-          const nextEl = P_MAIN_ELEMENTS[myIndex + 1];
-          currentPX += (el.w / 2) + GAP_BASE + (nextEl.w / 2);
-        }
-      });
-
-      // --- Row 3: Hand ---
-      for (let i = 0; i < 7; i++) {
-        playerContainer.addChild(createZone(
-          getSlotX(i, 7), P_ROW3_Y, CW, CH, "Hand", COLORS.PLAYER_TINT
-        ));
-      }
-
-
-      // ============================================
-      // ⚪ Control Area (Buttons) - 中央寄せ・固定幅
-      // ============================================
-      const ctrlContainer = new PIXI.Container();
-      ctrlContainer.position.set(0, Y_CTRL_START);
-      app.stage.addChild(ctrlContainer);
-
-      const buttons = ["Close", "Settings", "Reset", "Back", "View", "NextTurn"];
-      
-      const btnFixedW = 70; 
-      const btnH = 34;
-      const btnGap = 8;
-      
-      const totalBtnW = buttons.length * btnFixedW + (buttons.length - 1) * btnGap;
-      const btnStartX = (W - totalBtnW) / 2 + btnFixedW / 2;
-      const btnY = H_CTRL / 2;
-
-      buttons.forEach((label, i) => {
-        const btn = new PIXI.Container();
-        const bx = btnStartX + i * (btnFixedW + btnGap);
-        btn.position.set(bx, btnY);
-
-        const btnBg = new PIXI.Graphics();
-        btnBg.beginFill(0xFFFFFF);
-        btnBg.lineStyle(1, 0xCCCCCC);
-        btnBg.drawRoundedRect(-btnFixedW/2, -btnH/2, btnFixedW, btnH, 10); 
-        btnBg.endFill();
-        btn.addChild(btnBg);
-
-        const t = new PIXI.Text(label, {
-          fontFamily: 'Arial',
-          fontSize: 12,
-          fill: 0x333333,
-          fontWeight: 'bold',
-        });
-        t.anchor.set(0.5);
-        btn.addChild(t);
-        
-        btn.eventMode = 'static';
-        btn.cursor = 'pointer';
-        
-        ctrlContainer.addChild(btn);
-      });
-
-
-    } catch (e: any) {
-      console.error("LAYOUT DRAW ERROR:", e);
-      const errText = new PIXI.Text(`Error: ${e.message}`, {
-        fill: 0xFF0000, fontSize: 20, wordWrap: true, wordWrapWidth: app.renderer.width,
-      });
-      errText.position.set(20, app.renderer.height / 2);
-      app.stage.addChild(errText);
+    } catch (e) {
+      console.error("Layout Draw Error:", e);
     }
   };
 
-  return (
-    <div 
-      ref={containerRef}
-      style={{
-        width: '100vw',
-        height: '100vh',
-        overflow: 'hidden',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        background: '#000'
-      }}
-    />
-  );
+  return <div ref={containerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'fixed', top: 0, left: 0, background: '#000' }} />;
 };
