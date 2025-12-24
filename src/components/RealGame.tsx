@@ -16,24 +16,24 @@ const DON_H = 43.3;
 // 余白設定
 const GAP_S = 5;
 const GAP_M = 10;
-const GAP_L = 20;
 
-// 色定義 (フォールバック付き)
+// 色定義
 const THEME = {
-  BG: COLORS?.BACKGROUND || 0x2E8B57, // 深い緑
+  BG: COLORS?.BACKGROUND || 0x2E8B57,
   ZONE_BORDER: 0xFFFFFF,
   ZONE_BG: 0x000000,
   TEXT: 0xFFFFFF,
   BADGE_BG: 0xFF0000,
   BADGE_TEXT: 0xFFFFFF,
-  PLAYER_TINT: 0xAAAAFF, // 自分側の識別用（薄い青）
-  ENEMY_TINT: 0xFFAAAA,  // 相手側の識別用（薄い赤）
+  PLAYER_TINT: 0xAAAAFF, // 自分側 (青系)
+  ENEMY_TINT: 0xFFAAAA,  // 相手側 (赤系)
+  DON_TINT: 0xDDDDDD,
 };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const intervalRef = useRef<number | null>(null); // APIポーリング用
+  const intervalRef = useRef<number | null>(null);
 
   // レスポンシブ計算用ステート
   const [dimensions, setDimensions] = useState({ 
@@ -48,7 +48,6 @@ export const RealGame = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
       
-      // アスペクト比を維持して画面に収める (contain)
       const scaleW = w / LOGICAL_WIDTH;
       const scaleH = h / LOGICAL_HEIGHT;
       const scale = Math.min(scaleW, scaleH);
@@ -70,9 +69,8 @@ export const RealGame = () => {
     if (!containerRef.current || appRef.current) return;
 
     try {
-      console.log('[PixiJS] Initializing v1.2 Layout...');
+      console.log('[PixiJS] Initializing v1.2 Compliant Layout...');
 
-      // アプリケーション作成 (論理解像度で固定)
       const app = new PIXI.Application({
         width: LOGICAL_WIDTH,
         height: LOGICAL_HEIGHT,
@@ -89,7 +87,6 @@ export const RealGame = () => {
       // 🛠 ヘルパー関数
       // ---------------------------------------------------------
 
-      // ゾーン（枠線）の作成
       const createZone = (
         x: number, 
         y: number, 
@@ -111,15 +108,15 @@ export const RealGame = () => {
         g.endFill();
         container.addChild(g);
 
-        // ラベル (デバッグ用または薄く表示)
+        // ラベル
         if (options.label) {
           const text = new PIXI.Text(options.label, {
             fontFamily: 'Arial',
-            fontSize: 10,
+            fontSize: 9, // 少し小さく
             fill: color,
             align: 'center',
           });
-          text.alpha = 0.5;
+          text.alpha = 0.6;
           text.anchor.set(0.5);
           text.position.set(w / 2, h / 2);
           container.addChild(text);
@@ -129,13 +126,10 @@ export const RealGame = () => {
         return container;
       };
 
-      // バッジ（枚数表示）の作成
       const createBadge = (parent: PIXI.Container, count: number, w: number, h: number) => {
         const badge = new PIXI.Container();
-        
-        // 右下に配置
-        const r = 10;
-        badge.position.set(w - r/2, h - r/2);
+        const r = 9;
+        badge.position.set(w - r/2 - 2, h - r/2 - 2);
 
         const bg = new PIXI.Graphics();
         bg.beginFill(THEME.BADGE_BG);
@@ -156,67 +150,80 @@ export const RealGame = () => {
       };
 
       // ---------------------------------------------------------
-      // 🎨 盤面レイアウト実装 (指示書 v1.2)
+      // 🎨 盤面レイアウト実装 (指示書 v1.2 完全準拠)
       // ---------------------------------------------------------
 
-      // === 座標計算 ===
-      
-      // [Player] Y座標の基準点 (下から積み上げ)
-      const P_HAND_Y = LOGICAL_HEIGHT - STD_H - GAP_M; // 手札 (Bottom)
-      const P_LEADER_Y = P_HAND_Y - GAP_M - STD_H;     // リーダー列
-      const P_BATTLE_Y = P_LEADER_Y - GAP_M - STD_H;   // バトル場 (キャラ)
+      // === Y座標計算 ===
+      // [Player] 下から積み上げ
+      const P_HAND_Y   = LOGICAL_HEIGHT - STD_H - GAP_M; // Row 3 (Bottom)
+      const P_MAIN_Y   = P_HAND_Y - GAP_M - STD_H;       // Row 2 (Leader)
+      const P_BATTLE_Y = P_MAIN_Y - GAP_M - STD_H;       // Row 1 (Battle)
 
-      // [Enemy] Y座標の基準点 (上から配置)
-      const E_HAND_Y = GAP_M;                          // 手札 (Top)
-      const E_LEADER_Y = E_HAND_Y + STD_H + GAP_M;     // リーダー列
-      const E_BATTLE_Y = E_LEADER_Y + STD_H + GAP_M;   // バトル場
+      // [Opponent] 上から配置 (順序修正: Hand -> Main -> Battle)
+      const E_HAND_Y   = GAP_M;                          // Row 1 (Top)
+      const E_MAIN_Y   = E_HAND_Y + STD_H + GAP_M;       // Row 2 (Leader)
+      const E_BATTLE_Y = E_MAIN_Y + STD_H + GAP_M;       // Row 3 (Battle)
 
-      // [X座標]
-      const X_LEADER = CENTER_X - STD_W / 2;
+      // === X座標計算 (メイン列 - Player基準) ===
+      const LEADER_X = CENTER_X - STD_W / 2;
       
-      // リーダー列の配置: Life -- Don -- [Leader] -- Stage -- Deck -- Trash
-      // ※スペースが狭いため、少し調整して配置
-      const X_RIGHT_BLOCK = CENTER_X + STD_W / 2 + GAP_M; // リーダーの右
-      const X_LEFT_BLOCK  = CENTER_X - STD_W / 2 - GAP_M; // リーダーの左
+      // Player Side X
+      const P_STAGE_X  = LEADER_X + STD_W + GAP_S;
+      const P_DECK_X   = P_STAGE_X + STD_W + GAP_S;
+      const P_TRASH_X  = P_DECK_X + STD_W + GAP_S;
+      
+      const P_LIFE_X     = LEADER_X - STD_W - GAP_S;
+      const P_DON_DECK_X = P_LIFE_X - DON_W - GAP_S;
+      const P_COST_X     = P_DON_DECK_X - DON_W - GAP_S;
+
+      // Opponent Side X (点対称配置 = 左右反転)
+      // 相手のデッキ等は画面左側に来る
+      const E_STAGE_X = LEADER_X - STD_W - GAP_S; // リーダーの左
+      const E_DECK_X  = E_STAGE_X - STD_W - GAP_S;
+      const E_TRASH_X = E_DECK_X - STD_W - GAP_S;
+
+      const E_LIFE_X     = LEADER_X + STD_W + GAP_S; // リーダーの右
+      const E_DON_DECK_X = E_LIFE_X + STD_W + GAP_S; // LifeはSTD幅なのでオフセット調整
+      const E_COST_X     = E_DON_DECK_X + DON_W + GAP_S;
+
 
       // ==========================================
       // 🟢 PLAYER SIDE (自分)
       // ==========================================
       
-      // 1. Hand (手札) - 横幅いっぱい
-      createZone(GAP_S, P_HAND_Y, LOGICAL_WIDTH - GAP_S * 2, STD_H, { label: "Hand Area", tint: THEME.PLAYER_TINT });
+      // 1. Hand Area (7枚並べる)
+      for (let i = 0; i < 7; i++) {
+        createZone(
+          GAP_S + i * (STD_W + GAP_S), 
+          P_HAND_Y, 
+          STD_W, 
+          STD_H, 
+          { label: `Hand ${i+1}`, tint: THEME.PLAYER_TINT }
+        );
+      }
 
-      // 2. Leader (中央)
-      createZone(X_LEADER, P_LEADER_Y, STD_W, STD_H, { label: "Leader", tint: 0x00FF00 });
+      // 2. Main Row
+      // Cost
+      const costZone = createZone(P_COST_X, P_MAIN_Y, DON_W, STD_H, { label: "Cost", tint: THEME.DON_TINT });
+      createBadge(costZone, 0, DON_W, STD_H);
+      // Don Deck
+      const donDeckZone = createZone(P_DON_DECK_X, P_MAIN_Y, DON_W, STD_H, { label: "Don", tint: THEME.DON_TINT });
+      createBadge(donDeckZone, 10, DON_W, STD_H);
+      // Life
+      const lifeZone = createZone(P_LIFE_X, P_MAIN_Y, STD_W, STD_H, { label: "Life", tint: THEME.PLAYER_TINT });
+      createBadge(lifeZone, 5, STD_W, STD_H);
+      // Leader
+      createZone(LEADER_X, P_MAIN_Y, STD_W, STD_H, { label: "Leader", tint: 0x00FF00 });
+      // Stage
+      createZone(P_STAGE_X, P_MAIN_Y, STD_W, STD_H, { label: "Stage", tint: THEME.PLAYER_TINT });
+      // Deck
+      const deckZone = createZone(P_DECK_X, P_MAIN_Y, STD_W, STD_H, { label: "Deck", tint: THEME.PLAYER_TINT });
+      createBadge(deckZone, 40, STD_W, STD_H);
+      // Trash
+      const trashZone = createZone(P_TRASH_X, P_MAIN_Y, STD_W, STD_H, { label: "Trash", tint: THEME.PLAYER_TINT });
+      createBadge(trashZone, 0, STD_W, STD_H);
 
-      // 3. Stage (リーダーの右隣と仮定 ※指示書「リーダーとデッキの中間」)
-      createZone(X_RIGHT_BLOCK, P_LEADER_Y, STD_W, STD_H, { label: "Stage", tint: THEME.PLAYER_TINT });
-
-      // 4. Deck (ステージのさらに右)
-      const pDeckZone = createZone(X_RIGHT_BLOCK + STD_W + GAP_S, P_LEADER_Y, STD_W, STD_H, { label: "Deck", tint: THEME.PLAYER_TINT });
-      createBadge(pDeckZone, 40, STD_W, STD_H); // 初期枚数バッジ
-
-      // 5. Trash (デッキの右、または下？ スペース的にデッキの下に配置してみる)
-      // 今回はデッキの右（画面端）に配置
-      const pTrashZone = createZone(X_RIGHT_BLOCK + (STD_W + GAP_S) * 2, P_LEADER_Y, STD_W, STD_H, { label: "Trash", tint: THEME.PLAYER_TINT });
-      createBadge(pTrashZone, 0, STD_W, STD_H);
-
-      // 6. Life (リーダーの左隣)
-      const pLifeZone = createZone(X_LEFT_BLOCK - STD_W, P_LEADER_Y, STD_W, STD_H, { label: "Life", tint: THEME.PLAYER_TINT });
-      createBadge(pLifeZone, 5, STD_W, STD_H);
-
-      // 7. Don Area (ライフのさらに左)
-      // Active Don / Rest Don を分けて置くか、ドンデッキを置くか。
-      // ここではドンデッキ＋ドン置き場として2つ配置
-      const X_DON = X_LEFT_BLOCK - STD_W - GAP_S - DON_W;
-      const pDonDeck = createZone(X_DON, P_LEADER_Y, DON_W, DON_H, { label: "Don", tint: 0xDDDDDD });
-      createBadge(pDonDeck, 10, DON_W, DON_H);
-      
-      const pCostArea = createZone(X_DON - GAP_S - DON_W, P_LEADER_Y, DON_W, DON_H, { label: "Cost", tint: 0xDDDDDD });
-      createBadge(pCostArea, 0, DON_W, DON_H);
-
-      // 8. Battle Area (Characters) - 5枚グリッド
-      // 中央揃えにする: 全幅 = 5 * STD_W + 4 * GAP_S
+      // 3. Battle Area (Characters) - 中央揃え 5枚
       const BATTLE_ROW_W = (STD_W * 5) + (GAP_S * 4);
       const BATTLE_START_X = CENTER_X - BATTLE_ROW_W / 2;
       
@@ -235,23 +242,43 @@ export const RealGame = () => {
       // 🔴 OPPONENT SIDE (相手) - 点対称配置
       // ==========================================
       
-      // 1. Hand (最上部)
-      createZone(GAP_S, E_HAND_Y, LOGICAL_WIDTH - GAP_S * 2, STD_H, { label: "Enemy Hand", tint: THEME.ENEMY_TINT });
+      // 1. Hand Area (7枚並べる - 最上部)
+      for (let i = 0; i < 7; i++) {
+        createZone(
+          GAP_S + i * (STD_W + GAP_S), 
+          E_HAND_Y, 
+          STD_W, 
+          STD_H, 
+          { label: `Opp ${i+1}`, tint: THEME.ENEMY_TINT }
+        );
+      }
 
-      // 2. Leader (中央)
-      createZone(X_LEADER, E_LEADER_Y, STD_W, STD_H, { label: "E.Ldr", tint: 0xFF0000 });
-
-      // 3. Enemy Deck / Trash (相手から見て右＝こちらから見て左)
-      const eDeckZone = createZone(X_LEFT_BLOCK - STD_W, E_LEADER_Y, STD_W, STD_H, { label: "E.Deck", tint: THEME.ENEMY_TINT });
-      createBadge(eDeckZone, 40, STD_W, STD_H);
+      // 2. Main Row (画面左側にDeck/Trash、右側にLife/Don)
+      // Leader (Center)
+      createZone(LEADER_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Ldr", tint: 0xFF0000 });
       
-      // 4. Enemy Life (相手から見て左＝こちらから見て右)
-      const eLifeZone = createZone(X_RIGHT_BLOCK, E_LEADER_Y, STD_W, STD_H, { label: "E.Life", tint: THEME.ENEMY_TINT });
-      createBadge(eLifeZone, 5, STD_W, STD_H);
+      // Left Side: Trash -> Deck -> Stage
+      // E.Trash
+      const eTrash = createZone(E_TRASH_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Trs", tint: THEME.ENEMY_TINT });
+      createBadge(eTrash, 0, STD_W, STD_H);
+      // E.Deck
+      const eDeck = createZone(E_DECK_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Deck", tint: THEME.ENEMY_TINT });
+      createBadge(eDeck, 40, STD_W, STD_H);
+      // E.Stage
+      createZone(E_STAGE_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Stg", tint: THEME.ENEMY_TINT });
 
-      // 5. Enemy Battle Area (Characters)
+      // Right Side: Life -> Don -> Cost
+      // E.Life
+      const eLife = createZone(E_LIFE_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Life", tint: THEME.ENEMY_TINT });
+      createBadge(eLife, 5, STD_W, STD_H);
+      // E.Don
+      const eDon = createZone(E_DON_DECK_X, E_MAIN_Y, DON_W, STD_H, { label: "E.Don", tint: THEME.DON_TINT });
+      createBadge(eDon, 10, DON_W, STD_H);
+      // E.Cost
+      createZone(E_COST_X, E_MAIN_Y, DON_W, STD_H, { label: "E.Cost", tint: THEME.DON_TINT });
+
+      // 3. Battle Area (Characters)
       for (let i = 0; i < 5; i++) {
-        // 相手側は右詰め（相手視点で左詰め）にするか、こちらも中央揃えで統一
         createZone(
           BATTLE_START_X + i * (STD_W + GAP_S), 
           E_BATTLE_Y, 
@@ -263,12 +290,18 @@ export const RealGame = () => {
 
       console.log('[PixiJS] Layout v1.2 Complete.');
 
-      // --- 4. API Polling Setup (Mock) ---
-      // 将来的にここへ fetch ロジックを組み込む
-      intervalRef.current = window.setInterval(() => {
-        // console.log("Fetching game state..."); 
-        // updateGameState(app); // 関数を実装して呼び出す
-      }, 1000);
+      // --- 4. API Polling (Mock) ---
+      const fetchGameState = async () => {
+        try {
+          // const res = await fetch('...');
+          // const data = await res.json();
+          // updateBoard(app, data);
+        } catch (err) {
+          console.error("Fetch error:", err);
+        }
+      };
+
+      intervalRef.current = window.setInterval(fetchGameState, 2000);
 
     } catch (e: any) {
       console.error("PIXI LAYOUT ERROR:", e);
@@ -300,12 +333,10 @@ export const RealGame = () => {
       ref={containerRef}
       style={{
         position: 'absolute',
-        // 画面中央に配置
         transformOrigin: '0 0',
         transform: `translate(${dimensions.left}px, ${dimensions.top}px) scale(${dimensions.scale})`,
         width: LOGICAL_WIDTH,
         height: LOGICAL_HEIGHT,
-        // デバッグ用に影をつける
         boxShadow: '0 0 50px rgba(0,0,0,0.8)',
         overflow: 'hidden'
       }}
