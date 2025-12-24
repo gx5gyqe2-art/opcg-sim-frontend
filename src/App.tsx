@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode, useEffect, useState } from 'react';
+import { Component, useEffect, useState } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { RealGame } from './components/RealGame';
 
 // 🔧 デバッグモード切替スイッチ
