@@ -79,9 +79,10 @@ export const RealGame = () => {
           fontFamily: 'Arial',
           fontSize: 14,
           fill: color,
-          alpha: 0.7,
           align: 'center',
+          // alpha: 0.7 はスタイルプロパティではないため削除
         });
+        text.alpha = 0.7; // インスタンス生成後に設定
         text.anchor.set(0.5);
         text.x = w / 2;
         text.y = h / 2;
