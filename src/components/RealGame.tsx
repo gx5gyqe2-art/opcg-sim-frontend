@@ -11,7 +11,7 @@ const CENTER_X = LOGICAL_WIDTH / 2;
 const STD_W = 46.7;
 const STD_H = 63.3;
 const DON_W = 32.0;
-const DON_H = 43.3;
+const DON_H = 43.3; // 修正: Cost/Donエリアで使用する高さ
 
 // 余白設定
 const GAP_S = 5;
@@ -177,13 +177,12 @@ export const RealGame = () => {
       const P_COST_X     = P_DON_DECK_X - DON_W - GAP_S;
 
       // Opponent Side X (点対称配置 = 左右反転)
-      // 相手のデッキ等は画面左側に来る
-      const E_STAGE_X = LEADER_X - STD_W - GAP_S; // リーダーの左
+      const E_STAGE_X = LEADER_X - STD_W - GAP_S;
       const E_DECK_X  = E_STAGE_X - STD_W - GAP_S;
       const E_TRASH_X = E_DECK_X - STD_W - GAP_S;
 
-      const E_LIFE_X     = LEADER_X + STD_W + GAP_S; // リーダーの右
-      const E_DON_DECK_X = E_LIFE_X + STD_W + GAP_S; // LifeはSTD幅なのでオフセット調整
+      const E_LIFE_X     = LEADER_X + STD_W + GAP_S;
+      const E_DON_DECK_X = E_LIFE_X + STD_W + GAP_S;
       const E_COST_X     = E_DON_DECK_X + DON_W + GAP_S;
 
 
@@ -203,13 +202,18 @@ export const RealGame = () => {
       }
 
       // 2. Main Row
+      // Cost & Don Deck (小さいカード: DON_Hを使用し、下揃えにする)
+      const OFFSET_Y = STD_H - DON_H;
+
       // Cost
-      const costZone = createZone(P_COST_X, P_MAIN_Y, DON_W, STD_H, { label: "Cost", tint: THEME.DON_TINT });
-      createBadge(costZone, 0, DON_W, STD_H);
+      const costZone = createZone(P_COST_X, P_MAIN_Y + OFFSET_Y, DON_W, DON_H, { label: "Cost", tint: THEME.DON_TINT });
+      createBadge(costZone, 0, DON_W, DON_H);
+      
       // Don Deck
-      const donDeckZone = createZone(P_DON_DECK_X, P_MAIN_Y, DON_W, STD_H, { label: "Don", tint: THEME.DON_TINT });
-      createBadge(donDeckZone, 10, DON_W, STD_H);
-      // Life
+      const donDeckZone = createZone(P_DON_DECK_X, P_MAIN_Y + OFFSET_Y, DON_W, DON_H, { label: "Don", tint: THEME.DON_TINT });
+      createBadge(donDeckZone, 10, DON_W, DON_H);
+      
+      // Life (Standard Height)
       const lifeZone = createZone(P_LIFE_X, P_MAIN_Y, STD_W, STD_H, { label: "Life", tint: THEME.PLAYER_TINT });
       createBadge(lifeZone, 5, STD_W, STD_H);
       // Leader
@@ -223,7 +227,7 @@ export const RealGame = () => {
       const trashZone = createZone(P_TRASH_X, P_MAIN_Y, STD_W, STD_H, { label: "Trash", tint: THEME.PLAYER_TINT });
       createBadge(trashZone, 0, STD_W, STD_H);
 
-      // 3. Battle Area (Characters) - 中央揃え 5枚
+      // 3. Battle Area (Characters)
       const BATTLE_ROW_W = (STD_W * 5) + (GAP_S * 4);
       const BATTLE_START_X = CENTER_X - BATTLE_ROW_W / 2;
       
@@ -242,7 +246,7 @@ export const RealGame = () => {
       // 🔴 OPPONENT SIDE (相手) - 点対称配置
       // ==========================================
       
-      // 1. Hand Area (7枚並べる - 最上部)
+      // 1. Hand Area
       for (let i = 0; i < 7; i++) {
         createZone(
           GAP_S + i * (STD_W + GAP_S), 
@@ -253,11 +257,10 @@ export const RealGame = () => {
         );
       }
 
-      // 2. Main Row (画面左側にDeck/Trash、右側にLife/Don)
+      // 2. Main Row
       // Leader (Center)
       createZone(LEADER_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Ldr", tint: 0xFF0000 });
       
-      // Left Side: Trash -> Deck -> Stage
       // E.Trash
       const eTrash = createZone(E_TRASH_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Trs", tint: THEME.ENEMY_TINT });
       createBadge(eTrash, 0, STD_W, STD_H);
@@ -271,11 +274,14 @@ export const RealGame = () => {
       // E.Life
       const eLife = createZone(E_LIFE_X, E_MAIN_Y, STD_W, STD_H, { label: "E.Life", tint: THEME.ENEMY_TINT });
       createBadge(eLife, 5, STD_W, STD_H);
-      // E.Don
-      const eDon = createZone(E_DON_DECK_X, E_MAIN_Y, DON_W, STD_H, { label: "E.Don", tint: THEME.DON_TINT });
-      createBadge(eDon, 10, DON_W, STD_H);
+      
+      // E.Don (Top Aligned relative to screen = Bottom aligned relative to Opponent Hand)
+      // 小さいカードは行の上端 (E_MAIN_Y) に合わせる
+      const eDon = createZone(E_DON_DECK_X, E_MAIN_Y, DON_W, DON_H, { label: "E.Don", tint: THEME.DON_TINT });
+      createBadge(eDon, 10, DON_W, DON_H);
+      
       // E.Cost
-      createZone(E_COST_X, E_MAIN_Y, DON_W, STD_H, { label: "E.Cost", tint: THEME.DON_TINT });
+      createZone(E_COST_X, E_MAIN_Y, DON_W, DON_H, { label: "E.Cost", tint: THEME.DON_TINT });
 
       // 3. Battle Area (Characters)
       for (let i = 0; i < 5; i++) {
