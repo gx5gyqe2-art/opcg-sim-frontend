@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Stage, Container, Graphics } from '@pixi/react';
-import { GameBoard } from './GameBoard';
+// import { GameBoard } from './GameBoard'; // ⚠️ 原因切り分けのためコメントアウト
 import { SCREEN_WIDTH, SCREEN_HEIGHT, COLORS } from '../constants';
 
 export const RealGame = () => {
@@ -17,12 +17,10 @@ export const RealGame = () => {
       const windowWidth = window.innerWidth;
       const windowHeight = window.innerHeight;
       
-      // 画面内に収まる最大スケールを計算
       const scaleW = windowWidth / SCREEN_WIDTH;
       const scaleH = windowHeight / SCREEN_HEIGHT;
       const scale = Math.min(scaleW, scaleH);
 
-      // 中央寄せのための位置計算
       const left = (windowWidth - SCREEN_WIDTH * scale) / 2;
       const top = (windowHeight - SCREEN_HEIGHT * scale) / 2;
 
@@ -30,16 +28,17 @@ export const RealGame = () => {
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize(); // 初期実行
+    handleResize();
 
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // --- 3. 背景描画関数 ---
-  // GraphicsコンポーネントとCOLORS定数を使用し、TS6133エラーを回避
   const drawBackground = useCallback((g: any) => {
     g.clear();
-    g.beginFill(COLORS.BACKGROUND);
+    // COLORS.BACKGROUND がもし読み込めない場合用の一時的なフォールバックも含めておく
+    const bgColor = COLORS?.BACKGROUND || 0x005500; 
+    g.beginFill(bgColor);
     g.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     g.endFill();
   }, []);
@@ -58,17 +57,20 @@ export const RealGame = () => {
         width={SCREEN_WIDTH} 
         height={SCREEN_HEIGHT} 
         options={{ 
-          background: COLORS.BACKGROUND, // 初期化時の背景色指定
+          background: COLORS?.BACKGROUND || 0x005500,
           antialias: true,
           resolution: window.devicePixelRatio || 1
         }}
       >
         <Container>
-          {/* 背景レイヤー (Graphics使用) */}
+          {/* 背景レイヤー */}
           <Graphics draw={drawBackground} />
           
-          {/* メインゲーム盤面 */}
-          <GameBoard />
+          {/* ⚠️ CRITICAL DIAGNOSTIC STEP ⚠️
+            GameBoardの描画を一時的に停止中。
+            これでクラッシュが治れば、原因は GameBoard 内部にある。
+          */}
+          {/* <GameBoard /> */}
         </Container>
       </Stage>
     </div>
