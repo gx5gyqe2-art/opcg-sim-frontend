@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Stage, Container, Graphics } from '@pixi/react';
-import { GameBoard } from './GameBoard';
-import { SCREEN_WIDTH, SCREEN_HEIGHT, COLORS } from '../constants';
+import { Stage, Graphics } from '@pixi/react';
+import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../constants';
 
 export const RealGame = () => {
+  // --- 1. レスポンシブ計算用ステート ---
   const [dimensions, setDimensions] = useState({ 
     scale: 1, 
     left: 0, 
     top: 0 
   });
 
-  // レスポンシブ対応 (画面サイズに合わせてScale計算)
+  // --- 2. リサイズ監視ロジック (既存ロジックの維持) ---
   useEffect(() => {
     const handleResize = () => {
       const windowWidth = window.innerWidth;
@@ -29,17 +29,21 @@ export const RealGame = () => {
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize();
+    handleResize(); // 初期実行
 
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 背景描画（Graphics使用の要件を満たすため）
-  const drawBackground = useCallback((g: any) => {
+  // --- 3. 診断用描画関数 (画面を赤く塗るだけ) ---
+  const drawDiagnosticScreen = useCallback((g: any) => {
     g.clear();
-    // COLORS.BACKGROUND が未定義の場合はフォールバック色を使用
-    g.beginFill(COLORS.BACKGROUND || 0x222222);
+    g.beginFill(0xFF0000); // 赤色
     g.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    g.endFill();
+    
+    // 動作確認用のテキスト代わりの矩形（中央に白い四角）
+    g.beginFill(0xFFFFFF);
+    g.drawRect(SCREEN_WIDTH / 2 - 50, SCREEN_HEIGHT / 2 - 50, 100, 100);
     g.endFill();
   }, []);
 
@@ -50,7 +54,8 @@ export const RealGame = () => {
       transform: `translate(${dimensions.left}px, ${dimensions.top}px) scale(${dimensions.scale})`,
       width: SCREEN_WIDTH,
       height: SCREEN_HEIGHT,
-      boxShadow: '0 0 20px rgba(0,0,0,0.5)'
+      boxShadow: '0 0 20px rgba(255, 0, 0, 0.5)', // 赤い影で診断モードであることを強調
+      border: '2px solid red'
     }}>
       <Stage 
         width={SCREEN_WIDTH} 
@@ -61,12 +66,7 @@ export const RealGame = () => {
           resolution: window.devicePixelRatio || 1
         }}
       >
-        <Container>
-          {/* 背景レイヤー */}
-          <Graphics draw={drawBackground} />
-          {/* ゲーム盤面レイヤー */}
-          <GameBoard />
-        </Container>
+        <Graphics draw={drawDiagnosticScreen} />
       </Stage>
     </div>
   );
