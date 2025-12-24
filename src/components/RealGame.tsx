@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 
 // --- 定数・カラー定義 ---
-const SAFE_AREA_TOP = 44; // ノッチ回避計算用（背景描画は0から）
+const SAFE_AREA_TOP = 44; // ノッチ回避計算用
 
 const COLORS = {
   OPPONENT_BG: 0xFFEEEE, // 薄いピンク
@@ -106,19 +106,20 @@ export const RealGame = () => {
       // エリア分割
       const REMAINING_H = H - H_CTRL;
       const H_OPP_TOTAL = REMAINING_H * 0.45;
-      const H_PLAYER_TOTAL = REMAINING_H - H_OPP_TOTAL;
 
       // エリア開始Y座標
-      const Y_OPP_START = 0; // 画面最上部から
+      // 背景を最上部から塗るため Y=0 を代入して使用
+      const Y_OPP_START = 0; 
       const Y_CTRL_START = H_OPP_TOTAL;
       const Y_PLAYER_START = H_OPP_TOTAL + H_CTRL;
+      const H_PLAYER_TOTAL = H - Y_PLAYER_START;
 
       // --- 3. 背景描画 (Fullscreen) ---
       const bg = new PIXI.Graphics();
       
-      // Opponent Area (Top) - ノッチ裏まで塗る
+      // Opponent Area (Top) - Y_OPP_START (0) から描画してノッチ裏まで浸透させる
       bg.beginFill(COLORS.OPPONENT_BG);
-      bg.drawRect(0, 0, W, H_OPP_TOTAL);
+      bg.drawRect(0, Y_OPP_START, W, H_OPP_TOTAL);
       bg.endFill();
 
       // Control Area (Middle)
@@ -136,20 +137,17 @@ export const RealGame = () => {
 
       // --- 4. サイズ計算 ---
       const GAP_BASE = W * 0.015; 
-      // 横に7.2枚分入る計算
       const SLOT_W = (W - (GAP_BASE * 8)) / 7.2; 
       
       const CW = SLOT_W;
-      const CH = CW * 1.4; // アスペクト比 1:1.4
+      const CH = CW * 1.4; 
       
       // ドン!!カードサイズ (80%)
       const DON_W = CW * 0.8;
       const DON_H = CH * 0.8;
 
-      // 下揃え計算用オフセット (標準カードの底辺に合わせる)
-      // 自分側: 中心を下にずらす (+Y)
+      // 下揃え計算用オフセット
       const OFFSET_ALIGN_BOTTOM_PLAYER = (CH - DON_H) / 2;
-      // 相手側: コンテナが180度回転しているため、画面上で下にずらすにはコンテナ内Yを減らす (-Y)
       const OFFSET_ALIGN_BOTTOM_OPPONENT = -((CH - DON_H) / 2);
 
 
@@ -170,13 +168,12 @@ export const RealGame = () => {
         const textStr = isBack ? LABELS.BACK : label;
         const textColor = isBack ? COLORS.TEXT_BACK : COLORS.TEXT_MAIN;
 
-        // 背景 (Rounded Rect)
+        // 背景
         const g = new PIXI.Graphics();
         g.lineStyle(2, strokeColor, 0.8);
         g.beginFill(fillColor, isBack ? 1.0 : 0.5);
-        g.drawRoundedRect(-w/2, -h/2, w, h, 8); // 角丸少し強め
+        g.drawRoundedRect(-w/2, -h/2, w, h, 8); 
         
-        // 裏面装飾 (枠線内側に一本線を入れるなど)
         if (isBack) {
            g.lineStyle(1, 0xAAAAAA, 0.5);
            g.drawRoundedRect(-w/2 + 4, -h/2 + 4, w - 8, h - 8, 4);
@@ -184,7 +181,7 @@ export const RealGame = () => {
         g.endFill();
         container.addChild(g);
 
-        // ラベル
+        // ラベル - 裏面は太字で "BACK" をはっきり表示
         const fontSize = isBack ? 14 : Math.min(12, w * 0.25);
         const text = new PIXI.Text(textStr, {
           fontFamily: 'Arial',
@@ -198,7 +195,6 @@ export const RealGame = () => {
         // バッジ
         if (options.badge !== undefined) {
           const badge = new PIXI.Container();
-          // 右下配置
           badge.position.set(w/2 - 6, h/2 - 6);
 
           const badgeBg = new PIXI.Graphics();
@@ -237,9 +233,9 @@ export const RealGame = () => {
 
       const OPP_AVAIL_H = H_OPP_TOTAL - SAFE_AREA_TOP;
       
-      const O_ROW3_Y = OPP_AVAIL_H * 0.2 + SAFE_AREA_TOP * 0.2; // Char
-      const O_ROW2_Y = OPP_AVAIL_H * 0.55 + SAFE_AREA_TOP * 0.5; // Main
-      const O_ROW1_Y = OPP_AVAIL_H * 0.90 + SAFE_AREA_TOP; // Hand
+      const O_ROW3_Y = OPP_AVAIL_H * 0.2 + SAFE_AREA_TOP * 0.2; 
+      const O_ROW2_Y = OPP_AVAIL_H * 0.55 + SAFE_AREA_TOP * 0.5; 
+      const O_ROW1_Y = OPP_AVAIL_H * 0.90 + SAFE_AREA_TOP; 
 
       // --- Row 3: Characters ---
       for (let i = 0; i < 5; i++) {
@@ -259,14 +255,12 @@ export const RealGame = () => {
         { label: LABELS.TRASH, w: CW, h: CH, tint: COLORS.ENEMY_TINT, badge: 0 },
       ];
 
-      // 幅計算
       let oMainW = 0;
       O_MAIN_ELEMENTS.forEach(e => oMainW += e.w + GAP_BASE);
       oMainW -= GAP_BASE;
       let currentOX = (W - oMainW) / 2 + O_MAIN_ELEMENTS[0].w / 2;
 
       O_MAIN_ELEMENTS.forEach((el) => {
-        // ドンカード整列: 画面上で下揃えにするためのY調整
         const yOffset = (el.h < CH) ? OFFSET_ALIGN_BOTTOM_OPPONENT : 0;
         
         oppContainer.addChild(createZone(
@@ -277,7 +271,6 @@ export const RealGame = () => {
       });
 
       // --- Row 1: Hand (裏面, 中央揃え) ---
-      // デバッグログ回避マージンを削除し、純粋な中央揃えに変更
       const handCount = 7;
       for (let i = 0; i < handCount; i++) {
         oppContainer.addChild(createZone(
@@ -298,9 +291,9 @@ export const RealGame = () => {
       app.stage.addChild(playerContainer);
 
       const P_AVAIL_H = H_PLAYER_TOTAL;
-      const P_ROW1_Y = P_AVAIL_H * 0.2; // Char
-      const P_ROW2_Y = P_AVAIL_H * 0.55; // Main
-      const P_ROW3_Y = P_AVAIL_H * 0.9; // Hand
+      const P_ROW1_Y = P_AVAIL_H * 0.2; 
+      const P_ROW2_Y = P_AVAIL_H * 0.55; 
+      const P_ROW3_Y = P_AVAIL_H * 0.9; 
 
       // --- Row 1: Characters ---
       for (let i = 0; i < 5; i++) {
@@ -326,7 +319,6 @@ export const RealGame = () => {
       let currentPX = (W - pMainW) / 2 + P_MAIN_ELEMENTS[0].w / 2;
 
       P_MAIN_ELEMENTS.forEach((el) => {
-        // ドンカード整列: 下揃え (Yを増やす)
         const yOffset = (el.h < CH) ? OFFSET_ALIGN_BOTTOM_PLAYER : 0;
 
         playerContainer.addChild(createZone(
@@ -358,11 +350,10 @@ export const RealGame = () => {
 
       const buttons = ["Close", "Settings", "Reset", "Back", "View", "NextTurn"];
       
-      const btnFixedW = 70; // 固定幅
+      const btnFixedW = 70; 
       const btnH = 34;
       const btnGap = 8;
       
-      // 全体の幅を計算して中央寄せ
       const totalBtnW = buttons.length * btnFixedW + (buttons.length - 1) * btnGap;
       const btnStartX = (W - totalBtnW) / 2 + btnFixedW / 2;
       const btnY = H_CTRL / 2;
@@ -375,7 +366,7 @@ export const RealGame = () => {
         const btnBg = new PIXI.Graphics();
         btnBg.beginFill(0xFFFFFF);
         btnBg.lineStyle(1, 0xCCCCCC);
-        btnBg.drawRoundedRect(-btnFixedW/2, -btnH/2, btnFixedW, btnH, 10); // 角丸強め
+        btnBg.drawRoundedRect(-btnFixedW/2, -btnH/2, btnFixedW, btnH, 10); 
         btnBg.endFill();
         btn.addChild(btnBg);
 
