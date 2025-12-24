@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stage, Container, Graphics } from '@pixi/react';
 import { GameBoard } from './components/GameBoard';
 import { SCREEN_WIDTH, SCREEN_HEIGHT, COLORS } from './constants';

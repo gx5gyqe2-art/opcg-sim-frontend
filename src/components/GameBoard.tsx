@@ -6,8 +6,7 @@ import { SCREEN_WIDTH, SCREEN_HEIGHT, CARD_WIDTH, CARD_HEIGHT, DON_WIDTH, DON_HE
 export const GameBoard: React.FC = () => {
   // ■ 配置計算 (簡易計算)
   const centerX = SCREEN_WIDTH / 2;
-  const centerY = SCREEN_HEIGHT / 2;
-
+  
   // プレイヤー基準Y座標 (画面下半分)
   const playerBaseY = 500;
   // 相手基準Y座標 (画面上半分) - 点対称っぽく配置

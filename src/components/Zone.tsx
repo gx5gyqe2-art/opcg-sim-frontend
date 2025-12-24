@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Graphics, Text } from '@pixi/react';
+import { Graphics, Text, Container } from '@pixi/react';
 import { TextStyle } from 'pixi.js';
 import { COLORS } from '../constants';
 
@@ -39,7 +39,7 @@ export const Zone: React.FC<ZoneProps> = ({
   });
 
   return (
-    <container x={x} y={y} rotation={rotation}>
+    <Container x={x} y={y} rotation={rotation}>
       <Graphics draw={draw} />
       {label && (
         <Text 
@@ -50,6 +50,6 @@ export const Zone: React.FC<ZoneProps> = ({
           anchor={0.5} 
         />
       )}
-    </container>
+    </Container>
   );
 };
