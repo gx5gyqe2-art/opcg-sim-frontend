@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { Component, ErrorInfo, ReactNode, useEffect, useState } from 'react';
 import { RealGame } from './components/RealGame';
 
 // 🔧 デバッグモード切替スイッチ
@@ -6,6 +6,64 @@ import { RealGame } from './components/RealGame';
 // false: 本番のゲーム画面 (RealGame) を表示
 const IS_DEBUG_MODE = false;
 
+// --- Error Boundary (クラッシュ捕捉用コンポーネント) ---
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error, errorInfo: null };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#330000', // 暗い赤背景
+          color: '#ffaaaa',
+          height: '100%',
+          overflow: 'auto',
+          fontFamily: 'monospace',
+          border: '2px solid red',
+          boxSizing: 'border-box'
+        }}>
+          <h2 style={{ color: '#ff5555' }}>⚠️ CRITICAL RENDER ERROR</h2>
+          <div style={{ marginBottom: '20px', fontSize: '14px', fontWeight: 'bold' }}>
+            {this.state.error && this.state.error.toString()}
+          </div>
+          <details style={{ whiteSpace: 'pre-wrap', fontSize: '11px', lineHeight: '1.4' }}>
+            <summary style={{ cursor: 'pointer', marginBottom: '10px', color: '#fff' }}>
+              View Stack Trace
+            </summary>
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// --- Main App Component ---
 export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -74,10 +132,13 @@ export default function App() {
           <p>PixiJS is currently disabled.</p>
         </div>
       ) : (
-        <RealGame />
+        // 🛡️ ErrorBoundary で RealGame をラップ
+        <ErrorBoundary>
+          <RealGame />
+        </ErrorBoundary>
       )}
 
-      {/* --- Debug Overlay (常時表示) --- */}
+      {/* --- Debug Overlay (最前面・常時表示) --- */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -102,7 +163,7 @@ export default function App() {
           <div key={i} style={{ 
             marginBottom: '2px', 
             borderBottom: '1px solid #333',
-            color: log.includes('ERR') ? '#ff4444' : '#0f0' 
+            color: log.includes('ERR') || log.includes('WIN_ERR') ? '#ff4444' : '#0f0' 
           }}>
             {log}
           </div>
