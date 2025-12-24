@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 
 // --- 定数・カラー定義 ---
@@ -34,24 +34,16 @@ const LABELS = {
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  
-  // 画面リサイズ検知用のState
-  const [windowSize, setWindowSize] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight
-  });
 
   // --- 1. リサイズ監視 ---
   useEffect(() => {
     const handleResize = () => {
-      setWindowSize({
-        width: window.innerWidth,
-        height: window.innerHeight
-      });
-      // Pixiのレンダラーもリサイズ
+      // Reactのステート更新を行わず、直接Pixiレンダラーを操作する方式に変更
       if (appRef.current) {
+        // レンダラーのサイズをウィンドウに合わせる
         appRef.current.renderer.resize(window.innerWidth, window.innerHeight);
-        drawLayout(appRef.current); // レイアウト再描画
+        // レイアウト再描画を実行
+        drawLayout(appRef.current);
       }
     };
 
@@ -94,7 +86,7 @@ export const RealGame = () => {
         appRef.current = null;
       }
     };
-  }, []); // 初回のみ実行 (リサイズは上のuseEffectで処理)
+  }, []); // 初回のみ実行
 
 
   // =========================================================
