@@ -4,7 +4,7 @@ import { RealGame } from './components/RealGame';
 // 🔧 デバッグモード切替スイッチ
 // true: 外部依存を排除したメンテナンス画面を表示
 // false: 本番のゲーム画面 (RealGame) を表示
-const IS_DEBUG_MODE = false;
+const IS_DEBUG_MODE = true;
 
 export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
