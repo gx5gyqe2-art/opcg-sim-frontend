@@ -1,10 +1,9 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
+import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
+import './index.css'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+// React.StrictMode を削除し、PixiJS のコンテキストが
+// 1回だけ生成されるように制御します。
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <App />
 )
