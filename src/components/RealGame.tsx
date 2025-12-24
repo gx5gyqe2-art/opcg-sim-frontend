@@ -18,6 +18,17 @@ const COLORS = {
   BADGE_TEXT:  0xFFFFFF,
 };
 
+const LABELS = {
+  LEADER: "Leader",
+  STAGE: "Stage",
+  DECK: "Deck",
+  TRASH: "Trash",
+  LIFE: "Life",
+  DON: "Don",
+  COST: "Cost",
+  BACK: "BACK",
+};
+
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -64,12 +75,12 @@ export const RealGame = () => {
       const W = app.renderer.width / app.renderer.resolution;
       const H = app.renderer.height / app.renderer.resolution;
 
-      // 2. 垂直方向のサイズ制限
+      // 垂直方向のサイズ制限と計算
       const AVAILABLE_H_HALF = (H - MARGIN_TOP - MARGIN_BOTTOM - H_CTRL) / 2;
       const CH_LIMIT = AVAILABLE_H_HALF / 4.5;
       const CH = Math.min(CH_LIMIT, (W / 8) * 1.4);
       const CW = CH / 1.4;
-      const V_GAP = CH * 0.22; // 行間をカード高さの20%以上確保
+      const V_GAP = CH * 0.22; 
 
       const Y_CTRL_START = MARGIN_TOP + AVAILABLE_H_HALF;
       const Y_PLAYER_START = Y_CTRL_START + H_CTRL;
@@ -81,16 +92,12 @@ export const RealGame = () => {
       bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_PLAYER_START, W, H - Y_PLAYER_START).endFill();
       app.stage.addChild(bg);
 
-      // --- ゾーン生成ヘルパー ---
+      // ゾーン生成ヘルパー
       const createCardZone = (label: string, options: { 
         isBack?: boolean, badge?: number, isRest?: boolean, power?: string, name?: string, isOpponent?: boolean 
       } = {}) => {
         const container = new PIXI.Container();
-        
-        // レスト状態の回転 (1.3節)
-        if (options.isRest) {
-          container.rotation = Math.PI / 2;
-        }
+        if (options.isRest) container.rotation = Math.PI / 2;
 
         const g = new PIXI.Graphics();
         g.lineStyle(2, COLORS.ZONE_BORDER);
@@ -99,13 +106,11 @@ export const RealGame = () => {
         g.endFill();
         container.addChild(g);
 
-        // 内部エレメント用コンテナ
         const content = new PIXI.Container();
-        // 相手側の場合はエレメント自体を180度回転 (1.3節, 3.1節)
         if (options.isOpponent) content.rotation = Math.PI;
         container.addChild(content);
 
-        const mainText = new PIXI.Text(options.isBack ? "BACK" : label, {
+        const mainText = new PIXI.Text(options.isBack ? LABELS.BACK : label, {
           fontSize: Math.max(10, CH * 0.14), fontWeight: 'bold', fill: COLORS.TEXT_MAIN
         });
         mainText.anchor.set(0.5);
@@ -133,40 +138,33 @@ export const RealGame = () => {
           b.addChild(bt);
           content.addChild(b);
         }
-
         return container;
       };
 
-      // --- 配置ロジック ---
-      const getRowY = (rowIdx: number, isPlayer: boolean) => {
-        // rowIdx: 1(中央寄り) ~ 4(端寄り)
-        const base = isPlayer ? 0 : AVAILABLE_H_HALF;
-        const dir = isPlayer ? 1 : -1;
-        return (rowIdx - 0.5) * (CH + V_GAP) * dir;
-      };
+      const getRowYOffset = (rowIdx: number) => (rowIdx - 0.5) * (CH + V_GAP);
 
       // 🔵 自分側
       const pSide = new PIXI.Container();
       pSide.y = Y_PLAYER_START;
       app.stage.addChild(pSide);
 
-      // Row 1 (手札): 比率 [0.08, 0.22, 0.36, 0.50, 0.64, 0.78, 0.92]
+      // Row 1 (手札)
       [0.08, 0.22, 0.36, 0.5, 0.64, 0.78, 0.92].forEach(ratio => 
-        pSide.addChild(Object.assign(createCardZone("Hand", { name: "PLAYER" }), { x: W * ratio, y: (CH + V_GAP) * 3.5 }))
+        pSide.addChild(Object.assign(createCardZone("Hand", { name: "PLAYER" }), { x: W * ratio, y: getRowYOffset(4) }))
       );
-      // Row 2 (リソース): [0.15:DonDeck, 0.35:DonActive, 0.55:DonRest(横), 0.85:Trash]
-      pSide.addChild(Object.assign(createCardZone("DonDeck", { badge: 10 }), { x: W * 0.15, y: (CH + V_GAP) * 2.5 }));
-      pSide.addChild(Object.assign(createCardZone("DonActive"), { x: W * 0.35, y: (CH + V_GAP) * 2.5 }));
-      pSide.addChild(Object.assign(createCardZone("DonRest", { isRest: true }), { x: W * 0.55, y: (CH + V_GAP) * 2.5 }));
-      pSide.addChild(Object.assign(createCardZone("Trash", { badge: 0 }), { x: W * 0.85, y: (CH + V_GAP) * 2.5 }));
-      // Row 3 (司令部): [0.15:Life, 0.43:Leader, 0.57:Stage, 0.85:Deck]
-      pSide.addChild(Object.assign(createCardZone("Life", { badge: 5 }), { x: W * 0.15, y: (CH + V_GAP) * 1.5 }));
-      pSide.addChild(Object.assign(createCardZone("Leader", { power: "POWER 5000", name: "LUFFY" }), { x: W * 0.43, y: (CH + V_GAP) * 1.5 }));
-      pSide.addChild(Object.assign(createCardZone("Stage"), { x: W * 0.57, y: (CH + V_GAP) * 1.5 }));
-      pSide.addChild(Object.assign(createCardZone("Deck", { isBack: true, badge: 40 }), { x: W * 0.85, y: (CH + V_GAP) * 1.5 }));
-      // Row 4 (キャラ): [0.15, 0.50]
+      // Row 2 (リソース)
+      pSide.addChild(Object.assign(createCardZone(LABELS.DON + "Deck", { badge: 10 }), { x: W * 0.15, y: getRowYOffset(3) }));
+      pSide.addChild(Object.assign(createCardZone(LABELS.DON + "Active"), { x: W * 0.35, y: getRowYOffset(3) }));
+      pSide.addChild(Object.assign(createCardZone(LABELS.DON + "Rest", { isRest: true }), { x: W * 0.55, y: getRowYOffset(3) }));
+      pSide.addChild(Object.assign(createCardZone(LABELS.TRASH, { badge: 0 }), { x: W * 0.85, y: getRowYOffset(3) }));
+      // Row 3 (司令部)
+      pSide.addChild(Object.assign(createCardZone(LABELS.LIFE, { badge: 5 }), { x: W * 0.15, y: getRowYOffset(2) }));
+      pSide.addChild(Object.assign(createCardZone(LABELS.LEADER, { power: "POWER 5000", name: "LUFFY" }), { x: W * 0.43, y: getRowYOffset(2) }));
+      pSide.addChild(Object.assign(createCardZone(LABELS.STAGE), { x: W * 0.57, y: getRowYOffset(2) }));
+      pSide.addChild(Object.assign(createCardZone(LABELS.DECK, { isBack: true, badge: 40 }), { x: W * 0.85, y: getRowYOffset(2) }));
+      // Row 4 (キャラ)
       [0.15, 0.50].forEach(ratio => 
-        pSide.addChild(Object.assign(createCardZone("Char"), { x: W * ratio, y: (CH + V_GAP) * 0.5 }))
+        pSide.addChild(Object.assign(createCardZone("Char"), { x: W * ratio, y: getRowYOffset(1) }))
       );
 
       // 🔴 相手側 (180度回転・点対称)
@@ -174,28 +172,26 @@ export const RealGame = () => {
       oSide.x = W; oSide.y = Y_CTRL_START; oSide.rotation = Math.PI;
       app.stage.addChild(oSide);
 
-      const oRowY = (idx: number) => (idx - 0.5) * (CH + V_GAP);
-
-      // Row 1 (手札): 自分(1-ratio)
+      // Row 1 (手札)
       [0.08, 0.22, 0.36, 0.5, 0.64, 0.78, 0.92].forEach(ratio => 
-        oSide.addChild(Object.assign(createCardZone("Hand", { isBack: true, isOpponent: true, name: "ENEMY" }), { x: W * ratio, y: oRowY(4) }))
+        oSide.addChild(Object.assign(createCardZone("Hand", { isBack: true, isOpponent: true, name: "ENEMY" }), { x: W * ratio, y: getRowYOffset(4) }))
       );
-      // Row 2 (リソース): 点対称 [0.15:DonDeck, 0.35:DonActive, 0.55:DonRest(横), 0.85:Trash]
-      oSide.addChild(Object.assign(createCardZone("DonDeck", { badge: 10, isOpponent: true }), { x: W * 0.15, y: oRowY(3) }));
-      oSide.addChild(Object.assign(createCardZone("DonActive", { isOpponent: true }), { x: W * 0.35, y: oRowY(3) }));
-      oSide.addChild(Object.assign(createCardZone("DonRest", { isRest: true, isOpponent: true }), { x: W * 0.55, y: oRowY(3) }));
-      oSide.addChild(Object.assign(createCardZone("Trash", { badge: 0, isOpponent: true }), { x: W * 0.85, y: oRowY(3) }));
-      // Row 3 (司令部): [0.15:Deck, 0.43:Stage, 0.57:Leader, 0.85:Life]
-      oSide.addChild(Object.assign(createCardZone("Deck", { isBack: true, badge: 40, isOpponent: true }), { x: W * 0.15, y: oRowY(2) }));
-      oSide.addChild(Object.assign(createCardZone("Stage", { isOpponent: true }), { x: W * 0.43, y: oRowY(2) }));
-      oSide.addChild(Object.assign(createCardZone("Leader", { power: "POWER 7000", name: "KAIDO", isOpponent: true }), { x: W * 0.57, y: oRowY(2) }));
-      oSide.addChild(Object.assign(createCardZone("Life", { isBack: true, badge: 5, isOpponent: true }), { x: W * 0.85, y: oRowY(2) }));
+      // Row 2 (リソース)
+      oSide.addChild(Object.assign(createCardZone(LABELS.DON + "Deck", { badge: 10, isOpponent: true }), { x: W * 0.15, y: getRowYOffset(3) }));
+      oSide.addChild(Object.assign(createCardZone(LABELS.DON + "Active", { isOpponent: true }), { x: W * 0.35, y: getRowYOffset(3) }));
+      oSide.addChild(Object.assign(createCardZone(LABELS.DON + "Rest", { isRest: true, isOpponent: true }), { x: W * 0.55, y: getRowYOffset(3) }));
+      oSide.addChild(Object.assign(createCardZone(LABELS.TRASH, { badge: 0, isOpponent: true }), { x: W * 0.85, y: getRowYOffset(3) }));
+      // Row 3 (司令部)
+      oSide.addChild(Object.assign(createCardZone(LABELS.DECK, { isBack: true, badge: 40, isOpponent: true }), { x: W * 0.15, y: getRowYOffset(2) }));
+      oSide.addChild(Object.assign(createCardZone(LABELS.STAGE, { isOpponent: true }), { x: W * 0.43, y: getRowYOffset(2) }));
+      oSide.addChild(Object.assign(createCardZone(LABELS.LEADER, { power: "POWER 7000", name: "KAIDO", isOpponent: true }), { x: W * 0.57, y: getRowYOffset(2) }));
+      oSide.addChild(Object.assign(createCardZone(LABELS.LIFE, { isBack: true, badge: 5, isOpponent: true }), { x: W * 0.85, y: getRowYOffset(2) }));
       // Row 4 (キャラ)
       [0.15, 0.50].forEach(ratio => 
-        oSide.addChild(Object.assign(createCardZone("Char", { isOpponent: true }), { x: W * ratio, y: oRowY(1) }))
+        oSide.addChild(Object.assign(createCardZone("Char", { isOpponent: true }), { x: W * ratio, y: getRowYOffset(1) }))
       );
 
-      // 中央バーのボタン
+      // 中央操作バー
       const cBar = new PIXI.Container();
       cBar.y = Y_CTRL_START;
       app.stage.addChild(cBar);
