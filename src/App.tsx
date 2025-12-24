@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 export default function App() {
-  const [msg, setMsg] = useState("checking...");
   const base = import.meta.env.VITE_API_BASE_URL;
+  const [msg, setMsg] = useState("checking...");
 
   useEffect(() => {
     fetch(`${base}/health`)
@@ -12,7 +12,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 16 }}>
-      <div>VITE_API_BASE_URL: {base}</div>
+      <div>BASE: {base}</div>
       <div>{msg}</div>
     </div>
   );
