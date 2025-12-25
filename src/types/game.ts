@@ -1,16 +1,40 @@
-export interface CardInstance {
+// 盤面用（公開）カード
+export interface BoardCard {
   uuid: string;
   card_id: string;
-  name?: string;
-  power?: number;
-  cost?: number;
+  name: string;
+  power: number;
+  cost: number;
   is_rest: boolean;
-  is_face_up: boolean;
+  is_face_up: true; // BoardCardは常にtrue
   attached_don: number;
   owner_id: string;
   attribute?: string;
   counter?: number;
   traits?: string[];
+  keywords?: string[];
+}
+
+// 秘匿可能カード（手札・ライフ用）
+export interface HiddenCard {
+  uuid: string;
+  owner_id: string;
+  is_face_up: boolean;
+  // 以下は公開時のみ存在する可能性のある項目
+  card_id?: string;
+  name?: string;
+  power?: number;
+  cost?: number;
+  is_rest?: boolean;
+}
+
+export type CardInstance = BoardCard | HiddenCard;
+
+// ドンカードの構造
+export interface DonInstance {
+  uuid: string;
+  owner_id: string;
+  is_rest: boolean;
 }
 
 export interface PlayerState {
@@ -18,23 +42,16 @@ export interface PlayerState {
   name: string;
   life_count: number;
   hand_count: number;
-  don_active: any[]; // バックエンド公認のリスト形式
-  don_rested: any[];
-  leader: CardInstance;
+  don_active: DonInstance[];
+  don_rested: DonInstance[];
+  leader: BoardCard; // リーダーは常にBoardCard
   zones: {
-    field: CardInstance[];
+    field: BoardCard[];
     hand: CardInstance[];
     life: CardInstance[];
     trash: CardInstance[];
-    stage: CardInstance | null;
+    stage: BoardCard | null;
   };
-}
-
-// 既存の CardInstance や PlayerState の下に追加
-export interface GameResponse {
-  success: boolean;
-  gameId: string;
-  state: GameState;
 }
 
 export interface GameState {
@@ -50,3 +67,8 @@ export interface GameState {
   };
 }
 
+export interface GameResponse {
+  success: boolean;
+  gameId: string;
+  state: GameState;
+}

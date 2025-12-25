@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
-import { GameState, CardInstance } from '../types/game';
+import type { GameState, CardInstance, BoardCard } from '../types/game';
 import { initialGameResponse } from '../mocks/gameState';
 
-// --- デザイン定量パラメータ (v1.2 準拠) ---
 const MARGIN_TOP = 50;
 const MARGIN_BOTTOM = 40;
 const H_CTRL = 60;
 const COLORS = {
-  OPPONENT_BG: 0xFFEEEE, // ピンク
-  CONTROL_BG:  0xF0F0F0, // グレー
-  PLAYER_BG:   0xE6F7FF, // ブルー
+  OPPONENT_BG: 0xFFEEEE,
+  CONTROL_BG:  0xF0F0F0,
+  PLAYER_BG:   0xE6F7FF,
   ZONE_BORDER: 0x999999,
   ZONE_FILL:   0xFFFFFF,
   CARD_BACK:   0xDDDDDD,
@@ -22,24 +21,22 @@ const COLORS = {
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  
-  // 1. State管理
   const [gameState, setGameState] = useState<GameState>(initialGameResponse.state);
 
   const urlParams = new URLSearchParams(window.location.search);
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  // --- 座標・描画計算ヘルパー ---
   const getX = useCallback((ratio: number, width: number) => width * ratio, []);
-  const getY = useCallback((rowIdx: number, cardHeight: number, gap: number) => {
-    return (rowIdx - 0.5) * (cardHeight + gap);
-  }, []);
+  const getY = useCallback((rowIdx: number, cardHeight: number, gap: number) => (rowIdx - 0.5) * (cardHeight + gap), []);
 
-  const renderCard = (card: Partial<CardInstance>, cw: number, ch: number, isOpponent: boolean = false) => {
+  const renderCard = (card: CardInstance, cw: number, ch: number, isOpponent: boolean = false) => {
     const container = new PIXI.Container();
-    // 状態追従確認：is_rest による回転
-    if (card.is_rest) container.rotation = Math.PI / 2;
+    
+    // 型ガード: is_restプロパティの存在チェック
+    if ('is_rest' in card && card.is_rest) {
+      container.rotation = Math.PI / 2;
+    }
 
     const g = new PIXI.Graphics();
     g.lineStyle(2, COLORS.ZONE_BORDER);
@@ -52,20 +49,24 @@ export const RealGame = () => {
     if (isOpponent) content.rotation = Math.PI;
     container.addChild(content);
 
-    if (card.is_face_up !== false && card.name) {
-      const nameTxt = new PIXI.Text(card.name, { fontSize: 9, fill: COLORS.TEXT_MAIN });
+    // 公開状態の描画ロジック
+    if (card.is_face_up && 'name' in card) {
+      const nameTxt = new PIXI.Text(card.name ?? 'Unknown', { fontSize: 9, fill: COLORS.TEXT_MAIN });
       nameTxt.anchor.set(0.5, 0); nameTxt.y = ch / 2 + 2;
       content.addChild(nameTxt);
 
-      const pwrTxt = new PIXI.Text(`P: ${card.power ?? 0}`, { fontSize: 10, fill: 0xFF0000, fontWeight: 'bold' });
-      pwrTxt.anchor.set(0.5, 1); pwrTxt.y = -ch / 2 + 12;
-      content.addChild(pwrTxt);
+      const powerTxt = new PIXI.Text(`P: ${card.power ?? 0}`, { fontSize: 10, fill: 0xFF0000, fontWeight: 'bold' });
+      powerTxt.anchor.set(0.5, 1); powerTxt.y = -ch / 2 + 12;
+      content.addChild(powerTxt);
 
-      const attrTxt = new PIXI.Text(`${card.attribute ?? '-'} | C: ${card.counter ?? 0}`, { fontSize: 7, fill: 0x666666 });
-      attrTxt.anchor.set(0.5); attrTxt.y = ch / 5;
-      content.addChild(attrTxt);
+      // BoardCard特有のプロパティアクセス
+      if ('attribute' in card || 'counter' in card) {
+        const attrTxt = new PIXI.Text(`${card.attribute ?? '-'} | C: ${card.counter ?? 0}`, { fontSize: 7, fill: 0x666666 });
+        attrTxt.anchor.set(0.5); attrTxt.y = ch / 5;
+        content.addChild(attrTxt);
+      }
 
-      if (card.attached_don && card.attached_don > 0) {
+      if ('attached_don' in card && card.attached_don > 0) {
         const donTxt = new PIXI.Text(`+${card.attached_don} DON!!`, { fontSize: 8, fill: 0x0000FF, fontWeight: 'bold' });
         donTxt.anchor.set(0.5, 0); donTxt.y = -ch / 2 + 15;
         content.addChild(donTxt);
@@ -73,11 +74,6 @@ export const RealGame = () => {
     } else {
       const backTxt = new PIXI.Text("BACK", { fontSize: 14, fontWeight: 'bold', fill: 0x666666 });
       backTxt.anchor.set(0.5); content.addChild(backTxt);
-    }
-
-    // 状態追従確認：badge による枚数表示
-    if (card.attached_don !== undefined && card.attached_don > 0) {
-        // ドン付与等の表示（必要に応じて）
     }
 
     return container;
@@ -109,69 +105,44 @@ export const RealGame = () => {
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
 
-    // --- 🔴 相手側 (oSide) ---
+    // 🔴 相手
     const opp = state.players[opponentId];
     const oSide = new PIXI.Container();
     oSide.x = W; oSide.y = Y_CTRL_START; oSide.rotation = Math.PI;
     app.stage.addChild(oSide);
 
-    // Row 4: Field
     opp.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH, true);
       card.x = getX(0.15 + i * 0.175, W); card.y = getY(1, CH, V_GAP);
       oSide.addChild(card);
     });
-
-    // Row 3: Leader, Life, Deck
-    const oLeader = renderCard(opp.leader, CW, CH, true);
-    oLeader.x = getX(0.43, W); oLeader.y = getY(2, CH, V_GAP);
-    oSide.addChild(oLeader);
-
-    const oLife = renderCard({ is_face_up: false }, CW, CH, true);
+    oSide.addChild(Object.assign(renderCard(opp.leader, CW, CH, true), { x: getX(0.43, W), y: getY(2, CH, V_GAP) }));
+    
+    const oLife = renderCard({ uuid: 'ol', owner_id: opponentId, is_face_up: false }, CW, CH, true);
     oLife.x = getX(0.15, W); oLife.y = getY(2, CH, V_GAP);
-    const oLifeBadge = createBadgeContainer(opp.life_count);
-    oLifeBadge.x = CW/2 - 4; oLifeBadge.y = CH/2 - 4; oLife.addChild(oLifeBadge);
+    oLife.addChild(Object.assign(createBadgeContainer(opp.life_count), { x: CW/2-4, y: CH/2-4 }));
     oSide.addChild(oLife);
 
-    // Row 2: Don
-    const oDonA = renderCard({ name: "Don" }, CW, CH, true);
-    oDonA.x = getX(0.35, W); oDonA.y = getY(3, CH, V_GAP);
-    const oDonABadge = createBadgeContainer(opp.don_active.length);
-    oDonABadge.x = CW/2 - 4; oDonABadge.y = CH/2 - 4; oDonA.addChild(oDonABadge);
-    oSide.addChild(oDonA);
+    oSide.addChild(Object.assign(renderCard({ uuid:'od', owner_id: opponentId, name: "Don", is_face_up: true, is_rest: false } as any, CW, CH, true), { x: getX(0.35, W), y: getY(3, CH, V_GAP), badge: opp.don_active.length }));
 
-    // --- 🔵 自分側 (pSide) ---
+    // 🔵 自分
     const pla = state.players[observerId];
     const pSide = new PIXI.Container();
     pSide.y = Y_CTRL_START + H_CTRL;
     app.stage.addChild(pSide);
 
-    // Row 4: Field
     pla.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH);
       card.x = getX(0.15 + i * 0.175, W); card.y = getY(1, CH, V_GAP);
       pSide.addChild(card);
     });
+    pSide.addChild(Object.assign(renderCard(pla.leader, CW, CH), { x: getX(0.43, W), y: getY(2, CH, V_GAP) }));
 
-    // Row 3: Leader, Life
-    const pLeader = renderCard(pla.leader, CW, CH);
-    pLeader.x = getX(0.43, W); pLeader.y = getY(2, CH, V_GAP);
-    pSide.addChild(pLeader);
-
-    const pLife = renderCard({ is_face_up: false }, CW, CH);
+    const pLife = renderCard({ uuid: 'pl', owner_id: observerId, is_face_up: false }, CW, CH);
     pLife.x = getX(0.15, W); pLife.y = getY(2, CH, V_GAP);
-    const pLifeBadge = createBadgeContainer(pla.life_count);
-    pLifeBadge.x = CW/2 - 4; pLifeBadge.y = CH/2 - 4; pLife.addChild(pLifeBadge);
+    pLife.addChild(Object.assign(createBadgeContainer(pla.life_count), { x: CW/2-4, y: CH/2-4 }));
     pSide.addChild(pLife);
 
-    // Row 2: Don
-    const pDonA = renderCard({ name: "Don" }, CW, CH);
-    pDonA.x = getX(0.35, W); pDonA.y = getY(3, CH, V_GAP);
-    const pDonABadge = createBadgeContainer(pla.don_active.length);
-    pDonABadge.x = CW/2 - 4; pDonABadge.y = CH/2 - 4; pDonA.addChild(pDonABadge);
-    pSide.addChild(pDonA);
-
-    // Row 1: Hand
     pla.zones.hand.forEach((c, i) => {
       const card = renderCard(c, CW, CH);
       card.x = getX(0.08 + i * 0.14, W); card.y = getY(4, CH, V_GAP);
@@ -191,45 +162,25 @@ export const RealGame = () => {
     appRef.current = app;
     drawLayout(gameState);
 
-    // ---  chaos debug loop (同期性能検証用) ---
     const interval = setInterval(() => {
       setGameState(prev => {
         const next = JSON.parse(JSON.stringify(prev)) as GameState;
-        const targetPlayer = next.players[observerId];
-        const randomAction = Math.floor(Math.random() * 3);
-
-        switch (randomAction) {
-          case 0: // ライフの増減
-            targetPlayer.life_count -= 1;
-            if (targetPlayer.life_count < 0) targetPlayer.life_count = 5;
-            break;
-          case 1: // フィールドの Rest 反転
-            if (targetPlayer.zones.field.length > 0) {
-              targetPlayer.zones.field[0].is_rest = !targetPlayer.zones.field[0].is_rest;
-            }
-            break;
-          case 2: // ドンの枚数増減
-            if (targetPlayer.don_active.length > 5) {
-              targetPlayer.don_active.pop();
-            } else {
-              targetPlayer.don_active.push({});
-            }
-            break;
+        const target = next.players[observerId];
+        const action = Math.floor(Math.random() * 3);
+        if (action === 0) target.life_count = target.life_count <= 0 ? 5 : target.life_count - 1;
+        else if (action === 1 && target.zones.field.length > 0) target.zones.field[0].is_rest = !target.zones.field[0].is_rest;
+        else if (action === 2) {
+          if (target.don_active.length > 5) target.don_active.pop();
+          else target.don_active.push({ uuid: 'd', owner_id: observerId, is_rest: false });
         }
         return next;
       });
     }, 500);
 
-    return () => {
-      clearInterval(interval);
-      if (appRef.current) appRef.current.destroy(true, { children: true });
-    };
+    return () => { clearInterval(interval); app.destroy(true); };
   }, [drawLayout, observerId]);
 
-  // gameState 変更時に Pixi 描画をトリガー
-  useEffect(() => {
-    if (appRef.current) drawLayout(gameState);
-  }, [gameState, drawLayout]);
+  useEffect(() => { if (appRef.current) drawLayout(gameState); }, [gameState, drawLayout]);
 
   return <div ref={containerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'fixed', top: 0, left: 0 }} />;
 };
