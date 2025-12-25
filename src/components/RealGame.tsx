@@ -44,7 +44,6 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     
-    // レスト回転
     const isRest = 'is_rest' in card && card.is_rest;
     if (isRest) {
       container.rotation = Math.PI / 2;
@@ -91,7 +90,7 @@ export const RealGame = () => {
         container.addChild(powerTxt);
       }
 
-      // 2. 名前 (表示幅を拡大: 2.2倍)
+      // 2. 名前 (表示領域の拡大修正)
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
@@ -102,8 +101,8 @@ export const RealGame = () => {
         align: 'center',
       });
 
-      // 修正: ワイド設定時は 2.2倍まで許容
-      const maxNameWidth = isWideName ? cw * 2.2 : cw - 4;
+      // 修正: 通常カードも幅広(1.8倍)に設定し、リーダー等はさらに広く(2.2倍)
+      const maxNameWidth = isWideName ? cw * 2.2 : cw * 1.8;
       const displayName = truncateText(nameStr, nameStyle, maxNameWidth);
 
       const nameTxt = new PIXI.Text(displayName, nameStyle);
@@ -162,7 +161,7 @@ export const RealGame = () => {
     }
 
     // -------------------------------------------------
-    // 枚数バッジ (回転補正の強化)
+    // 枚数バッジ
     // -------------------------------------------------
     if (badgeCount !== undefined) {
       const badgeR = 9;
@@ -194,7 +193,6 @@ export const RealGame = () => {
       const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bTxt.anchor.set(0.5);
 
-      // バッジの回転補正: 親コンテナの回転を完全にキャンセルし、相手側の場合は180度回す
       badge.rotation = -container.rotation + (isOpponent ? Math.PI : 0);
       
       badge.addChild(bTxt);

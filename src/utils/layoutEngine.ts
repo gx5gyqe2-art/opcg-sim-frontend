@@ -37,11 +37,12 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getDonRestX: (width) => width * 0.60,
     getTrashX: (width) => width * 0.85,
     
-    // 修正: ギャップを35px、左端マージンを50pxに拡大
+    // 修正: 左端の制限を撤廃し、単純なセンタリング + 視覚補正(20px) に変更
     getFieldX: (i, width, cardWidth, totalCards) => {
-      const gap = 35; // 35pxに拡大
+      const gap = 35;
       const totalW = totalCards * cardWidth + (totalCards - 1) * gap;
-      const startX = Math.max(50, (width - totalW) / 2); // 左端50px確保
+      // 単純な中央寄せ計算 + 視覚バランス調整
+      const startX = (width - totalW) / 2 + 20; 
       return startX + i * (cardWidth + gap);
     },
 
