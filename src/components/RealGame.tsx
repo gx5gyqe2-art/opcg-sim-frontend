@@ -16,9 +16,6 @@ export const RealGame = () => {
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  /**
-   * テキスト省略用ヘルパー関数
-   */
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
     if (metrics.width <= maxWidth) return text;
@@ -34,13 +31,17 @@ export const RealGame = () => {
     return '...';
   };
 
+  /**
+   * isWideName: リーダーやステージ用に名前表示幅を広げるフラグ
+   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
     ch: number, 
     isOpponent: boolean = false, 
     badgeCount?: number,
-    isCountBadge: boolean = false
+    isCountBadge: boolean = false,
+    isWideName: boolean = false 
   ): PIXI.Container => {
     const container = new PIXI.Container();
     container.eventMode = 'static';
@@ -65,7 +66,6 @@ export const RealGame = () => {
     if (isOpponent) content.rotation = Math.PI; 
     container.addChild(content);
 
-    // テキスト回転補正（レスト時用）
     const textRotation = isRest ? -Math.PI / 2 : 0;
     const yDir = isOpponent ? -1 : 1;
 
@@ -94,7 +94,7 @@ export const RealGame = () => {
         container.addChild(powerTxt);
       }
 
-      // 2. 名前 (表示領域拡張と省略処理)
+      // 2. 名前 (最大幅の制御)
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
@@ -105,8 +105,8 @@ export const RealGame = () => {
         align: 'center',
       });
 
-      // 表示幅: カード幅 + ギャップ分程度まで許容 (1.3倍)
-      const maxNameWidth = isRest ? ch * 1.3 : cw * 1.3;
+      // リーダー・ステージは幅広(1.8倍)、それ以外は枠内(cw - 4)
+      const maxNameWidth = isWideName ? cw * 1.8 : cw - 4;
       const displayName = truncateText(nameStr, nameStyle, maxNameWidth);
 
       const nameTxt = new PIXI.Text(displayName, nameStyle);
@@ -165,7 +165,7 @@ export const RealGame = () => {
     }
 
     // -------------------------------------------------
-    // 枚数バッジ (向き補正修正)
+    // 枚数バッジ (回転補正の修正)
     // -------------------------------------------------
     if (badgeCount !== undefined) {
       const badgeR = 9;
@@ -197,11 +197,9 @@ export const RealGame = () => {
       const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bTxt.anchor.set(0.5);
 
-      // バッジの回転補正: 親(container)の回転を完全に打ち消す
-      // Player Rest: container=+90 -> badge=-90
-      // Opponent Rest: container=+90 (relative to side), side=+180. Total=270. badge=-270(+90).
-      // 上記テキスト回転ロジックを流用: textRotation(-90) + Opponent(180) -> 90. 正しい。
-      badge.rotation = textRotation + (isOpponent ? Math.PI : 0);
+      // コンテナの回転を打ち消して常に正位置にする
+      // 相手側の場合はさらに180度回して相手から見て正位置にする
+      badge.rotation = -container.rotation + (isOpponent ? Math.PI : 0);
       
       badge.addChild(bTxt);
       container.addChild(badge);
@@ -231,11 +229,11 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // Row 1: Field (左詰め配置)
-      (p.zones.field || []).forEach((c: any, i: number) => {
+      // Row 1: Field (総数を渡して配置計算)
+      const fields = p.zones.field || [];
+      fields.forEach((c: any, i: number) => {
         const card = renderCard(c, CW, CH, isOpp);
-        // 新しい getFieldX (CWを渡す) を使用
-        card.x = coords.getFieldX(i, W, CW); 
+        card.x = coords.getFieldX(i, W, CW, fields.length); 
         card.y = coords.getY(1, CH, V_GAP);
         side.addChild(card);
       });
@@ -246,13 +244,14 @@ export const RealGame = () => {
       life.x = coords.getLifeX(W); life.y = r2Y;
       side.addChild(life);
 
-      const ldr = renderCard(p.leader, CW, CH, isOpp);
+      // リーダーは名前表示を拡張
+      const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true);
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
-      // 修正: ステージはデータが存在する場合のみ描画
       if (p.zones.stage) {
-        const stg = renderCard(p.zones.stage, CW, CH, isOpp);
+        // ステージも名前表示を拡張
+        const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true);
         stg.x = coords.getStageX(W); stg.y = r2Y;
         side.addChild(stg);
       }
@@ -294,7 +293,6 @@ export const RealGame = () => {
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
-  // ... (useEffect 等はそのまま)
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({

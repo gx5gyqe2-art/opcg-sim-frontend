@@ -13,8 +13,8 @@ export interface LayoutCoords {
   getDonActiveX: (width: number) => number;
   getDonRestX: (width: number) => number;
   getTrashX: (width: number) => number;
-  // getFieldX の引数に cardWidth を追加
-  getFieldX: (i: number, width: number, cardWidth: number) => number;
+  // 引数に totalCards を追加
+  getFieldX: (i: number, width: number, cardWidth: number, totalCards: number) => number;
   getHandX: (i: number, width: number) => number;
   getY: (row: number, h: number, g: number) => number;
 }
@@ -22,7 +22,6 @@ export interface LayoutCoords {
 export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
   
-  // カードサイズ縮小 (85%程度)
   const CH = Math.min(AVAIL_H_HALF / 5.2, (W / 8.5) * 1.4); 
   const CW = CH / 1.4;
   const V_GAP = CH * 0.30;
@@ -39,12 +38,12 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getDonRestX: (width) => width * 0.60,
     getTrashX: (width) => width * 0.85,
     
-    // 修正: フィールドカードを左詰め固定配置に変更
-    // 開始位置: 画面幅の5% (または50px)
-    // 間隔: 15px固定
-    getFieldX: (i, width, cardWidth) => {
-      const startX = width * 0.05; 
-      const gap = 15; 
+    // フィールドカードの配置計算 (センタリング + 左端マージン確保)
+    getFieldX: (i, width, cardWidth, totalCards) => {
+      const gap = 15; // 間隔を15pxに拡大
+      const totalW = totalCards * cardWidth + (totalCards - 1) * gap;
+      // 中央寄せの開始位置を計算し、最低でも左端20pxを確保
+      const startX = Math.max(20, (width - totalW) / 2);
       return startX + i * (cardWidth + gap);
     },
 
