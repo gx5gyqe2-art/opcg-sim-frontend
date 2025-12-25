@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
 import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/game';
 import { initialGameResponse } from '../mocks/gameState';
