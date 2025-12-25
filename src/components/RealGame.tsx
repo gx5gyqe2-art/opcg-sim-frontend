@@ -31,9 +31,6 @@ export const RealGame = () => {
     return '...';
   };
 
-  /**
-   * isWideName: リーダーやステージ用に名前表示幅を広げるフラグ
-   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
@@ -94,7 +91,7 @@ export const RealGame = () => {
         container.addChild(powerTxt);
       }
 
-      // 2. 名前 (最大幅の制御)
+      // 2. 名前 (表示幅を拡大: 2.2倍)
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
@@ -105,8 +102,8 @@ export const RealGame = () => {
         align: 'center',
       });
 
-      // リーダー・ステージは幅広(1.8倍)、それ以外は枠内(cw - 4)
-      const maxNameWidth = isWideName ? cw * 1.8 : cw - 4;
+      // 修正: ワイド設定時は 2.2倍まで許容
+      const maxNameWidth = isWideName ? cw * 2.2 : cw - 4;
       const displayName = truncateText(nameStr, nameStyle, maxNameWidth);
 
       const nameTxt = new PIXI.Text(displayName, nameStyle);
@@ -165,7 +162,7 @@ export const RealGame = () => {
     }
 
     // -------------------------------------------------
-    // 枚数バッジ (回転補正の修正)
+    // 枚数バッジ (回転補正の強化)
     // -------------------------------------------------
     if (badgeCount !== undefined) {
       const badgeR = 9;
@@ -197,8 +194,7 @@ export const RealGame = () => {
       const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bTxt.anchor.set(0.5);
 
-      // コンテナの回転を打ち消して常に正位置にする
-      // 相手側の場合はさらに180度回して相手から見て正位置にする
+      // バッジの回転補正: 親コンテナの回転を完全にキャンセルし、相手側の場合は180度回す
       badge.rotation = -container.rotation + (isOpponent ? Math.PI : 0);
       
       badge.addChild(bTxt);
@@ -229,7 +225,7 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // Row 1: Field (総数を渡して配置計算)
+      // Row 1: Field
       const fields = p.zones.field || [];
       fields.forEach((c: any, i: number) => {
         const card = renderCard(c, CW, CH, isOpp);
@@ -244,13 +240,11 @@ export const RealGame = () => {
       life.x = coords.getLifeX(W); life.y = r2Y;
       side.addChild(life);
 
-      // リーダーは名前表示を拡張
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true);
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
       if (p.zones.stage) {
-        // ステージも名前表示を拡張
         const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true);
         stg.x = coords.getStageX(W); stg.y = r2Y;
         side.addChild(stg);
