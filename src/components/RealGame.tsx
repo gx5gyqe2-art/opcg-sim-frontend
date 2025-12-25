@@ -14,7 +14,6 @@ export const RealGame = () => {
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  // 枚数バッジ付きカードレンダラー
   const renderCard = useCallback((card: CardInstance, cw: number, ch: number, isOpponent: boolean = false, badgeCount?: number) => {
     const container = new PIXI.Container();
     container.eventMode = 'static';
@@ -64,7 +63,7 @@ export const RealGame = () => {
       content.addChild(backTxt);
     }
 
-    // 枚数バッジ (LifeやDeck用)
+    // 枚数バッジ (Red Circle Badge)
     if (badgeCount !== undefined) {
       const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG).drawCircle(0, 0, 8).endFill();
       badge.x = cw / 2 - 5;
@@ -103,38 +102,37 @@ export const RealGame = () => {
       }
       app.stage.addChild(side);
 
-      // --- Row 1: Field ---
+      // Row 1: Field
       sidePlayer.zones.field.forEach((c: any, i: number) => {
         const card = renderCard(c, CW, CH, isOpp);
         card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
         side.addChild(card);
       });
 
-      // --- Row 2: Life, Leader, Stage, Deck ---
-      // 1. Life
+      // Row 2: 司令部ライン
+      // Life
       if (sidePlayer.zones.life.length > 0) {
-        const lifeCard = renderCard({ ...sidePlayer.zones.life[0], is_face_up: false }, CW, CH, isOpp, sidePlayer.zones.life.length);
+        const lifeCard = renderCard({ is_face_up: false } as any, CW, CH, isOpp, sidePlayer.zones.life.length);
         lifeCard.x = coords.getLifeX(W); lifeCard.y = coords.getY(2, CH, V_GAP);
         side.addChild(lifeCard);
       }
-      // 2. Leader
+      // Leader
       const ldr = renderCard(sidePlayer.leader, CW, CH, isOpp);
       ldr.x = coords.getLeaderX(W); ldr.y = coords.getY(2, CH, V_GAP);
       side.addChild(ldr);
-      // 3. Stage
-      sidePlayer.zones.stage.forEach((c: any) => {
-        const stg = renderCard(c, CW, CH, isOpp);
+      // Stage (修正: forEach を削除して単一オブジェクトとして描画)
+      if (sidePlayer.zones.stage) {
+        const stg = renderCard(sidePlayer.zones.stage, CW, CH, isOpp);
         stg.x = coords.getStageX(W); stg.y = coords.getY(2, CH, V_GAP);
         side.addChild(stg);
-      });
-      // 4. Deck
-      if (sidePlayer.zones.deck_count > 0) {
-        const deckCard = renderCard({ is_face_up: false } as any, CW, CH, isOpp, sidePlayer.zones.deck_count);
-        deckCard.x = coords.getDeckX(W); deckCard.y = coords.getY(2, CH, V_GAP);
-        side.addChild(deckCard);
       }
+      // Deck
+      const deckCount = sidePlayer.zones.deck?.length || 0;
+      const deckCard = renderCard({ is_face_up: false } as any, CW, CH, isOpp, deckCount);
+      deckCard.x = coords.getDeckX(W); deckCard.y = coords.getY(2, CH, V_GAP);
+      side.addChild(deckCard);
 
-      // --- Row 4: Hand (自分のみ) ---
+      // Row 4: Hand (自分のみ)
       if (!isOpp) {
         sidePlayer.zones.hand.forEach((c: any, i: number) => {
           const card = renderCard(c, CW, CH);
