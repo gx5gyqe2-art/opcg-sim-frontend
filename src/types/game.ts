@@ -29,3 +29,24 @@ export interface PlayerState {
     stage: CardInstance | null;
   };
 }
+
+// 既存の CardInstance や PlayerState の下に追加
+export interface GameResponse {
+  success: boolean;
+  gameId: string;
+  state: GameState;
+}
+
+export interface GameState {
+  game_id: string;
+  turn_info: {
+    turn_count: number;
+    current_phase: string;
+    active_player_id: string;
+    winner: string | null;
+  };
+  players: {
+    [key: string]: PlayerState;
+  };
+}
+
