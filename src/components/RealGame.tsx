@@ -97,18 +97,17 @@ export const RealGame = () => {
     oSide.x = W; oSide.y = Y_CTRL_START; oSide.rotation = Math.PI; 
     app.stage.addChild(oSide);
 
-    // キャラクター (Row 1)
     opponent.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH, true);
       card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
       oSide.addChild(card);
     });
-    // リーダー/ライフ (Row 2)
+    
     const oLeader = renderCard(opponent.leader, CW, CH, true);
     oLeader.x = coords.getLeaderX(W); oLeader.y = coords.getY(2, CH, V_GAP);
     oSide.addChild(oLeader);
 
-    opponent.zones.life.forEach((c, i) => {
+    opponent.zones.life.forEach((c) => {
       const card = renderCard(c, CW, CH, true);
       card.x = coords.getLifeX(W); card.y = coords.getY(2, CH, V_GAP);
       oSide.addChild(card);
@@ -119,24 +118,22 @@ export const RealGame = () => {
     pSide.y = Y_CTRL_START + LAYOUT.H_CTRL;
     app.stage.addChild(pSide);
 
-    // キャラクター (Row 1)
     player.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH);
       card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
       pSide.addChild(card);
     });
-    // リーダー/ライフ (Row 2)
+
     const pLeader = renderCard(player.leader, CW, CH);
     pLeader.x = coords.getLeaderX(W); pLeader.y = coords.getY(2, CH, V_GAP);
     pSide.addChild(pLeader);
 
-    player.zones.life.forEach((c, i) => {
+    player.zones.life.forEach((c) => {
       const card = renderCard(c, CW, CH);
       card.x = coords.getLifeX(W); card.y = coords.getY(2, CH, V_GAP);
       pSide.addChild(card);
     });
 
-    // 手札 (Row 4.0)
     player.zones.hand.forEach((c, i) => {
       const card = renderCard(c, CW, CH);
       card.x = coords.getHandX(i, W); card.y = coords.getY(4.0, CH, V_GAP);
