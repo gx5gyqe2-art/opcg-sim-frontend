@@ -78,5 +78,4 @@ export const initialGameResponse: GameResponse =  {
       "don_rested": []
     }
   }
-}
 }as unknown as GameResponse;
