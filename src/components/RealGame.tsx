@@ -16,12 +16,16 @@ export const RealGame = () => {
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
+  /**
+   * 改良版レンダラー: 右上の枚数カウント用バッジに対応
+   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
     ch: number, 
     isOpponent: boolean = false, 
-    badgeCount?: number
+    badgeCount?: number,
+    isCountBadge: boolean = false
   ): PIXI.Container => {
     const container = new PIXI.Container();
     container.eventMode = 'static';
@@ -32,7 +36,6 @@ export const RealGame = () => {
     }
 
     const isBackSide = 'is_face_up' in card ? card.is_face_up === false : false;
-
     const g = new PIXI.Graphics();
     g.lineStyle(2, COLORS.ZONE_BORDER);
     g.beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
@@ -44,43 +47,18 @@ export const RealGame = () => {
     if (isOpponent) content.rotation = Math.PI; 
     container.addChild(content);
 
-    if (!isBackSide) {
-      const name = 'name' in card ? card.name : '';
-      const power = 'power' in card ? card.power : undefined;
-      const cost = 'cost' in card ? card.cost : undefined;
-
-      const nameTxt = new PIXI.Text(name ?? '', { fontSize: 9, fill: COLORS.TEXT_MAIN, fontWeight: 'bold' });
-      nameTxt.anchor.set(0.5, 0); 
-      nameTxt.y = ch / 2 - 16; 
-      content.addChild(nameTxt);
-
-      if (power !== undefined) {
-        const powerTxt = new PIXI.Text(power.toString(), { fontSize: 14, fill: 0x000000, fontWeight: '900' });
-        powerTxt.anchor.set(0.5); 
-        powerTxt.y = -ch / 4;
-        content.addChild(powerTxt);
-      }
-
-      if (cost !== undefined) {
-        const costTxt = new PIXI.Text(cost.toString(), { fontSize: 9, fill: 0xFFFFFF });
-        const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
-        costBg.x = -cw / 2 + 10;
-        costBg.y = -ch / 2 + 10;
-        costTxt.anchor.set(0.5);
-        costBg.addChild(costTxt);
-        content.addChild(costBg);
-      }
-    } else {
-      const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 10, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
-      backTxt.anchor.set(0.5); 
-      content.addChild(backTxt);
-    }
+    const name = 'name' in card ? card.name : '';
+    const nameTxt = new PIXI.Text(name ?? '', { fontSize: 9, fill: isBackSide ? 0xFFFFFF : COLORS.TEXT_MAIN, fontWeight: 'bold' });
+    nameTxt.anchor.set(0.5); 
+    content.addChild(nameTxt);
 
     if (badgeCount !== undefined) {
-      const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG).drawCircle(0, 0, 8).endFill();
-      badge.x = cw / 2 - 4;
-      badge.y = ch / 2 - 4;
-      const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' });
+      // isCountBadge が true なら右上・黒バッジ、false なら右下・赤バッジ
+      const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 10).endFill();
+      badge.x = cw / 2 - (isCountBadge ? 0 : 5);
+      badge.y = isCountBadge ? -ch / 2 : ch / 2 - 5;
+      
+      const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' });
       bTxt.anchor.set(0.5);
       badge.addChild(bTxt);
       container.addChild(badge);
@@ -105,17 +83,13 @@ export const RealGame = () => {
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + LAYOUT.H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
 
-    const renderSide = (playerData: GameState['players'][keyof GameState['players']], isOpp: boolean) => {
+    const renderSide = (p: any, isOpp: boolean) => {
       const side = new PIXI.Container();
-      if (isOpp) {
-        side.x = W; side.y = Y_CTRL_START; side.rotation = Math.PI; 
-      } else {
-        side.y = Y_CTRL_START + LAYOUT.H_CTRL;
-      }
+      isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
       // Row 1: Field
-      playerData.zones.field.forEach((c, i) => {
+      (p.zones.field || []).forEach((c: any, i: number) => {
         const card = renderCard(c, CW, CH, isOpp);
         card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
         side.addChild(card);
@@ -123,50 +97,43 @@ export const RealGame = () => {
 
       // Row 2: 司令部
       const r2Y = coords.getY(2, CH, V_GAP);
-      const lifeCard = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, playerData.zones.life.length);
-      lifeCard.x = coords.getLifeX(W); lifeCard.y = r2Y;
-      side.addChild(lifeCard);
+      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0);
+      life.x = coords.getLifeX(W); life.y = r2Y;
+      side.addChild(life);
 
-      const ldr = renderCard(playerData.leader, CW, CH, isOpp);
+      const ldr = renderCard(p.leader, CW, CH, isOpp);
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
-      const stage = (playerData.zones as any).stage as CardInstance | undefined;
-      const stg = renderCard(stage || { name: 'Stage' }, CW, CH, isOpp);
+      const stg = renderCard(p.zones.stage || { name: 'Stage' }, CW, CH, isOpp);
       stg.x = coords.getStageX(W); stg.y = r2Y;
       side.addChild(stg);
 
-      const deckCount = (playerData.zones as any).deck?.length ?? 40;
-      const deckCard = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, deckCount);
-      deckCard.x = coords.getDeckX(W); deckCard.y = r2Y;
-      side.addChild(deckCard);
+      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40);
+      deck.x = coords.getDeckX(W); deck.y = r2Y;
+      side.addChild(deck);
 
-      // Row 3: コスト・墓地 (Don!! & Trash)
+      // Row 3: ドン!!バッジ表示
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10);
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
       side.addChild(donDk);
 
-      (playerData.don_active || []).forEach((d, i) => {
-        const don = renderCard({ name: 'DON!!', ...d }, CW * 0.8, CH * 0.8, isOpp);
-        don.x = coords.getDonActiveX(W) + (i * 12); don.y = r3Y;
-        side.addChild(don);
-      });
+      const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true);
+      donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
+      side.addChild(donAct);
 
-      (playerData.don_rested || []).forEach((d, i) => {
-        const don = renderCard({ name: 'DON!!', ...d, is_rest: true }, CW * 0.8, CH * 0.8, isOpp);
-        don.x = coords.getDonRestX(W) + (i * 12); don.y = r3Y;
-        side.addChild(don);
-      });
+      const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true);
+      donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
+      side.addChild(donRst);
 
-      const trashTop = playerData.zones.trash[playerData.zones.trash.length - 1];
-      const trash = renderCard(trashTop || { name: 'Trash' }, CW, CH, isOpp);
+      const trash = renderCard(p.zones.trash?.[0] || { name: 'Trash' }, CW, CH, isOpp);
       trash.x = coords.getTrashX(W); trash.y = r3Y;
       side.addChild(trash);
 
-      // Row 4: Hand (自分のみ)
+      // Row 4: Hand
       if (!isOpp) {
-        playerData.zones.hand.forEach((c, i) => {
+        (p.zones.hand || []).forEach((c: any, i: number) => {
           const card = renderCard(c, CW, CH);
           card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP);
           side.addChild(card);
@@ -176,7 +143,6 @@ export const RealGame = () => {
 
     renderSide(state.players[opponentId], true);
     renderSide(state.players[observerId], false);
-
   }, [observerId, opponentId, renderCard]);
 
   useEffect(() => {
