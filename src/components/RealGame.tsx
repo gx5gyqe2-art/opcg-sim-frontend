@@ -5,16 +5,7 @@ import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
 
-// 描画対象の型定義（安全のため、renderCard内では型ガードを使用してアクセスします）
-type DrawTarget = CardInstance | LeaderCard | BoardCard | { 
-  name: string; 
-  is_face_up?: boolean; 
-  is_rest?: boolean; 
-  power?: number; 
-  cost?: number; 
-  attribute?: string;
-  counter?: number; 
-};
+type DrawTarget = CardInstance | LeaderCard | BoardCard | { name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +17,7 @@ export const RealGame = () => {
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
   /**
-   * 最終仕様版レンダラー: 型安全なプロパティアクセスを実装
+   * 最終完成版レンダラー: レスト時の文字向き補正対応
    */
   const renderCard = useCallback((
     card: DrawTarget, 
@@ -40,8 +31,9 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     
-    // レスト回転 (型ガード)
-    if ('is_rest' in card && card.is_rest) {
+    // レスト回転
+    const isRest = 'is_rest' in card && card.is_rest;
+    if (isRest) {
       container.rotation = Math.PI / 2;
     }
 
@@ -55,12 +47,16 @@ export const RealGame = () => {
     g.endFill();
     container.addChild(g);
 
+    // コンテンツコンテナ
     const content = new PIXI.Container();
+    // 相手側カードの中身は180度回転
     if (isOpponent) content.rotation = Math.PI; 
     container.addChild(content);
 
+    // テキストの回転補正値: レスト時は逆回転させて正位置に戻す
+    const textRotation = isRest ? -Math.PI / 2 : 0;
+
     if (!isBackSide) {
-      // プロパティを安全に抽出（型ガード）
       const name = 'name' in card ? card.name : '';
       const power = 'power' in card ? card.power : undefined;
       const cost = 'cost' in card ? card.cost : undefined;
@@ -71,62 +67,70 @@ export const RealGame = () => {
       // 1. パワー (カード枠の真上)
       // -------------------------------------------------
       if (power !== undefined) {
-        const powerTextStr = `POWER ${power}`;
-        const powerTxt = new PIXI.Text(powerTextStr, { 
-          fontSize: 12, 
-          fill: 0xFF0000, // 赤色
-          fontWeight: 'bold',
-          align: 'center'
+        const powerTxt = new PIXI.Text(`POWER ${power}`, { 
+          fontSize: 12, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
         });
         powerTxt.anchor.set(0.5); 
-        powerTxt.y = -ch / 2 - 12; 
         
-        if (isOpponent) powerTxt.rotation = Math.PI;
+        // レスト時は座標軸が入れ替わるため X/Y を調整
+        if (isRest) {
+          powerTxt.x = -ch / 2 - 12; // 元の上が左へ
+          powerTxt.y = 0;
+        } else {
+          powerTxt.x = 0;
+          powerTxt.y = -ch / 2 - 12;
+        }
         
+        // 相手側の場合、文字をさらに180度回して自分に向ける
+        powerTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
         container.addChild(powerTxt);
       }
 
       // -------------------------------------------------
-      // 2. 名前 (カード枠の真下)
+      // 2. 名前 / DON!! / Trash (カード枠外下 または 中央)
       // -------------------------------------------------
       const nameStr = name || '';
+      const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
+      
       const nameTxt = new PIXI.Text(nameStr, { 
-        fontSize: 10, 
-        fill: 0x333333, // 黒色
+        fontSize: isResource ? 12 : 10, // リソース系は少し大きく
+        fill: isResource ? 0x000000 : 0x333333, 
         fontWeight: 'bold',
         align: 'center',
         wordWrap: true,
-        wordWrapWidth: cw * 1.5
+        wordWrapWidth: isRest ? ch * 0.9 : cw * 1.5
       });
-      nameTxt.anchor.set(0.5, 0); 
-      nameTxt.y = ch / 2 + 6; 
+      nameTxt.anchor.set(0.5, isResource ? 0.5 : 0); // リソースは中央揃え
       
-      if (isOpponent) nameTxt.rotation = Math.PI;
-
+      if (isRest) {
+        nameTxt.x = isResource ? 0 : ch / 2 + 6; // 元の下が右へ
+        nameTxt.y = 0;
+      } else {
+        nameTxt.x = 0;
+        nameTxt.y = isResource ? 0 : ch / 2 + 6;
+      }
+      
+      nameTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
       container.addChild(nameTxt);
 
       // -------------------------------------------------
       // 3. カウンター (左端中央・縦書き)
       // -------------------------------------------------
       if (counter !== undefined) {
-        const counterStr = `+${counter}`;
-        const counterTxt = new PIXI.Text(counterStr, {
-          fontSize: 9,
-          fill: 0x000000,
-          stroke: 0xFFFFFF,
-          strokeThickness: 2,
-          fontWeight: 'bold'
+        const counterTxt = new PIXI.Text(`+${counter}`, {
+          fontSize: 9, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
         });
         counterTxt.anchor.set(0.5);
+        
+        // カウンターはカード内部固定なので content に追加
         counterTxt.x = -cw / 2 + 8;
         counterTxt.y = 0;
-        counterTxt.rotation = -Math.PI / 2;
-        
+        counterTxt.rotation = -Math.PI / 2; // 常に縦向き
         content.addChild(counterTxt);
       }
 
       // -------------------------------------------------
-      // 4. 属性 (ステージ以外に表示)
+      // 4. 属性
       // -------------------------------------------------
       if (attribute && power !== undefined) {
         const attrTxt = new PIXI.Text(attribute, { fontSize: 8, fill: 0x666666 });
@@ -137,7 +141,7 @@ export const RealGame = () => {
       }
 
       // -------------------------------------------------
-      // 5. コスト (左上)
+      // 5. コスト
       // -------------------------------------------------
       if (cost !== undefined) {
         const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
@@ -152,24 +156,46 @@ export const RealGame = () => {
     } else {
       // 裏面テキスト
       const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 10, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
-      backTxt.anchor.set(0.5); 
-      content.addChild(backTxt);
+      backTxt.anchor.set(0.5);
+      // 裏面テキストも回転補正
+      backTxt.rotation = textRotation; 
+      // 裏面テキストは常に中央なので座標変換不要
+      container.addChild(backTxt); 
     }
 
     // -------------------------------------------------
-    // 枚数バッジ
+    // 枚数バッジ (向き補正)
     // -------------------------------------------------
     if (badgeCount !== undefined) {
       const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 10).endFill();
-      badge.x = cw / 2;
-      badge.y = isCountBadge ? -ch / 2 : ch / 2;
+      
+      // バッジ位置: レスト時は座標が入れ替わる
+      // 通常: 右上 (x=cw/2, y=-ch/2) or 右下 (x=cw/2, y=ch/2)
+      // レスト(90度): 
+      //   右上 -> 右下 (x=ch/2, y=cw/2)
+      //   右下 -> 左下 (x=-ch/2, y=cw/2) 
+      //   ...ややこしいので、「画面上の右上」を目指す
+      
+      let bx = 0, by = 0;
+      if (isRest) {
+         // 90度回転しているので、画面上の右上は コンテナ内の (x=ch/2, y=-cw/2)
+         // カウント用(右上): x=ch/2, y=-cw/2
+         // 通常(右下): x=ch/2, y=cw/2
+         bx = ch / 2;
+         by = isCountBadge ? -cw / 2 : cw / 2;
+      } else {
+         bx = cw / 2;
+         by = isCountBadge ? -ch / 2 : ch / 2;
+      }
+
+      badge.x = bx;
+      badge.y = by;
       
       const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' });
       bTxt.anchor.set(0.5);
 
-      if (isOpponent) {
-        badge.rotation = Math.PI;
-      }
+      // バッジ文字も常に正位置
+      badge.rotation = textRotation + (isOpponent ? Math.PI : 0);
       
       badge.addChild(bTxt);
       container.addChild(badge);
@@ -216,7 +242,6 @@ export const RealGame = () => {
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
-      // ステージ
       const stg = renderCard(p.zones.stage || { name: 'Stage' }, CW, CH, isOpp);
       stg.x = coords.getStageX(W); stg.y = r2Y;
       side.addChild(stg);
@@ -258,6 +283,7 @@ export const RealGame = () => {
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
+  // ... (useEffect 等は変更なし)
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({
