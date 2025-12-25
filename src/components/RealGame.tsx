@@ -1,20 +1,38 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/game';
 import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
+// 1. フックのインポート
+import { useGameAction } from '../hooks/useGameAction';
 
-type DrawTarget = CardInstance | LeaderCard | BoardCard | { name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number };
+type DrawTarget = CardInstance | LeaderCard | BoardCard | { 
+  name: string; 
+  is_face_up?: boolean; 
+  is_rest?: boolean; 
+  power?: number; 
+  cost?: number; 
+  attribute?: string; 
+  counter?: number; 
+  attached_don?: number; // ドン付与表示用に型定義を拡張
+  uuid?: string;         // アクション用にIDが必要
+};
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const gameState: GameState = initialGameResponse.state;
+
+  // 1. State管理への変更
+  // initialGameResponse 全体ではなく、.state 部分を初期値として渡します
+  const [gameState, setGameState] = useState<GameState>(initialGameResponse.state as unknown as GameState);
 
   const urlParams = new URLSearchParams(window.location.search);
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
+
+  // 1. フックの初期化
+  const { sendAction } = useGameAction('test-game-id', observerId, gameState, setGameState);
 
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
@@ -31,6 +49,10 @@ export const RealGame = () => {
     return '...';
   };
 
+  /**
+   * renderCard
+   * - locationType: 'hand' | 'field' | 'other' を追加してアクションを分岐
+   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
@@ -38,15 +60,59 @@ export const RealGame = () => {
     isOpponent: boolean = false, 
     badgeCount?: number,
     isCountBadge: boolean = false,
-    isWideName: boolean = false 
+    isWideName: boolean = false,
+    locationType: 'hand' | 'field' | 'other' = 'other' // アクション判定用
   ): PIXI.Container => {
     const container = new PIXI.Container();
+    
+    // 2. タップイベントの実装
     container.eventMode = 'static';
     container.cursor = 'pointer';
+
+    container.on('pointertap', () => {
+      // 相手のカードは何もしない
+      if (isOpponent) return;
+
+      const cardId = (card as any).uuid; // 型アサーションでID取得
+      if (!cardId) return;
+
+      if (locationType === 'hand') {
+        // 手札の場合
+        if (window.confirm("このカードを登場させますか？")) {
+          sendAction('PLAY_CARD', { card_id: cardId });
+        }
+      } else if (locationType === 'field') {
+        // 場のカードの場合
+        const action = window.prompt("アクションを選択:\n1: 攻撃\n2: ドン付与\n3: 効果発動");
+        if (action === '1') {
+          sendAction('ATTACK', { card_id: cardId, target_ids: ['dummy'] });
+        } else if (action === '2') {
+          sendAction('ATTACH_DON', { target_ids: [cardId], extra: { count: 1 } });
+        } else if (action === '3') {
+          sendAction('ACTIVATE', { card_id: cardId });
+        }
+      }
+    });
     
+    // レスト回転
     const isRest = 'is_rest' in card && card.is_rest;
     if (isRest) {
       container.rotation = Math.PI / 2;
+    }
+
+    // 3. 付与ドン (Attached Don) の表示
+    // メインカードの描画前に配置することで後ろに表示させる
+    if (!isOpponent && 'attached_don' in card && (card.attached_don || 0) > 0) {
+      const donBg = new PIXI.Graphics();
+      donBg.lineStyle(1, 0x666666);
+      // 裏面色またはグレー
+      donBg.beginFill(COLORS.CARD_BACK); 
+      donBg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
+      donBg.endFill();
+      // 位置ずらし
+      donBg.x = 6;
+      donBg.y = 6;
+      container.addChild(donBg);
     }
 
     const isBackSide = 'is_face_up' in card ? card.is_face_up === false : false;
@@ -90,7 +156,7 @@ export const RealGame = () => {
         container.addChild(powerTxt);
       }
 
-      // 2. 名前 (表示領域の拡大修正)
+      // 2. 名前
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
@@ -101,7 +167,6 @@ export const RealGame = () => {
         align: 'center',
       });
 
-      // 修正: 通常カードも幅広(1.8倍)に設定し、リーダー等はさらに広く(2.2倍)
       const maxNameWidth = isWideName ? cw * 2.2 : cw * 1.8;
       const displayName = truncateText(nameStr, nameStyle, maxNameWidth);
 
@@ -160,9 +225,6 @@ export const RealGame = () => {
       container.addChild(backTxt); 
     }
 
-    // -------------------------------------------------
-    // 枚数バッジ
-    // -------------------------------------------------
     if (badgeCount !== undefined) {
       const badgeR = 9;
       const margin = 2; 
@@ -200,7 +262,7 @@ export const RealGame = () => {
     }
 
     return container;
-  }, []);
+  }, [sendAction]); // 依存配列に sendAction を追加
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current;
@@ -226,7 +288,8 @@ export const RealGame = () => {
       // Row 1: Field
       const fields = p.zones.field || [];
       fields.forEach((c: any, i: number) => {
-        const card = renderCard(c, CW, CH, isOpp);
+        // Field上のカードとして描画
+        const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field');
         card.x = coords.getFieldX(i, W, CW, fields.length); 
         card.y = coords.getY(1, CH, V_GAP);
         side.addChild(card);
@@ -234,47 +297,50 @@ export const RealGame = () => {
 
       // Row 2: 司令部
       const r2Y = coords.getY(2, CH, V_GAP);
-      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0);
+      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y;
       side.addChild(life);
 
-      const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true);
+      // Leader (Field扱い)
+      const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
       if (p.zones.stage) {
-        const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true);
+        // Stage (Field扱いだがアクションは限定的かも)
+        const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field');
         stg.x = coords.getStageX(W); stg.y = r2Y;
         side.addChild(stg);
       }
 
-      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40);
+      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
       deck.x = coords.getDeckX(W); deck.y = r2Y;
       side.addChild(deck);
 
       // Row 3: ドン!! & トラッシュ
       const r3Y = coords.getY(3, CH, V_GAP);
-      const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10);
+      const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10, false, false, 'other');
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
       side.addChild(donDk);
 
-      const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true);
+      const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
       side.addChild(donAct);
 
-      const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true);
+      const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
       side.addChild(donRst);
 
       const tCount = p.zones.trash?.length || 0;
-      const trash = renderCard(p.zones.trash?.[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount);
+      const trash = renderCard(p.zones.trash?.[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y;
       side.addChild(trash);
 
       // Row 4: Hand
       if (!isOpp) {
         (p.zones.hand || []).forEach((c: any, i: number) => {
-          const card = renderCard(c, CW, CH);
+          // 手札として描画
+          const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand');
           card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP);
           side.addChild(card);
         });
