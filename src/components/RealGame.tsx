@@ -20,7 +20,7 @@ type DrawTarget = CardInstance | LeaderCard | BoardCard | {
   counter?: number; 
   attached_don?: number;
   uuid?: string;
-  text?: string; // 詳細表示用にtextを追加
+  text?: string;
 };
 
 export const RealGame = () => {
@@ -29,7 +29,7 @@ export const RealGame = () => {
 
   const [gameState, setGameState] = useState<GameState>(initialGameResponse.state as unknown as GameState);
   
-  // 1. UI用のState追加
+  // UI用のState
   const [selectedCard, setSelectedCard] = useState<{ card: DrawTarget, location: 'hand' | 'field' | 'other' } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
 
@@ -65,6 +65,7 @@ export const RealGame = () => {
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
     if (metrics.width <= maxWidth) return text;
+
     let truncated = text;
     while (truncated.length > 0) {
       truncated = truncated.slice(0, -1);
@@ -86,7 +87,7 @@ export const RealGame = () => {
   ): PIXI.Container => {
     const container = new PIXI.Container();
     
-    // 2. タップ/長押しイベントの実装
+    // タップ/長押しイベントの実装
     container.eventMode = 'static';
     container.cursor = 'pointer';
 
@@ -133,7 +134,7 @@ export const RealGame = () => {
       }
     });
     
-    // ... (以下、既存の描画ロジック：レスト回転、付与ドン、カード枠、テキスト等) ...
+    // ... 描画ロジック ...
     const isRest = 'is_rest' in card && card.is_rest;
     if (isRest) {
       container.rotation = Math.PI / 2;
@@ -259,7 +260,6 @@ export const RealGame = () => {
   }, [sendAction]); 
 
   const drawLayout = useCallback((state: GameState) => {
-    // ... (既存のdrawLayoutロジックは変更なし) ...
     const app = appRef.current;
     if (!app) return;
     app.stage.removeChildren();
@@ -342,17 +342,27 @@ export const RealGame = () => {
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
+  // 1. Pixi App Initialization (Once)
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
+
     const app = new PIXI.Application({
-      width: window.innerWidth, height: window.innerHeight,
-      backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1,
-      autoDensity: true, antialias: true,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: 0xFFFFFF,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+      antialias: true,
     });
+
     containerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
-    const handleResize = () => app.renderer.resize(window.innerWidth, window.innerHeight);
+
+    const handleResize = () => {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+    };
     window.addEventListener('resize', handleResize);
+
     return () => {
       window.removeEventListener('resize', handleResize);
       app.destroy(true);
@@ -360,17 +370,17 @@ export const RealGame = () => {
     };
   }, []);
 
+  // 2. Draw Loop (On State Change)
   useEffect(() => {
     if (!appRef.current) return;
     drawLayout(gameState);
   }, [gameState, drawLayout]);
 
-  // 3. UIのレンダリング
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
       
-      {/* デバッグ情報 (必要に応じて残す) */}
+      {/* デバッグ情報 */}
       <div style={{
         position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)',
         color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none'
@@ -378,17 +388,17 @@ export const RealGame = () => {
         <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
       </div>
 
-      {/* アクションメニューの表示 */}
+      {/* アクションメニュー */}
       {selectedCard && !isDetailMode && (
         <ActionMenu 
-          cardName={selectedCard.card.name} 
+          cardName={selectedCard.card.name || ''} 
           location={selectedCard.location}
           onSelect={handleActionSelect}
           onClose={() => setSelectedCard(null)}
         />
       )}
 
-      {/* カード詳細シートの表示 */}
+      {/* カード詳細シート */}
       {selectedCard && isDetailMode && (
         <CardDetailSheet 
           card={selectedCard.card} 
