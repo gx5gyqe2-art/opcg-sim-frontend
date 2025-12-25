@@ -17,7 +17,7 @@ export const RealGame = () => {
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
   /**
-   * 改良版レンダラー: 右上の枚数カウント用バッジに対応
+   * 改良版レンダラー: バッジの向き補正と位置調整に対応
    */
   const renderCard = useCallback((
     card: DrawTarget, 
@@ -52,14 +52,21 @@ export const RealGame = () => {
     nameTxt.anchor.set(0.5); 
     content.addChild(nameTxt);
 
+    // バッジ描画ロジック
     if (badgeCount !== undefined) {
-      // isCountBadge が true なら右上・黒バッジ、false なら右下・赤バッジ
       const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 10).endFill();
-      badge.x = cw / 2 - (isCountBadge ? 0 : 5);
-      badge.y = isCountBadge ? -ch / 2 : ch / 2 - 5;
+      // 角に被りすぎないよう位置を微調整
+      badge.x = cw / 2;
+      badge.y = isCountBadge ? -ch / 2 : ch / 2;
       
       const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' });
       bTxt.anchor.set(0.5);
+
+      // 🌟 相手側のバッジ数字を自分向き（正位置）に補正
+      if (isOpponent) {
+        badge.rotation = Math.PI;
+      }
+      
       badge.addChild(bTxt);
       container.addChild(badge);
     }
@@ -95,7 +102,7 @@ export const RealGame = () => {
         side.addChild(card);
       });
 
-      // Row 2: 司令部
+      // Row 2: 司令部 (Life, Leader, Stage, Deck)
       const r2Y = coords.getY(2, CH, V_GAP);
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0);
       life.x = coords.getLifeX(W); life.y = r2Y;
@@ -113,7 +120,7 @@ export const RealGame = () => {
       deck.x = coords.getDeckX(W); deck.y = r2Y;
       side.addChild(deck);
 
-      // Row 3: ドン!!バッジ表示
+      // Row 3: ドン!! & トラッシュ
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10);
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
@@ -127,7 +134,9 @@ export const RealGame = () => {
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
       side.addChild(donRst);
 
-      const trash = renderCard(p.zones.trash?.[0] || { name: 'Trash' }, CW, CH, isOpp);
+      // トラッシュの枚数バッジを追加
+      const tCount = p.zones.trash?.length || 0;
+      const trash = renderCard(p.zones.trash?.[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount);
       trash.x = coords.getTrashX(W); trash.y = r3Y;
       side.addChild(trash);
 
@@ -180,3 +189,4 @@ export const RealGame = () => {
     </div>
   );
 };
+  

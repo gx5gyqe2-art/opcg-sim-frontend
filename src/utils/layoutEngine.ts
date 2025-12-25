@@ -29,11 +29,11 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     CH, CW, V_GAP, Y_CTRL_START,
     getLifeX: (width) => width * 0.15,
     getLeaderX: (width) => width * 0.43,
-    getStageX: (width) => width * 0.57,
+    getStageX: (width) => width * 0.65, // ステージをリーダーから離して配置
     getDeckX: (width) => width * 0.85,
     getDonDeckX: (width) => width * 0.15,
-    getDonActiveX: (width) => width * 0.35,
-    getDonRestX: (width) => width * 0.55,
+    getDonActiveX: (width) => width * 0.38, // 間隔を広げて視認性向上
+    getDonRestX: (width) => width * 0.60,   // 間隔を広げて視認性向上
     getTrashX: (width) => width * 0.85,
     getFieldX: (i, width) => width * 0.15 + (i * CW * 1.2),
     getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
