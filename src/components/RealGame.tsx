@@ -14,7 +14,8 @@ export const RealGame = () => {
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  const renderCard = useCallback((card: CardInstance, cw: number, ch: number, isOpponent: boolean = false) => {
+  // 枚数バッジ付きカードレンダラー
+  const renderCard = useCallback((card: CardInstance, cw: number, ch: number, isOpponent: boolean = false, badgeCount?: number) => {
     const container = new PIXI.Container();
     container.eventMode = 'static';
     container.cursor = 'pointer';
@@ -48,14 +49,6 @@ export const RealGame = () => {
       powerTxt.y = -ch / 4;
       content.addChild(powerTxt);
 
-      if ('attribute' in card && card.attribute) {
-        const attrTxt = new PIXI.Text(card.attribute, { fontSize: 8, fill: 0x666666 });
-        attrTxt.anchor.set(1, 0);
-        attrTxt.x = cw / 2 - 5;
-        attrTxt.y = -ch / 2 + 5;
-        content.addChild(attrTxt);
-      }
-
       if ('cost' in card && card.cost !== undefined) {
         const costTxt = new PIXI.Text(card.cost.toString(), { fontSize: 9, fill: 0xFFFFFF });
         const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
@@ -70,6 +63,18 @@ export const RealGame = () => {
       backTxt.anchor.set(0.5); 
       content.addChild(backTxt);
     }
+
+    // 枚数バッジ (LifeやDeck用)
+    if (badgeCount !== undefined) {
+      const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG).drawCircle(0, 0, 8).endFill();
+      badge.x = cw / 2 - 5;
+      badge.y = ch / 2 - 5;
+      const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' });
+      bTxt.anchor.set(0.5);
+      badge.addChild(bTxt);
+      container.addChild(badge);
+    }
+
     return container;
   }, []);
 
@@ -89,56 +94,58 @@ export const RealGame = () => {
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + LAYOUT.H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
 
-    const player = state.players[observerId];
-    const opponent = state.players[opponentId];
+    const renderSide = (sidePlayer: any, isOpp: boolean) => {
+      const side = new PIXI.Container();
+      if (isOpp) {
+        side.x = W; side.y = Y_CTRL_START; side.rotation = Math.PI; 
+      } else {
+        side.y = Y_CTRL_START + LAYOUT.H_CTRL;
+      }
+      app.stage.addChild(side);
 
-    // --- 🔴 相手側 (oSide) ---
-    const oSide = new PIXI.Container();
-    oSide.x = W; oSide.y = Y_CTRL_START; oSide.rotation = Math.PI; 
-    app.stage.addChild(oSide);
+      // --- Row 1: Field ---
+      sidePlayer.zones.field.forEach((c: any, i: number) => {
+        const card = renderCard(c, CW, CH, isOpp);
+        card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
+        side.addChild(card);
+      });
 
-    opponent.zones.field.forEach((c, i) => {
-      const card = renderCard(c, CW, CH, true);
-      card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
-      oSide.addChild(card);
-    });
-    
-    const oLeader = renderCard(opponent.leader, CW, CH, true);
-    oLeader.x = coords.getLeaderX(W); oLeader.y = coords.getY(2, CH, V_GAP);
-    oSide.addChild(oLeader);
+      // --- Row 2: Life, Leader, Stage, Deck ---
+      // 1. Life
+      if (sidePlayer.zones.life.length > 0) {
+        const lifeCard = renderCard({ ...sidePlayer.zones.life[0], is_face_up: false }, CW, CH, isOpp, sidePlayer.zones.life.length);
+        lifeCard.x = coords.getLifeX(W); lifeCard.y = coords.getY(2, CH, V_GAP);
+        side.addChild(lifeCard);
+      }
+      // 2. Leader
+      const ldr = renderCard(sidePlayer.leader, CW, CH, isOpp);
+      ldr.x = coords.getLeaderX(W); ldr.y = coords.getY(2, CH, V_GAP);
+      side.addChild(ldr);
+      // 3. Stage
+      sidePlayer.zones.stage.forEach((c: any) => {
+        const stg = renderCard(c, CW, CH, isOpp);
+        stg.x = coords.getStageX(W); stg.y = coords.getY(2, CH, V_GAP);
+        side.addChild(stg);
+      });
+      // 4. Deck
+      if (sidePlayer.zones.deck_count > 0) {
+        const deckCard = renderCard({ is_face_up: false } as any, CW, CH, isOpp, sidePlayer.zones.deck_count);
+        deckCard.x = coords.getDeckX(W); deckCard.y = coords.getY(2, CH, V_GAP);
+        side.addChild(deckCard);
+      }
 
-    opponent.zones.life.forEach((c) => {
-      const card = renderCard(c, CW, CH, true);
-      card.x = coords.getLifeX(W); card.y = coords.getY(2, CH, V_GAP);
-      oSide.addChild(card);
-    });
+      // --- Row 4: Hand (自分のみ) ---
+      if (!isOpp) {
+        sidePlayer.zones.hand.forEach((c: any, i: number) => {
+          const card = renderCard(c, CW, CH);
+          card.x = coords.getHandX(i, W); card.y = coords.getY(4.0, CH, V_GAP);
+          side.addChild(card);
+        });
+      }
+    };
 
-    // --- 🔵 自分側 (pSide) ---
-    const pSide = new PIXI.Container();
-    pSide.y = Y_CTRL_START + LAYOUT.H_CTRL;
-    app.stage.addChild(pSide);
-
-    player.zones.field.forEach((c, i) => {
-      const card = renderCard(c, CW, CH);
-      card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
-      pSide.addChild(card);
-    });
-
-    const pLeader = renderCard(player.leader, CW, CH);
-    pLeader.x = coords.getLeaderX(W); pLeader.y = coords.getY(2, CH, V_GAP);
-    pSide.addChild(pLeader);
-
-    player.zones.life.forEach((c) => {
-      const card = renderCard(c, CW, CH);
-      card.x = coords.getLifeX(W); card.y = coords.getY(2, CH, V_GAP);
-      pSide.addChild(card);
-    });
-
-    player.zones.hand.forEach((c, i) => {
-      const card = renderCard(c, CW, CH);
-      card.x = coords.getHandX(i, W); card.y = coords.getY(4.0, CH, V_GAP);
-      pSide.addChild(card);
-    });
+    renderSide(state.players[opponentId], true);
+    renderSide(state.players[observerId], false);
 
   }, [observerId, opponentId, renderCard]);
 
