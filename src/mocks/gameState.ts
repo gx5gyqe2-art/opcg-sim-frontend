@@ -3,6 +3,8 @@ import type { GameResponse } from '../types/game';
 // 先頭にこれを追記
 export const initialGameResponse: GameResponse =  {
   "success": true,
+  "gameId": "high-density-test-2025",
+  "state": 
   {"game_id": "high-density-test-2025",
   "turn_info": {
     "turn_count": 5,
