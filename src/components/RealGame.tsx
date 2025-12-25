@@ -5,8 +5,8 @@ import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
 
-// 描画対象を厳格に定義
-type DrawTarget = CardInstance | LeaderCard | BoardCard | { name: string; is_face_up?: boolean; is_rest?: boolean };
+// 描画対象を厳格に定義。実データと空枠用オブジェクトの両方を許容する Union 型
+type DrawTarget = CardInstance | LeaderCard | BoardCard | { name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,7 +31,7 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     
-    // 型ガードを伴うプロパティ参照
+    // 型ガードを用いてプロパティを安全に参照
     if ('is_rest' in card && card.is_rest) {
       container.rotation = Math.PI / 2;
     }
@@ -50,7 +50,6 @@ export const RealGame = () => {
     container.addChild(content);
 
     if (!isBackSide) {
-      // 安全にプロパティを取り出す
       const name = 'name' in card ? card.name : '';
       const power = 'power' in card ? card.power : undefined;
       const cost = 'cost' in card ? card.cost : undefined;
@@ -111,7 +110,7 @@ export const RealGame = () => {
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + LAYOUT.H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
 
-    const renderSide = (playerData: GameState['players']['p1' | 'p2'], isOpp: boolean) => {
+    const renderSide = (playerData: GameState['players'][keyof GameState['players']], isOpp: boolean) => {
       const side = new PIXI.Container();
       if (isOpp) {
         side.x = W; side.y = Y_CTRL_START; side.rotation = Math.PI; 
@@ -127,9 +126,9 @@ export const RealGame = () => {
         side.addChild(card);
       });
 
-      // Row 2: 司令部 (Strictly access through state)
+      // Row 2: 司令部
       const r2Y = coords.getY(2, CH, V_GAP);
-      const lifeCard = renderCard({ is_face_up: false }, CW, CH, isOpp, playerData.zones.life.length);
+      const lifeCard = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, playerData.zones.life.length);
       lifeCard.x = coords.getLifeX(W); lifeCard.y = r2Y;
       side.addChild(lifeCard);
 
@@ -137,20 +136,19 @@ export const RealGame = () => {
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
-      // Stage: Type-safe access
       const stage = (playerData.zones as any).stage as CardInstance | undefined;
       const stg = renderCard(stage || { name: 'Stage' }, CW, CH, isOpp);
       stg.x = coords.getStageX(W); stg.y = r2Y;
       side.addChild(stg);
 
       const deckCount = (playerData.zones as any).deck?.length ?? 40;
-      const deckCard = renderCard({ is_face_up: false }, CW, CH, isOpp, deckCount);
+      const deckCard = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, deckCount);
       deckCard.x = coords.getDeckX(W); deckCard.y = r2Y;
       side.addChild(deckCard);
 
       // Row 3: Don & Trash
       const r3Y = coords.getY(3, CH, V_GAP);
-      const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, 10);
+      const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10);
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
       side.addChild(donDk);
 
@@ -171,7 +169,7 @@ export const RealGame = () => {
       trash.x = coords.getTrashX(W); trash.y = r3Y;
       side.addChild(trash);
 
-      // Row 4: Hand
+      // Row 4: Hand (自分のみ)
       if (!isOpp) {
         playerData.zones.hand.forEach((c, i) => {
           const card = renderCard(c, CW, CH);
@@ -186,4 +184,38 @@ export const RealGame = () => {
 
   }, [observerId, opponentId, renderCard]);
 
-  // ... (useEffect, return は変更なし)
+  useEffect(() => {
+    if (!containerRef.current || appRef.current) return;
+    const app = new PIXI.Application({
+      width: window.innerWidth, height: window.innerHeight,
+      backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1,
+      autoDensity: true, antialias: true,
+    });
+    containerRef.current.appendChild(app.view as HTMLCanvasElement);
+    appRef.current = app;
+    drawLayout(gameState);
+
+    const handleResize = () => {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+      drawLayout(gameState);
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      app.destroy(true);
+    };
+  }, [drawLayout, gameState]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
+      <div style={{
+        position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)',
+        color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none'
+      }}>
+        <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
+      </div>
+    </div>
+  );
+};
