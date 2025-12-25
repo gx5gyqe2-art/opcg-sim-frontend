@@ -56,7 +56,7 @@ export const RealGame = () => {
       const attribute = 'attribute' in card ? (card.attribute as string) : undefined;
       const counter = 'counter' in card ? card.counter : undefined;
 
-      // 1. パワー (フォントサイズ微調整: 12 -> 11)
+      // 1. パワー (フォントサイズ 11)
       if (power !== undefined) {
         const powerTxt = new PIXI.Text(`POWER ${power}`, { 
           fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
@@ -64,7 +64,7 @@ export const RealGame = () => {
         powerTxt.anchor.set(0.5); 
         
         if (isRest) {
-          powerTxt.x = (-ch / 2 - 10) * yDir; // 余白も少し詰める
+          powerTxt.x = (-ch / 2 - 10) * yDir; 
           powerTxt.y = 0;
         } else {
           powerTxt.x = 0;
@@ -75,7 +75,7 @@ export const RealGame = () => {
         container.addChild(powerTxt);
       }
 
-      // 2. 名前 (フォントサイズ微調整: 10/12 -> 9/11)
+      // 2. 名前 (余白を最小化: 2px)
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
@@ -89,7 +89,9 @@ export const RealGame = () => {
       });
       nameTxt.anchor.set(0.5, isResource ? 0.5 : 0);
       
-      const nameOffset = 8; // 余白調整
+      // 余白を 2px に設定
+      const nameOffset = 2; 
+
       if (isRest) {
         nameTxt.x = (isResource ? 0 : ch / 2 + nameOffset) * yDir;
         nameTxt.y = 0;
@@ -101,7 +103,7 @@ export const RealGame = () => {
       nameTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
       container.addChild(nameTxt);
 
-      // 3. カウンター (フォントサイズ微調整: 9 -> 8)
+      // 3. カウンター (フォントサイズ 8)
       if (counter !== undefined) {
         const counterTxt = new PIXI.Text(`+${counter}`, {
           fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
@@ -113,7 +115,7 @@ export const RealGame = () => {
         content.addChild(counterTxt);
       }
 
-      // 4. 属性 (フォントサイズ微調整: 8 -> 7)
+      // 4. 属性 (フォントサイズ 7)
       if (attribute && power !== undefined) {
         const attrTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
         attrTxt.anchor.set(1, 0);
@@ -122,7 +124,7 @@ export const RealGame = () => {
         content.addChild(attrTxt);
       }
 
-      // 5. コスト (フォントサイズ微調整: 9 -> 8)
+      // 5. コスト (フォントサイズ 8)
       if (cost !== undefined) {
         const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         costBg.x = -cw / 2 + 10;
@@ -140,17 +142,41 @@ export const RealGame = () => {
       container.addChild(backTxt); 
     }
 
-    // 枚数バッジ (フォントサイズ微調整: 10 -> 9)
+    // -------------------------------------------------
+    // 枚数バッジ (カード枠内に配置)
+    // -------------------------------------------------
     if (badgeCount !== undefined) {
-      const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 9).endFill();
+      const badgeR = 9;
+      const margin = 2; // 枠線からのマージン
+      const offset = badgeR + margin;
+
+      const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, badgeR).endFill();
       
+      // カード内側の配置可能エリア（中心からの距離）
+      const localW = cw / 2 - offset;
+      const localH = ch / 2 - offset;
+
       let bx = 0, by = 0;
+
       if (isRest) {
-         bx = (ch / 2) * yDir;
-         by = (isCountBadge ? -cw / 2 : cw / 2) * yDir;
+         // レスト時 (90度回転)
+         // 画面上で「右下」に見せる → ローカル「右上」(X>0, Y<0)
+         // 画面上で「右上」に見せる → ローカル「左上」(X<0, Y<0)
+         
+         const restX = isCountBadge ? -localW : localW;
+         const restY = -localH; // 常に上辺側 (画面上の右側)
+
+         bx = restX * yDir;
+         by = restY * yDir;
       } else {
-         bx = (cw / 2) * yDir;
-         by = (isCountBadge ? -ch / 2 : ch / 2) * yDir;
+         // 通常時
+         // 通常バッジ(右下) -> X>0, Y>0
+         // カウントバッジ(右上) -> X>0, Y<0
+         const normX = localW;
+         const normY = isCountBadge ? -localH : localH;
+
+         bx = normX * yDir;
+         by = normY * yDir;
       }
       
       badge.x = bx;
