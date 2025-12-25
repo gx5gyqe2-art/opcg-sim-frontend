@@ -1,4 +1,4 @@
-import { GameResponse } from '../types/game';
+import type { GameResponse } from '../types/game';
 
 // 先頭にこれを追記
 export const initialGameResponse: GameResponse =  {
