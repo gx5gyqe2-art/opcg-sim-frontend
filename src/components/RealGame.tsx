@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
 import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/game';
 import { initialGameResponse } from '../mocks/gameState';
@@ -21,7 +21,9 @@ const COLORS = {
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const [gameState, setGameState] = useState<GameState>(initialGameResponse.state);
+  
+  // 未使用の setGameState を削除し const 宣言に変更
+  const gameState: GameState = initialGameResponse.state;
 
   const urlParams = new URLSearchParams(window.location.search);
   const observerId = urlParams.get('observerId') || 'p1';
@@ -40,8 +42,8 @@ export const RealGame = () => {
       container.rotation = Math.PI / 2;
     }
 
-    // 裏表判定の修正: 明示的に false の場合のみ裏向き、それ以外(true/undefined)は表
-    const isBackSide = card.is_face_up === false;
+    // 1. is_face_up の判定箇所の修正
+    const isBackSide = 'is_face_up' in card ? card.is_face_up === false : false;
 
     const g = new PIXI.Graphics();
     g.lineStyle(2, COLORS.ZONE_BORDER);
@@ -51,8 +53,7 @@ export const RealGame = () => {
     container.addChild(g);
 
     const content = new PIXI.Container();
-    // 相手側カードの場合、外側のoSideが180度回っているため、
-    // 内部の文字をさらに180度回すことで自分から正位置に見えるようにする
+    // 4. 相手側カードの文字反転ロジックを維持
     if (isOpponent) content.rotation = Math.PI;
     container.addChild(content);
 
@@ -62,7 +63,7 @@ export const RealGame = () => {
       // 名前表示
       const nameTxt = new PIXI.Text(cardData.name ?? 'Unknown', { fontSize: 10, fill: COLORS.TEXT_MAIN, fontWeight: 'bold' });
       nameTxt.anchor.set(0.5, 0); 
-      nameTxt.y = ch / 2 - 18; // 下部に配置
+      nameTxt.y = ch / 2 - 18; 
       content.addChild(nameTxt);
 
       // パワー表示
@@ -80,8 +81,8 @@ export const RealGame = () => {
         content.addChild(attrTxt);
       }
 
-      // コスト表示 (BoardCardのみ)
-      if ('cost' in card) {
+      // 2. cost の表示箇所の修正
+      if ('cost' in card && card.cost !== undefined) {
         const costTxt = new PIXI.Text(card.cost.toString(), { fontSize: 12, fill: 0xFFFFFF });
         const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 9).endFill();
         costBg.x = -cw / 2 + 10;
@@ -108,7 +109,6 @@ export const RealGame = () => {
     const H = app.renderer.height / app.renderer.resolution;
     const AVAIL_H_HALF = (H - H_CTRL - MARGIN_TOP - MARGIN_BOTTOM) / 2;
     
-    // iPhone縦画面を考慮したサイズ調整
     const CH = Math.min(AVAIL_H_HALF / 3.8, (W / 6) * 1.4);
     const CW = CH / 1.4;
     const V_GAP = CH * 0.15;
@@ -120,10 +120,8 @@ export const RealGame = () => {
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
 
-    // デバッグログの出力
     const player = state.players[observerId];
     const opponent = state.players[opponentId];
-    console.log(`[Render] Ldr:${player.leader.name}, Field:${player.zones.field.length} | OppLdr:${opponent.leader.name}`);
 
     // --- 🔴 相手側レイアウト ---
     const oSide = new PIXI.Container();
@@ -174,7 +172,6 @@ export const RealGame = () => {
     appRef.current = app;
     drawLayout(gameState);
 
-    // iPhoneのリサイズ（回転）対応
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
       drawLayout(gameState);
@@ -187,12 +184,9 @@ export const RealGame = () => {
     };
   }, [drawLayout, gameState]);
 
-  useEffect(() => { if (appRef.current) drawLayout(gameState); }, [gameState, drawLayout]);
-
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
-      {/* デバッグパネル */}
       <div style={{
         position: 'absolute', top: 5, left: 5, background: 'rgba(0,0,0,0.7)',
         color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none'
