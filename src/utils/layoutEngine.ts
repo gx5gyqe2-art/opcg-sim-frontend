@@ -5,36 +5,33 @@ export interface LayoutCoords {
   CW: number;
   V_GAP: number;
   Y_CTRL_START: number;
-  getFieldX: (index: number, width: number) => number;
-  getHandX: (index: number, width: number) => number;
-  getLeaderX: (width: number) => number;
   getLifeX: (width: number) => number;
-  getY: (rowIdx: number, cardHeight: number, gap: number) => number;
+  getLeaderX: (width: number) => number;
+  getStageX: (width: number) => number;
+  getTrashX: (width: number) => number;
+  getFieldX: (i: number, width: number) => number;
+  getHandX: (i: number, width: number) => number;
+  getY: (row: number, h: number, g: number) => number;
 }
 
-export const calculateCardSize = (W: number, H: number) => {
-  const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
-  // Step 1: 1列最大7枚、高さ4.2分割
-  const CH = Math.min(AVAIL_H_HALF / 4.2, (W / 7) * 1.4);
-  const CW = CH / 1.4;
-  const V_GAP = CH * 0.1;
-  return { CH, CW, V_GAP };
-};
-
 export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
-  const { CH, CW, V_GAP } = calculateCardSize(W, H);
-  const Y_CTRL_START = LAYOUT.MARGIN_TOP + ((H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2);
+  const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
+  // カードサイズを Step 1 のボリューム感に合わせる
+  const CH = Math.min(AVAIL_H_HALF / 4.5, (W / 7.5) * 1.4); 
+  const CW = CH / 1.4;
+  const V_GAP = CH * 0.15;
+  const Y_CTRL_START = LAYOUT.MARGIN_TOP + AVAIL_H_HALF;
 
   return {
-    CH,
-    CW,
-    V_GAP,
-    Y_CTRL_START,
-    // Step 1 黄金比率の復元
-    getLeaderX: (width) => width * 0.43,
-    getLifeX: (width) => width * 0.15,
-    getFieldX: (i, width) => width * 0.15 + (i * CW * 1.2),
-    getHandX: (i, width) => width * 0.1 + (i * CW * 0.7),
-    getY: (rowIdx, cardHeight, gap) => (rowIdx - 0.5) * (cardHeight + gap),
+    CH, CW, V_GAP, Y_CTRL_START,
+    // X座標：Step 1 の固定比率
+    getLifeX: (width: number) => width * 0.15,
+    getLeaderX: (width: number) => width * 0.43,
+    getStageX: (width: number) => width * 0.57,
+    getTrashX: (width: number) => width * 0.85,
+    getFieldX: (i: number, width: number) => width * 0.15 + (i * CW * 1.2),
+    getHandX: (i: number, width: number) => width * 0.08 + (i * CW * 0.75),
+    // Y座標：1=最前線(Char), 2=司令部(Leader/Life), 4=手札
+    getY: (row: number, h: number, g: number) => (row - 0.5) * (h + g),
   };
 };
