@@ -16,9 +16,6 @@ export const RealGame = () => {
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  /**
-   * 最終完成版レンダラー: レスト時の文字向き補正対応
-   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
@@ -31,7 +28,6 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     
-    // レスト回転
     const isRest = 'is_rest' in card && card.is_rest;
     if (isRest) {
       container.rotation = Math.PI / 2;
@@ -40,21 +36,22 @@ export const RealGame = () => {
     const isBackSide = 'is_face_up' in card ? card.is_face_up === false : false;
     const g = new PIXI.Graphics();
     
-    // カード枠
     g.lineStyle(2, COLORS.ZONE_BORDER);
     g.beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
     g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
     g.endFill();
     container.addChild(g);
 
-    // コンテンツコンテナ
     const content = new PIXI.Container();
-    // 相手側カードの中身は180度回転
+    // 相手側カードはコンテナごと180度回転
     if (isOpponent) content.rotation = Math.PI; 
     container.addChild(content);
 
-    // テキストの回転補正値: レスト時は逆回転させて正位置に戻す
+    // テキストの回転補正
     const textRotation = isRest ? -Math.PI / 2 : 0;
+    
+    // 相手側の場合、Y座標を反転させる係数（画面上で位置を統一するため）
+    const yDir = isOpponent ? -1 : 1;
 
     if (!isBackSide) {
       const name = 'name' in card ? card.name : '';
@@ -72,42 +69,43 @@ export const RealGame = () => {
         });
         powerTxt.anchor.set(0.5); 
         
-        // レスト時は座標軸が入れ替わるため X/Y を調整
         if (isRest) {
-          powerTxt.x = -ch / 2 - 12; // 元の上が左へ
+          // レスト時: 枠の「上辺（画面左）」または「画面上」
+          // 統一ルール: カードの「上辺側」に配置
+          powerTxt.x = (-ch / 2 - 12) * yDir; 
           powerTxt.y = 0;
         } else {
+          // 通常時: 画面上の「上」に統一
           powerTxt.x = 0;
-          powerTxt.y = -ch / 2 - 12;
+          powerTxt.y = (-ch / 2 - 12) * yDir; // yDir=-1なら ch/2+12（ローカル下＝画面上）
         }
         
-        // 相手側の場合、文字をさらに180度回して自分に向ける
         powerTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
         container.addChild(powerTxt);
       }
 
       // -------------------------------------------------
-      // 2. 名前 / DON!! / Trash (カード枠外下 または 中央)
+      // 2. 名前 (カード枠の真下)
       // -------------------------------------------------
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
       const nameTxt = new PIXI.Text(nameStr, { 
-        fontSize: isResource ? 12 : 10, // リソース系は少し大きく
+        fontSize: isResource ? 12 : 10,
         fill: isResource ? 0x000000 : 0x333333, 
         fontWeight: 'bold',
         align: 'center',
         wordWrap: true,
         wordWrapWidth: isRest ? ch * 0.9 : cw * 1.5
       });
-      nameTxt.anchor.set(0.5, isResource ? 0.5 : 0); // リソースは中央揃え
+      nameTxt.anchor.set(0.5, isResource ? 0.5 : 0);
       
       if (isRest) {
-        nameTxt.x = isResource ? 0 : ch / 2 + 6; // 元の下が右へ
+        nameTxt.x = (isResource ? 0 : ch / 2 + 6) * yDir;
         nameTxt.y = 0;
       } else {
         nameTxt.x = 0;
-        nameTxt.y = isResource ? 0 : ch / 2 + 6;
+        nameTxt.y = (isResource ? 0 : ch / 2 + 6) * yDir; // yDir=-1なら -ch/2-6（ローカル上＝画面下）
       }
       
       nameTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
@@ -121,11 +119,10 @@ export const RealGame = () => {
           fontSize: 9, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
         });
         counterTxt.anchor.set(0.5);
-        
-        // カウンターはカード内部固定なので content に追加
+        // カウンターはカード内部固定のため反転しない
         counterTxt.x = -cw / 2 + 8;
         counterTxt.y = 0;
-        counterTxt.rotation = -Math.PI / 2; // 常に縦向き
+        counterTxt.rotation = -Math.PI / 2;
         content.addChild(counterTxt);
       }
 
@@ -154,40 +151,31 @@ export const RealGame = () => {
       }
       
     } else {
-      // 裏面テキスト
       const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 10, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
       backTxt.anchor.set(0.5);
-      // 裏面テキストも回転補正
       backTxt.rotation = textRotation; 
-      // 裏面テキストは常に中央なので座標変換不要
       container.addChild(backTxt); 
     }
 
     // -------------------------------------------------
-    // 枚数バッジ (向き補正)
+    // 枚数バッジ
     // -------------------------------------------------
     if (badgeCount !== undefined) {
       const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 10).endFill();
       
-      // バッジ位置: レスト時は座標が入れ替わる
-      // 通常: 右上 (x=cw/2, y=-ch/2) or 右下 (x=cw/2, y=ch/2)
-      // レスト(90度): 
-      //   右上 -> 右下 (x=ch/2, y=cw/2)
-      //   右下 -> 左下 (x=-ch/2, y=cw/2) 
-      //   ...ややこしいので、「画面上の右上」を目指す
-      
+      // バッジ位置計算
       let bx = 0, by = 0;
       if (isRest) {
-         // 90度回転しているので、画面上の右上は コンテナ内の (x=ch/2, y=-cw/2)
-         // カウント用(右上): x=ch/2, y=-cw/2
-         // 通常(右下): x=ch/2, y=cw/2
-         bx = ch / 2;
-         by = isCountBadge ? -cw / 2 : cw / 2;
+         bx = (ch / 2) * yDir;
+         by = (isCountBadge ? -cw / 2 : cw / 2) * yDir;
       } else {
-         bx = cw / 2;
-         by = isCountBadge ? -ch / 2 : ch / 2;
+         bx = (cw / 2) * yDir; // 相手なら左へ（画面上は右）
+         by = (isCountBadge ? -ch / 2 : ch / 2) * yDir; // 相手なら上へ（画面上は下）
       }
-
+      
+      // ただしバッジは「常に画面上の右」に寄せたい場合、yDirの影響を調整する必要があるが
+      // ここではカードの角に追従させるため反転させる
+      
       badge.x = bx;
       badge.y = by;
       
@@ -283,7 +271,6 @@ export const RealGame = () => {
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
-  // ... (useEffect 等は変更なし)
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({

@@ -23,8 +23,8 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const CH = Math.min(AVAIL_H_HALF / 4.5, (W / 7.5) * 1.4); 
   const CW = CH / 1.4;
   
-  // V_GAP を大幅に広げてテキストの重なりを防ぐ
-  const V_GAP = CH * 0.45;
+  // 1. 行間を詰める (CH * 0.45 -> CH * 0.15)
+  const V_GAP = CH * 0.15;
   
   const Y_CTRL_START = LAYOUT.MARGIN_TOP + AVAIL_H_HALF;
 
@@ -41,10 +41,11 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getFieldX: (i, width) => width * 0.15 + (i * CW * 1.2),
     getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
     
-    // Row 1 (戦場) を中央線に寄せるための調整
+    // 2. Y座標の計算を調整し、全体を中央（H_CTRL）寄りに配置
     getY: (row, h, g) => {
-      // Row 1 の場合、開始位置を詰める (0.5 -> 0.2)
-      const offset = row === 1 ? 0.2 : (row - 0.5);
+      // row 1 (Field) をより中央線（H_CTRL）に近づける
+      // (row - 0.5) だと 0.5 * height 分離れるが、これを 0.2 程度に抑える
+      const offset = row === 1 ? 0.2 : (row - 0.55); 
       return offset * (h + g);
     },
   };
