@@ -1,12 +1,26 @@
-// 盤面用（公開）カード
+// リーダー専用型
+export interface LeaderCard {
+  uuid: string;
+  card_id: string;
+  name: string;
+  power: number;
+  attribute: string;
+  is_rest: boolean;
+  owner_id: string;
+  traits: string[];
+  is_face_up: true;
+  attached_don: number;
+}
+
+// 盤面キャラクター用（公開）
 export interface BoardCard {
   uuid: string;
   card_id: string;
   name: string;
   power: number;
-  cost: number;
+  cost: number; // キャラクターには必須
   is_rest: boolean;
-  is_face_up: true; // BoardCardは常にtrue
+  is_face_up: true;
   attached_don: number;
   owner_id: string;
   attribute?: string;
@@ -20,7 +34,6 @@ export interface HiddenCard {
   uuid: string;
   owner_id: string;
   is_face_up: boolean;
-  // 以下は公開時のみ存在する可能性のある項目
   card_id?: string;
   name?: string;
   power?: number;
@@ -28,7 +41,8 @@ export interface HiddenCard {
   is_rest?: boolean;
 }
 
-export type CardInstance = BoardCard | HiddenCard;
+// すべてのカード型の連合
+export type CardInstance = LeaderCard | BoardCard | HiddenCard;
 
 // ドンカードの構造
 export interface DonInstance {
@@ -44,7 +58,7 @@ export interface PlayerState {
   hand_count: number;
   don_active: DonInstance[];
   don_rested: DonInstance[];
-  leader: BoardCard; // リーダーは常にBoardCard
+  leader: LeaderCard; // リーダー分離
   zones: {
     field: BoardCard[];
     hand: CardInstance[];

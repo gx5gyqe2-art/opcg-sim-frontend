@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
-import type { GameState, CardInstance, BoardCard } from '../types/game';
+import type { GameState, CardInstance, LeaderCard, BoardCard, HiddenCard } from '../types/game';
 import { initialGameResponse } from '../mocks/gameState';
 
 const MARGIN_TOP = 50;
@@ -50,22 +50,34 @@ export const RealGame = () => {
     container.addChild(content);
 
     // 公開状態の描画ロジック
-    if (card.is_face_up && 'name' in card) {
-      const nameTxt = new PIXI.Text(card.name ?? 'Unknown', { fontSize: 9, fill: COLORS.TEXT_MAIN });
+    if (card.is_face_up) {
+      // name, powerは LeaderCard | BoardCard では必須、HiddenCardでは任意
+      const cardData = card as Partial<LeaderCard & BoardCard>;
+      const nameTxt = new PIXI.Text(cardData.name ?? 'Unknown', { fontSize: 9, fill: COLORS.TEXT_MAIN });
       nameTxt.anchor.set(0.5, 0); nameTxt.y = ch / 2 + 2;
       content.addChild(nameTxt);
 
-      const powerTxt = new PIXI.Text(`P: ${card.power ?? 0}`, { fontSize: 10, fill: 0xFF0000, fontWeight: 'bold' });
+      const powerTxt = new PIXI.Text(`P: ${cardData.power ?? 0}`, { fontSize: 10, fill: 0xFF0000, fontWeight: 'bold' });
       powerTxt.anchor.set(0.5, 1); powerTxt.y = -ch / 2 + 12;
       content.addChild(powerTxt);
 
-      // BoardCard特有のプロパティアクセス
-      if ('attribute' in card || 'counter' in card) {
-        const attrTxt = new PIXI.Text(`${card.attribute ?? '-'} | C: ${card.counter ?? 0}`, { fontSize: 7, fill: 0x666666 });
-        attrTxt.anchor.set(0.5); attrTxt.y = ch / 5;
+      // LeaderCard 特有の情報描画（attribute）
+      if ('attribute' in card && card.attribute) {
+        const attrTxt = new PIXI.Text(card.attribute, { fontSize: 8, fill: 0x333333, fontWeight: 'bold' });
+        attrTxt.anchor.set(0.5);
+        attrTxt.y = 0;
         content.addChild(attrTxt);
       }
 
+      // BoardCard 特有の情報描画（counter）
+      if ('counter' in card && typeof card.counter === 'number') {
+        const counterTxt = new PIXI.Text(`C: ${card.counter}`, { fontSize: 7, fill: 0x666666 });
+        counterTxt.anchor.set(0.5);
+        counterTxt.y = ch / 5;
+        content.addChild(counterTxt);
+      }
+
+      // ドン付着情報の描画 (LeaderCard | BoardCard)
       if ('attached_don' in card && card.attached_don > 0) {
         const donTxt = new PIXI.Text(`+${card.attached_don} DON!!`, { fontSize: 8, fill: 0x0000FF, fontWeight: 'bold' });
         donTxt.anchor.set(0.5, 0); donTxt.y = -ch / 2 + 15;
@@ -118,12 +130,11 @@ export const RealGame = () => {
     });
     oSide.addChild(Object.assign(renderCard(opp.leader, CW, CH, true), { x: getX(0.43, W), y: getY(2, CH, V_GAP) }));
     
-    const oLife = renderCard({ uuid: 'ol', owner_id: opponentId, is_face_up: false }, CW, CH, true);
+    const oLifeData: HiddenCard = { uuid: 'ol', owner_id: opponentId, is_face_up: false };
+    const oLife = renderCard(oLifeData, CW, CH, true);
     oLife.x = getX(0.15, W); oLife.y = getY(2, CH, V_GAP);
     oLife.addChild(Object.assign(createBadgeContainer(opp.life_count), { x: CW/2-4, y: CH/2-4 }));
     oSide.addChild(oLife);
-
-    oSide.addChild(Object.assign(renderCard({ uuid:'od', owner_id: opponentId, name: "Don", is_face_up: true, is_rest: false } as any, CW, CH, true), { x: getX(0.35, W), y: getY(3, CH, V_GAP), badge: opp.don_active.length }));
 
     // 🔵 自分
     const pla = state.players[observerId];
@@ -138,7 +149,8 @@ export const RealGame = () => {
     });
     pSide.addChild(Object.assign(renderCard(pla.leader, CW, CH), { x: getX(0.43, W), y: getY(2, CH, V_GAP) }));
 
-    const pLife = renderCard({ uuid: 'pl', owner_id: observerId, is_face_up: false }, CW, CH);
+    const pLifeData: HiddenCard = { uuid: 'pl', owner_id: observerId, is_face_up: false };
+    const pLife = renderCard(pLifeData, CW, CH);
     pLife.x = getX(0.15, W); pLife.y = getY(2, CH, V_GAP);
     pLife.addChild(Object.assign(createBadgeContainer(pla.life_count), { x: CW/2-4, y: CH/2-4 }));
     pSide.addChild(pLife);
@@ -166,13 +178,9 @@ export const RealGame = () => {
       setGameState(prev => {
         const next = JSON.parse(JSON.stringify(prev)) as GameState;
         const target = next.players[observerId];
-        const action = Math.floor(Math.random() * 3);
+        const action = Math.floor(Math.random() * 2);
         if (action === 0) target.life_count = target.life_count <= 0 ? 5 : target.life_count - 1;
         else if (action === 1 && target.zones.field.length > 0) target.zones.field[0].is_rest = !target.zones.field[0].is_rest;
-        else if (action === 2) {
-          if (target.don_active.length > 5) target.don_active.pop();
-          else target.don_active.push({ uuid: 'd', owner_id: observerId, is_rest: false });
-        }
         return next;
       });
     }, 500);

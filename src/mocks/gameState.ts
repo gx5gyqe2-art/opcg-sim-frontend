@@ -114,4 +114,4 @@ export const initialGameResponse: GameResponse =  {
     }
   }
 }
-};
+}as unknown as GameResponse;`
