@@ -10,6 +10,8 @@ export interface LayoutCoords {
   getStageX: (width: number) => number;
   getDeckX: (width: number) => number;
   getDonDeckX: (width: number) => number;
+  getDonActiveX: (width: number) => number;
+  getDonRestX: (width: number) => number;
   getTrashX: (width: number) => number;
   getFieldX: (i: number, width: number) => number;
   getHandX: (i: number, width: number) => number;
@@ -29,8 +31,10 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getLeaderX: (width) => width * 0.43,
     getStageX: (width) => width * 0.57,
     getDeckX: (width) => width * 0.85,
-    getDonDeckX: (width) => width * 0.15, // 3行目左端
-    getTrashX: (width) => width * 0.85,    // 3行目右端
+    getDonDeckX: (width) => width * 0.15,
+    getDonActiveX: (width) => width * 0.35,
+    getDonRestX: (width) => width * 0.55,
+    getTrashX: (width) => width * 0.85,
     getFieldX: (i, width) => width * 0.15 + (i * CW * 1.2),
     getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
     getY: (row, h, g) => (row - 0.5) * (h + g),

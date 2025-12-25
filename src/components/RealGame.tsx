@@ -5,7 +5,6 @@ import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
 
-// 描画対象を厳格に定義。実データと空枠用オブジェクトの両方を許容する Union 型
 type DrawTarget = CardInstance | LeaderCard | BoardCard | { name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number };
 
 export const RealGame = () => {
@@ -17,9 +16,6 @@ export const RealGame = () => {
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  /**
-   * 厳格に型定義されたカードレンダラー
-   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
@@ -31,7 +27,6 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     
-    // 型ガードを用いてプロパティを安全に参照
     if ('is_rest' in card && card.is_rest) {
       container.rotation = Math.PI / 2;
     }
@@ -146,21 +141,21 @@ export const RealGame = () => {
       deckCard.x = coords.getDeckX(W); deckCard.y = r2Y;
       side.addChild(deckCard);
 
-      // Row 3: Don & Trash
+      // Row 3: コスト・墓地 (Don!! & Trash)
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10);
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
       side.addChild(donDk);
 
-      playerData.don_active.forEach((d, i) => {
+      (playerData.don_active || []).forEach((d, i) => {
         const don = renderCard({ name: 'DON!!', ...d }, CW * 0.8, CH * 0.8, isOpp);
-        don.x = coords.getDonDeckX(W) + CW * 0.9 + (i * 12); don.y = r3Y;
+        don.x = coords.getDonActiveX(W) + (i * 12); don.y = r3Y;
         side.addChild(don);
       });
 
-      playerData.don_rested.forEach((d, i) => {
+      (playerData.don_rested || []).forEach((d, i) => {
         const don = renderCard({ name: 'DON!!', ...d, is_rest: true }, CW * 0.8, CH * 0.8, isOpp);
-        don.x = coords.getDonDeckX(W) + CW * 2.5 + (i * 12); don.y = r3Y;
+        don.x = coords.getDonRestX(W) + (i * 12); don.y = r3Y;
         side.addChild(don);
       });
 
