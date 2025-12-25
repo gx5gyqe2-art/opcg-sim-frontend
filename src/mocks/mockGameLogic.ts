@@ -1,5 +1,5 @@
-import { GameState } from '../types/game';
-import { GameActionRequest } from '../types/api';
+import type { GameState } from '../types/game';
+import type { GameActionRequest } from '../types/api';
 
 const cloneState = (state: GameState): GameState => JSON.parse(JSON.stringify(state));
 
@@ -17,8 +17,7 @@ export const processMockAction = (currentState: GameState, request: GameActionRe
         player.zones.hand.splice(handIndex, 1);
         card.is_rest = false;
         
-        // 型アサーションを追加して BoardCard[] への push を許可
-        // 実際には手札のカードデータに power や cost が含まれている前提
+        // Cast to 'any' to bypass strict type checking between HiddenCard and BoardCard for mock logic
         player.zones.field.push(card as any); 
         
         console.log(`[Mock] Played: ${card.name}`);

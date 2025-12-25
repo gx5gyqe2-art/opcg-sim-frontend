@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid'; // npm install uuid 
-import { GameActionRequest, ActionType } from '../types/api';
-import { GameState } from '../types/game';
+import { v4 as uuidv4 } from 'uuid'; 
+import type { GameActionRequest, ActionType } from '../types/api';
+import type { GameState } from '../types/game';
 import { processMockAction } from '../mocks/mockGameLogic';
 
 export const useGameAction = (
-  gameId: string, 
+  _gameId: string, // Unused variable prefixed with _
   playerId: string, 
   currentState: GameState, 
   setGameState: (state: GameState) => void
@@ -17,7 +17,6 @@ export const useGameAction = (
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
   ) => {
     setIsPending(true);
-    // 擬似的な通信ラグ (200ms)
     await new Promise(resolve => setTimeout(resolve, 200));
 
     const request: GameActionRequest = {
@@ -28,8 +27,6 @@ export const useGameAction = (
     };
 
     try {
-      // ★現在はモックロジックで状態を計算
-      // 将来的にはここで fetch('/api/game/action', ...) を呼ぶ
       const nextState = processMockAction(currentState, request);
       setGameState(nextState);
     } catch (e) {
