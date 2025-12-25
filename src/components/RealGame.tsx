@@ -57,8 +57,8 @@ export const RealGame = () => {
       }
 
       if ('cost' in card && card.cost !== undefined) {
-        const costTxt = new PIXI.Text(card.cost.toString(), { fontSize: 12, fill: 0xFFFFFF });
-        const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 9).endFill();
+        const costTxt = new PIXI.Text(card.cost.toString(), { fontSize: 9, fill: 0xFFFFFF });
+        const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         costBg.x = -cw / 2 + 10;
         costBg.y = -ch / 2 + 10;
         costTxt.anchor.set(0.5);
@@ -99,15 +99,14 @@ export const RealGame = () => {
 
     opponent.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH, true);
-      // 修正: 第3引数に CW を追加
-      card.x = coords.getFieldX(i, W, CW); 
-      card.y = coords.getY(1.0, CH, V_GAP);
+      card.x = coords.getFieldX(i, W); 
+      card.y = coords.getY(1, CH, V_GAP);
       oSide.addChild(card);
     });
     
     const oLeader = renderCard(opponent.leader, CW, CH, true);
     oLeader.x = coords.getLeaderX(W); 
-    oLeader.y = coords.getY(2.0, CH, V_GAP);
+    oLeader.y = coords.getY(2, CH, V_GAP);
     oSide.addChild(oLeader);
 
     // --- 🔵 自分側 (pSide) ---
@@ -117,24 +116,20 @@ export const RealGame = () => {
 
     player.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH);
-      // 修正: 第3引数に CW を追加
-      card.x = coords.getFieldX(i, W, CW); 
-      card.y = coords.getY(2.0, CH, V_GAP);
+      card.x = coords.getFieldX(i, W); 
+      card.y = coords.getY(1, CH, V_GAP);
       pSide.addChild(card);
     });
 
     const pLeader = renderCard(player.leader, CW, CH);
     pLeader.x = coords.getLeaderX(W); 
-    pLeader.y = coords.getY(1.0, CH, V_GAP);
+    pLeader.y = coords.getY(2, CH, V_GAP);
     pSide.addChild(pLeader);
 
     player.zones.hand.forEach((c, i) => {
-      const handCW = CW * 0.8;
-      const handCH = CH * 0.8;
-      const card = renderCard(c, handCW, handCH);
-      // 修正: 第3引数に handCW を追加
-      card.x = coords.getHandX(i, W, handCW); 
-      card.y = coords.getY(3.8, CH, V_GAP);
+      const card = renderCard(c, CW, CH);
+      card.x = coords.getHandX(i, W); 
+      card.y = coords.getY(4.0, CH, V_GAP);
       pSide.addChild(card);
     });
 
