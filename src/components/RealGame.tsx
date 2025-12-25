@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
 import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/game';
 import { initialGameResponse } from '../mocks/gameState';
@@ -80,8 +80,6 @@ export const RealGame = () => {
 
     const W = app.renderer.width / app.renderer.resolution;
     const H = app.renderer.height / app.renderer.resolution;
-    
-    // レイアウトエンジンの呼び出し
     const coords = calculateCoordinates(W, H);
     const { CH, CW, V_GAP, Y_CTRL_START } = coords;
 
@@ -94,39 +92,49 @@ export const RealGame = () => {
     const player = state.players[observerId];
     const opponent = state.players[opponentId];
 
-    // --- 🔴 相手側レイアウト ---
+    // --- 🔴 相手側 (oSide) ---
     const oSide = new PIXI.Container();
     oSide.x = W; oSide.y = Y_CTRL_START; oSide.rotation = Math.PI; 
     app.stage.addChild(oSide);
 
     opponent.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH, true);
-      card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
+      // 修正: 第3引数に CW を追加
+      card.x = coords.getFieldX(i, W, CW); 
+      card.y = coords.getY(1.0, CH, V_GAP);
       oSide.addChild(card);
     });
     
     const oLeader = renderCard(opponent.leader, CW, CH, true);
-    oLeader.x = coords.getLeaderX(W); oLeader.y = coords.getY(2, CH, V_GAP);
+    oLeader.x = coords.getLeaderX(W); 
+    oLeader.y = coords.getY(2.0, CH, V_GAP);
     oSide.addChild(oLeader);
 
-    // --- 🔵 自分側レイアウト ---
+    // --- 🔵 自分側 (pSide) ---
     const pSide = new PIXI.Container();
     pSide.y = Y_CTRL_START + LAYOUT.H_CTRL;
     app.stage.addChild(pSide);
 
     player.zones.field.forEach((c, i) => {
       const card = renderCard(c, CW, CH);
-      card.x = coords.getFieldX(i, W); card.y = coords.getY(1, CH, V_GAP);
+      // 修正: 第3引数に CW を追加
+      card.x = coords.getFieldX(i, W, CW); 
+      card.y = coords.getY(2.0, CH, V_GAP);
       pSide.addChild(card);
     });
 
     const pLeader = renderCard(player.leader, CW, CH);
-    pLeader.x = coords.getLeaderX(W); pLeader.y = coords.getY(2, CH, V_GAP);
+    pLeader.x = coords.getLeaderX(W); 
+    pLeader.y = coords.getY(1.0, CH, V_GAP);
     pSide.addChild(pLeader);
 
     player.zones.hand.forEach((c, i) => {
-      const card = renderCard(c, CW * 0.8, CH * 0.8);
-      card.x = coords.getHandX(i, W); card.y = coords.getY(4.2, CH, V_GAP);
+      const handCW = CW * 0.8;
+      const handCH = CH * 0.8;
+      const card = renderCard(c, handCW, handCH);
+      // 修正: 第3引数に handCW を追加
+      card.x = coords.getHandX(i, W, handCW); 
+      card.y = coords.getY(3.8, CH, V_GAP);
       pSide.addChild(card);
     });
 
@@ -159,7 +167,7 @@ export const RealGame = () => {
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
       <div style={{
-        position: 'absolute', top: 5, left: 5, background: 'rgba(0,0,0,0.7)',
+        position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)',
         color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none'
       }}>
         <div>LDR: {gameState.players[observerId].leader.name}</div>
