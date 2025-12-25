@@ -8,7 +8,6 @@ export interface LeaderCard {
   is_rest: boolean;
   owner_id: string;
   traits: string[];
-  is_face_up: true;
   attached_don: number;
 }
 
@@ -20,7 +19,6 @@ export interface BoardCard {
   power: number;
   cost: number; // キャラクターには必須
   is_rest: boolean;
-  is_face_up: true;
   attached_don: number;
   owner_id: string;
   attribute?: string;
