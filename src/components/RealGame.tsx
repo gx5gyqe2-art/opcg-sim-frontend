@@ -4,7 +4,6 @@ import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/ga
 import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
-// 1. フックのインポート
 import { useGameAction } from '../hooks/useGameAction';
 
 type DrawTarget = CardInstance | LeaderCard | BoardCard | { 
@@ -15,23 +14,20 @@ type DrawTarget = CardInstance | LeaderCard | BoardCard | {
   cost?: number; 
   attribute?: string; 
   counter?: number; 
-  attached_don?: number; // ドン付与表示用に型定義を拡張
-  uuid?: string;         // アクション用にIDが必要
+  attached_don?: number; 
+  uuid?: string;         
 };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
 
-  // 1. State管理への変更
-  // initialGameResponse 全体ではなく、.state 部分を初期値として渡します
   const [gameState, setGameState] = useState<GameState>(initialGameResponse.state as unknown as GameState);
 
   const urlParams = new URLSearchParams(window.location.search);
   const observerId = urlParams.get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  // 1. フックの初期化
   const { sendAction } = useGameAction('test-game-id', observerId, gameState, setGameState);
 
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
@@ -49,10 +45,6 @@ export const RealGame = () => {
     return '...';
   };
 
-  /**
-   * renderCard
-   * - locationType: 'hand' | 'field' | 'other' を追加してアクションを分岐
-   */
   const renderCard = useCallback((
     card: DrawTarget, 
     cw: number, 
@@ -61,28 +53,24 @@ export const RealGame = () => {
     badgeCount?: number,
     isCountBadge: boolean = false,
     isWideName: boolean = false,
-    locationType: 'hand' | 'field' | 'other' = 'other' // アクション判定用
+    locationType: 'hand' | 'field' | 'other' = 'other' 
   ): PIXI.Container => {
     const container = new PIXI.Container();
     
-    // 2. タップイベントの実装
     container.eventMode = 'static';
     container.cursor = 'pointer';
 
     container.on('pointertap', () => {
-      // 相手のカードは何もしない
       if (isOpponent) return;
 
-      const cardId = (card as any).uuid; // 型アサーションでID取得
+      const cardId = (card as any).uuid; 
       if (!cardId) return;
 
       if (locationType === 'hand') {
-        // 手札の場合
         if (window.confirm("このカードを登場させますか？")) {
           sendAction('PLAY_CARD', { card_id: cardId });
         }
       } else if (locationType === 'field') {
-        // 場のカードの場合
         const action = window.prompt("アクションを選択:\n1: 攻撃\n2: ドン付与\n3: 効果発動");
         if (action === '1') {
           sendAction('ATTACK', { card_id: cardId, target_ids: ['dummy'] });
@@ -94,22 +82,17 @@ export const RealGame = () => {
       }
     });
     
-    // レスト回転
     const isRest = 'is_rest' in card && card.is_rest;
     if (isRest) {
       container.rotation = Math.PI / 2;
     }
 
-    // 3. 付与ドン (Attached Don) の表示
-    // メインカードの描画前に配置することで後ろに表示させる
     if (!isOpponent && 'attached_don' in card && (card.attached_don || 0) > 0) {
       const donBg = new PIXI.Graphics();
       donBg.lineStyle(1, 0x666666);
-      // 裏面色またはグレー
       donBg.beginFill(COLORS.CARD_BACK); 
       donBg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
       donBg.endFill();
-      // 位置ずらし
       donBg.x = 6;
       donBg.y = 6;
       container.addChild(donBg);
@@ -138,7 +121,6 @@ export const RealGame = () => {
       const attribute = 'attribute' in card ? (card.attribute as string) : undefined;
       const counter = 'counter' in card ? card.counter : undefined;
 
-      // 1. パワー
       if (power !== undefined) {
         const powerTxt = new PIXI.Text(`POWER ${power}`, { 
           fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
@@ -156,7 +138,6 @@ export const RealGame = () => {
         container.addChild(powerTxt);
       }
 
-      // 2. 名前
       const nameStr = name || '';
       const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
       
@@ -186,7 +167,6 @@ export const RealGame = () => {
       nameTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
       container.addChild(nameTxt);
 
-      // 3. カウンター
       if (counter !== undefined) {
         const counterTxt = new PIXI.Text(`+${counter}`, {
           fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
@@ -198,7 +178,6 @@ export const RealGame = () => {
         content.addChild(counterTxt);
       }
 
-      // 4. 属性
       if (attribute && power !== undefined) {
         const attrTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
         attrTxt.anchor.set(1, 0);
@@ -207,7 +186,6 @@ export const RealGame = () => {
         content.addChild(attrTxt);
       }
 
-      // 5. コスト
       if (cost !== undefined) {
         const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         costBg.x = -cw / 2 + 10;
@@ -262,7 +240,7 @@ export const RealGame = () => {
     }
 
     return container;
-  }, [sendAction]); // 依存配列に sendAction を追加
+  }, [sendAction]);
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current;
@@ -285,29 +263,24 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // Row 1: Field
       const fields = p.zones.field || [];
       fields.forEach((c: any, i: number) => {
-        // Field上のカードとして描画
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field');
         card.x = coords.getFieldX(i, W, CW, fields.length); 
         card.y = coords.getY(1, CH, V_GAP);
         side.addChild(card);
       });
 
-      // Row 2: 司令部
       const r2Y = coords.getY(2, CH, V_GAP);
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y;
       side.addChild(life);
 
-      // Leader (Field扱い)
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
       side.addChild(ldr);
 
       if (p.zones.stage) {
-        // Stage (Field扱いだがアクションは限定的かも)
         const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field');
         stg.x = coords.getStageX(W); stg.y = r2Y;
         side.addChild(stg);
@@ -317,7 +290,6 @@ export const RealGame = () => {
       deck.x = coords.getDeckX(W); deck.y = r2Y;
       side.addChild(deck);
 
-      // Row 3: ドン!! & トラッシュ
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10, false, false, 'other');
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
@@ -336,10 +308,8 @@ export const RealGame = () => {
       trash.x = coords.getTrashX(W); trash.y = r3Y;
       side.addChild(trash);
 
-      // Row 4: Hand
       if (!isOpp) {
         (p.zones.hand || []).forEach((c: any, i: number) => {
-          // 手札として描画
           const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand');
           card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP);
           side.addChild(card);
@@ -351,28 +321,39 @@ export const RealGame = () => {
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
+  // 1. Pixi App Initialization (Once)
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
+
     const app = new PIXI.Application({
-      width: window.innerWidth, height: window.innerHeight,
-      backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1,
-      autoDensity: true, antialias: true,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: 0xFFFFFF,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+      antialias: true,
     });
+
     containerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
-    drawLayout(gameState);
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
-      drawLayout(gameState);
     };
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
       app.destroy(true);
+      appRef.current = null;
     };
-  }, [drawLayout, gameState]);
+  }, []);
+
+  // 2. Draw Loop (On State Change)
+  useEffect(() => {
+    if (!appRef.current) return;
+    drawLayout(gameState);
+  }, [gameState, drawLayout]);
 
   return (
     <div style={{ position: 'relative' }}>
