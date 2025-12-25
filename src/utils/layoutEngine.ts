@@ -20,11 +20,17 @@ export interface LayoutCoords {
 
 export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
-  const CH = Math.min(AVAIL_H_HALF / 4.5, (W / 7.5) * 1.4); 
+  
+  // 1. カードサイズを縮小 (85%程度)
+  // 高さ: 画面半分の 4.5分割 -> 5.2分割
+  // 幅: 画面幅の 7.5分割 -> 8.5分割
+  const CH = Math.min(AVAIL_H_HALF / 5.2, (W / 8.5) * 1.4); 
   const CW = CH / 1.4;
   
-  // 1. 行間を詰める (CH * 0.45 -> CH * 0.15)
-  const V_GAP = CH * 0.15;
+  // 2. 行間 (V_GAP) を広げてテキスト重複を防止
+  // カードが小さくなった分、相対的なギャップ比率を上げてクリアランスを確保
+  // 上下のテキスト領域 (約25px分) を吸収できる隙間を設定
+  const V_GAP = CH * 0.30;
   
   const Y_CTRL_START = LAYOUT.MARGIN_TOP + AVAIL_H_HALF;
 
@@ -41,10 +47,9 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getFieldX: (i, width) => width * 0.15 + (i * CW * 1.2),
     getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
     
-    // 2. Y座標の計算を調整し、全体を中央（H_CTRL）寄りに配置
+    // 3. 全体を画面内に収めるためのY座標オフセット調整
+    // Row 1 (Field) を中央線に寄せつつ、全体のマージンバランスをとる
     getY: (row, h, g) => {
-      // row 1 (Field) をより中央線（H_CTRL）に近づける
-      // (row - 0.5) だと 0.5 * height 分離れるが、これを 0.2 程度に抑える
       const offset = row === 1 ? 0.2 : (row - 0.55); 
       return offset * (h + g);
     },
