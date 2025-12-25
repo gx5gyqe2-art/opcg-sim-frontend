@@ -9,8 +9,8 @@ export interface LayoutCoords {
   getLeaderX: (width: number) => number;
   getStageX: (width: number) => number;
   getDeckX: (width: number) => number;
-  getDonDeckX: (width: number) => number; // 追加
-  getTrashX: (width: number) => number;    // 追加
+  getDonDeckX: (width: number) => number;
+  getTrashX: (width: number) => number;
   getFieldX: (i: number, width: number) => number;
   getHandX: (i: number, width: number) => number;
   getY: (row: number, h: number, g: number) => number;
