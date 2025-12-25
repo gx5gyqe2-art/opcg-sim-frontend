@@ -13,7 +13,8 @@ export interface LayoutCoords {
   getDonActiveX: (width: number) => number;
   getDonRestX: (width: number) => number;
   getTrashX: (width: number) => number;
-  getFieldX: (i: number, width: number) => number;
+  // getFieldX の引数に cardWidth を追加
+  getFieldX: (i: number, width: number, cardWidth: number) => number;
   getHandX: (i: number, width: number) => number;
   getY: (row: number, h: number, g: number) => number;
 }
@@ -21,17 +22,10 @@ export interface LayoutCoords {
 export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
   
-  // 1. カードサイズを縮小 (85%程度)
-  // 高さ: 画面半分の 4.5分割 -> 5.2分割
-  // 幅: 画面幅の 7.5分割 -> 8.5分割
+  // カードサイズ縮小 (85%程度)
   const CH = Math.min(AVAIL_H_HALF / 5.2, (W / 8.5) * 1.4); 
   const CW = CH / 1.4;
-  
-  // 2. 行間 (V_GAP) を広げてテキスト重複を防止
-  // カードが小さくなった分、相対的なギャップ比率を上げてクリアランスを確保
-  // 上下のテキスト領域 (約25px分) を吸収できる隙間を設定
   const V_GAP = CH * 0.30;
-  
   const Y_CTRL_START = LAYOUT.MARGIN_TOP + AVAIL_H_HALF;
 
   return {
@@ -44,11 +38,17 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getDonActiveX: (width) => width * 0.38,
     getDonRestX: (width) => width * 0.60,
     getTrashX: (width) => width * 0.85,
-    getFieldX: (i, width) => width * 0.15 + (i * CW * 1.2),
-    getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
     
-    // 3. 全体を画面内に収めるためのY座標オフセット調整
-    // Row 1 (Field) を中央線に寄せつつ、全体のマージンバランスをとる
+    // 修正: フィールドカードを左詰め固定配置に変更
+    // 開始位置: 画面幅の5% (または50px)
+    // 間隔: 15px固定
+    getFieldX: (i, width, cardWidth) => {
+      const startX = width * 0.05; 
+      const gap = 15; 
+      return startX + i * (cardWidth + gap);
+    },
+
+    getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
     getY: (row, h, g) => {
       const offset = row === 1 ? 0.2 : (row - 0.55); 
       return offset * (h + g);
