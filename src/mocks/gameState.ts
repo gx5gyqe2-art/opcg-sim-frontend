@@ -1,4 +1,8 @@
-{
+import type { GameResponse } from '../types/game';
+
+// 先頭にこれを追記
+export const initialGameResponse: GameResponse =  {
+  "success": true,
   "game_id": "high-density-test-2025",
   "turn_info": {
     "turn_count": 5,
@@ -75,3 +79,4 @@
     }
   }
 }
+}as unknown as GameResponse;
