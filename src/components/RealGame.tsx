@@ -8,6 +8,7 @@ import { ActionMenu } from './ui/ActionMenu';
 import { CardDetailSheet } from './ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 
+// インデックス署名を追加して動的アクセスを許可
 type DrawTarget = {
   [key: string]: any;
 };
@@ -76,8 +77,8 @@ export const RealGame = () => {
       donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
 
-    // リーダーカードを強制的に表向きにする
-    const isLeader = card[prop.TYPE] === prop.TYPE_LEADER;
+    // 1. リーダー判定の修正: 直接 "type" を参照して確実に表面化
+    const isLeader = card["type"] === "LEADER" || card[prop.TYPE] === "LEADER";
     const isBackSide = isLeader ? false : card[prop.IS_FACE_UP] === false;
 
     const g = new PIXI.Graphics().lineStyle(2, COLORS.ZONE_BORDER).beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
@@ -156,10 +157,17 @@ export const RealGame = () => {
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
 
-      // ドン!!デッキの表示復旧
+      // 2. ドン!!デッキの座標修正: getDonDeckX を使用してメインデッキとの重なりを解消
       const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
       const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
-      donDk.x = coords.getDeckX(W); donDk.y = r2Y; side.addChild(donDk);
+      donDk.x = coords.getDonDeckX(W); 
+      donDk.y = r2Y;
+      side.addChild(donDk);
+
+      const mainDeck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
+      mainDeck.x = coords.getDeckX(W);
+      mainDeck.y = r2Y;
+      side.addChild(mainDeck);
 
       const r3Y = coords.getY(3, CH, V_GAP);
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
@@ -196,7 +204,7 @@ export const RealGame = () => {
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* ステータスパネル (不要なデバッグパネルは削除) */}
+      {/* ステータスパネル (zIndexを確保) */}
       {gameState && (
         <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none', zIndex: 100 }}>
           <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
@@ -205,7 +213,7 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* UI要素の zIndex を PixiJS より前面に設定 */}
+      {/* エラートースト */}
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}
@@ -213,6 +221,7 @@ export const RealGame = () => {
         </div>
       )}
 
+      {/* ローディング幕 */}
       {!gameState && (
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -224,6 +233,7 @@ export const RealGame = () => {
         </div>
       )}
 
+      {/* 3. zIndexを考慮した UI コンポーネント */}
       {selectedCard && !isDetailMode && (
         <ActionMenu cardName={selectedCard.card[CONST.CARD_PROPERTIES.NAME] || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}
