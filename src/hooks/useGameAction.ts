@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GameActionRequest, ActionType } from '../types/api';
 import type { GameState } from '../types/game';
 
+// Cloud Run バックエンドのベースURL
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
 
 export const useGameAction = (
@@ -13,13 +14,16 @@ export const useGameAction = (
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // 1. Health Check
+  // 1. 疎通確認（Health Check）機能
   useEffect(() => {
     const checkHealth = async () => {
       try {
         const res = await fetch(`${BASE_URL}/health`);
-        if (res.ok) console.log("[API] Health Check Success.");
-        else throw new Error(`Health check failed: ${res.status}`);
+        if (res.ok) {
+          console.log("[API] Health Check Success.");
+        } else {
+          throw new Error(`Health check failed: ${res.status}`);
+        }
       } catch (e: any) {
         setErrorToast(`サーバーに接続できません: ${e.message}`);
       }
@@ -27,7 +31,7 @@ export const useGameAction = (
     checkHealth();
   }, []);
 
-  // 2. Game Start (v1.4 schema sync)
+  // 2. ゲーム開始 (v1.4 スキーマ同期)
   const startGame = useCallback(async () => {
     setIsPending(true);
     try {
@@ -35,8 +39,10 @@ export const useGameAction = (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          p1_deck: "imu.json", p2_deck: "nami.json",
-          p1_name: "Player 1", p2_name: "Player 2"
+          p1_deck: "imu.json",
+          p2_deck: "nami.json",
+          p1_name: "Player 1",
+          p2_name: "Player 2"
         }),
       });
       const data = await res.json();
@@ -58,7 +64,7 @@ export const useGameAction = (
     }
   }, [setGameState]);
 
-  // 3. Action Send
+  // 3. アクション送信
   const sendAction = useCallback(async (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
@@ -82,6 +88,7 @@ export const useGameAction = (
       });
 
       const result = await response.json();
+      // レスポンスから最新の盤面状態を抽出
       const nextState = result.game_state || result.state;
 
       if (!response.ok || !result.success || !nextState) {
@@ -89,7 +96,8 @@ export const useGameAction = (
       }
       setGameState(nextState);
     } catch (e: any) {
-      setErrorToast(`アクション失敗: ${e.message}`);
+      console.error(e);
+      setErrorToast(`通信失敗: ${e.message}`);
     } finally {
       setIsPending(false);
     }

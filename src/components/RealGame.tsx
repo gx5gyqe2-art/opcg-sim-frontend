@@ -35,11 +35,20 @@ export const RealGame = () => {
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
     const cardUuid = selectedCard.card.uuid;
+
     switch (actionType) {
-      case 'PLAY_CARD': sendAction('PLAY_CARD', { card_id: cardUuid }); break;
-      case 'ATTACK': sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] }); break;
-      case 'ATTACH_DON': sendAction('ATTACH_DON', { target_ids: [cardUuid], extra: { count: 1 } }); break;
-      case 'ACTIVATE': sendAction('ACTIVATE', { card_id: cardUuid }); break;
+      case 'PLAY_CARD':
+        sendAction('PLAY_CARD', { card_id: cardUuid });
+        break;
+      case 'ATTACK':
+        sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] });
+        break;
+      case 'ATTACH_DON':
+        sendAction('ATTACH_DON', { target_ids: [cardUuid], extra: { count: 1 } });
+        break;
+      case 'ACTIVATE':
+        sendAction('ACTIVATE', { card_id: cardUuid });
+        break;
     }
     setSelectedCard(null);
   };
@@ -57,8 +66,10 @@ export const RealGame = () => {
 
   const renderCard = useCallback((card: DrawTarget, cw: number, ch: number, isOpponent: boolean = false, badgeCount?: number, isCountBadge: boolean = false, isWideName: boolean = false, locationType: 'hand' | 'field' | 'other' = 'other'): PIXI.Container => {
     const container = new PIXI.Container();
-    container.eventMode = 'static'; container.cursor = 'pointer';
-    let pressTimer: any = null; let isLongPress = false;
+    container.eventMode = 'static';
+    container.cursor = 'pointer';
+    let pressTimer: any = null;
+    let isLongPress = false;
 
     container.on('pointerdown', () => {
       if (isOpponent) return;
@@ -84,7 +95,8 @@ export const RealGame = () => {
     const content = new PIXI.Container();
     if (isOpponent) content.rotation = Math.PI;
     container.addChild(content);
-    const textRotation = isRest ? -Math.PI / 2 : 0; const yDir = isOpponent ? -1 : 1;
+    const textRotation = isRest ? -Math.PI / 2 : 0;
+    const yDir = isOpponent ? -1 : 1;
 
     if (!isBackSide) {
       const name = 'name' in card ? card.name : '';
@@ -138,7 +150,7 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // 1. Field (zones.field)
+      // 1. フィールド参照の修正 (zones.field)
       const fs = p.zones?.field || [];
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
@@ -146,22 +158,23 @@ export const RealGame = () => {
       });
 
       const r2Y = coords.getY(2, CH, V_GAP);
-      // 2. Life (zones.life)
+      // 2. ライフ参照の修正 (zones.life)
       const lCount = p.zones?.life?.length || 0;
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lCount, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
-      // 3. Leader (直下の leader)
+      // 3. リーダー参照の修正 (直下の leader)
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
-      // 4. Stage (zones.stage)
+      // 4. ステージ参照の修正 (zones.stage)
       if (p.zones?.stage) { 
         const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
 
-      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, p.don_deck_count ?? 40, false, false, 'other');
+      const deckCount = p.don_deck_count ?? 40;
+      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, deckCount, false, false, 'other');
       deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
 
       const r3Y = coords.getY(3, CH, V_GAP);
@@ -171,12 +184,12 @@ export const RealGame = () => {
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
 
-      // 5. Trash (zones.trash)
+      // 5. トラッシュ参照の修正 (zones.trash)
       const ts = p.zones?.trash || [];
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
-      // 6. Hand (zones.hand)
+      // 6. 手札参照の修正 (zones.hand)
       if (!isOpp) { 
         const hs = p.zones?.hand || [];
         hs.forEach((c: any, i: number) => { 
@@ -223,11 +236,4 @@ export const RealGame = () => {
         </div>
       )}
       {selectedCard && !isDetailMode && (
-        <ActionMenu cardName={selectedCard.card.name || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
-      )}
-      {selectedCard && isDetailMode && (
-        <CardDetailSheet card={selectedCard.card} onClose={() => setSelectedCard(null)} />
-      )}
-    </div>
-  );
-};
+        <ActionMenu cardName={selectedCard.card.name || ''
