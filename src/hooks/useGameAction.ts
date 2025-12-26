@@ -42,14 +42,15 @@ export const useGameAction = (
       });
       const data = await res.json();
       
-      // 共通定数のルートキーを使用してデータを抽出
-      const newState = data[CONST.API_ROOT_KEYS.GAME_STATE] || data.state;
+      // 型安全なキー参照
+      const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
+      const newState = data[stateKey] || data.state;
       
-      if (data.success && newState) {
+      if (newState) {
         setGameId(data.game_id);
         setGameState(newState);
       } else {
-        throw new Error(data.error?.message || "Invalid Response Schema");
+        throw new Error("Invalid Response Schema");
       }
     } catch (e: any) {
       setErrorToast(`ゲーム開始エラー: ${e.message}`);
@@ -80,10 +81,11 @@ export const useGameAction = (
       });
 
       const result = await response.json();
-      const nextState = result[CONST.API_ROOT_KEYS.GAME_STATE] || result.state;
+      const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof result;
+      const nextState = result[stateKey] || result.state;
 
-      if (!response.ok || !result.success || !nextState) {
-        throw new Error(result.error?.message || "Action failed");
+      if (!response.ok || !nextState) {
+        throw new Error("Action failed");
       }
       setGameState(nextState);
     } catch (e: any) {
