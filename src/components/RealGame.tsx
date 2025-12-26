@@ -97,7 +97,7 @@ export const RealGame = () => {
       const nTxt = new PIXI.Text(truncateText(name, nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
       nTxt.anchor.set(0.5, (name === 'DON!!' || name === 'Trash') ? 0.5 : 0);
       nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir : 0;
-      nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir;
+      nTxt.y = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir;
       nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
       if (cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
@@ -183,30 +183,42 @@ export const RealGame = () => {
 
   useEffect(() => { if (!appRef.current || !gameState) return; drawLayout(gameState); }, [gameState, drawLayout]);
 
-  if (!gameState) {
-    return (
-      <div style={{ color: 'white', background: 'black', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-        <div style={{ fontSize: '20px', fontWeight: 'bold' }}>Connecting to Fleet Server...</div>
-        <div style={{ fontSize: '12px', opacity: 0.7 }}>Cloud Run: asia-northeast1</div>
-      </div>
-    );
-  }
-
+  // JSX構造をオーバーレイ方式に変更
   return (
-    <div style={{ position: 'relative' }}>
-      <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
-      {/* 修正箇所: absolute プロパティを position プロパティへ変更 */}
-      <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
-        <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
-        <div>GAME ID: {gameId}</div>
-        <div>OBSERVER: {currentObserverId}</div>
-      </div>
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      {/* 1. PixiJS キャンバス用コンテナ（常にレンダリングする） */}
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* 2. デバッグ情報（データがある時のみ表示） */}
+      {gameState && (
+        <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
+          <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
+          <div>GAME ID: {gameId}</div>
+          <div>OBSERVER: {currentObserverId}</div>
+        </div>
+      )}
+
+      {/* 3. 通信エラートースト */}
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}
           <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップして閉じる</div>
         </div>
       )}
+
+      {/* 4. ローディング画面（データがない時だけ上に被せる） */}
+      {!gameState && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'black', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9998, gap: '20px'
+        }}>
+          <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Connecting to Fleet Server...</div>
+          <div style={{ color: 'white', fontSize: '12px', opacity: 0.7 }}>Cloud Run: asia-northeast1</div>
+        </div>
+      )}
+
+      {/* 5. アクション/詳細 UI */}
       {selectedCard && !isDetailMode && (
         <ActionMenu cardName={selectedCard.card[CONST.CARD_PROPERTIES.NAME] || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}
