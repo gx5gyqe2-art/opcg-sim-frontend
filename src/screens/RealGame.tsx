@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
+
 import * as PIXI from 'pixi.js';
 
 // パス修正：domainやlayout、actionsの新しい位置を指定
