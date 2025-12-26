@@ -1,12 +1,24 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import * as PIXI from 'pixi.js';
-import type { GameState } from '../types/game';
-import { LAYOUT, COLORS } from '../constants/layout';
-import { calculateCoordinates } from '../utils/layoutEngine';
-import { useGameAction } from '../hooks/useGameAction';
-import { ActionMenu } from './ui/ActionMenu';
-import { CardDetailSheet } from './ui/CardDetailSheet';
-import CONST from '../../shared_constants.json';
+// 変更前: import type { GameState } from '../types/game';
+import type { GameState } from '../game/types';
+
+// 変更前: import { LAYOUT, COLORS } from '../constants/layout';
+import { LAYOUT, COLORS } from '../layout/layout.constants';
+
+// 変更前: import { calculateCoordinates } from '../utils/layoutEngine';
+import { calculateCoordinates } from '../layout/layoutEngine';
+
+// 変更前: import { useGameAction } from '../hooks/useGameAction';
+import { useGameAction } from '../game/actions';
+
+// 変更前: import { ActionMenu } from './ui/ActionMenu';
+import { ActionMenu } from '../ui/ActionMenu';
+
+// 変更前: import { CardDetailSheet } from './ui/CardDetailSheet';
+import { CardDetailSheet } from '../ui/CardDetailSheet';
+
+// 変更前: import CONST from '../../shared_constants.json';
+import CONST from '../../shared_constants.json'; 
+
 
 type DrawTarget = {
   [key: string]: any;

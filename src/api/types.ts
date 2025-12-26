@@ -1,4 +1,5 @@
-import type { GameState } from './game';
+// 変更前: import type { GameState } from './game';
+import type { GameState } from '../game/types';
 
 export type ActionType = 
   | 'PLAY_CARD' 

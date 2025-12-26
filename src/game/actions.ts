@@ -1,8 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid'; 
-import type { GameActionRequest, ActionType } from '../types/api';
-import type { GameState } from '../types/game';
+
+// 変更前: import type { GameActionRequest, ActionType } from '../types/api';
+import type { GameActionRequest, ActionType } from '../api/types';
+
+// 変更前: import type { GameState } from '../types/game';
+import type { GameState } from './types'; // 同階層
+
+// 変更前: import CONST from '../../shared_constants.json';
 import CONST from '../../shared_constants.json';
+
 
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
 

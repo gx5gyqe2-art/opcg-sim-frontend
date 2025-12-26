@@ -1,4 +1,6 @@
-import { LAYOUT } from '../constants/layout';
+// 変更前: import { LAYOUT } from '../constants/layout';
+import { LAYOUT } from './layout.constants'; // 同階層
+
 
 export interface LayoutCoords {
   CH: number;
