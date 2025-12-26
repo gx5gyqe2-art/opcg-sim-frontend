@@ -135,7 +135,7 @@ export const RealGame = () => {
       bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
     return container;
-  }, [observerNameFromUrl, renderCard]);
+  }, [sendAction]); // 不要な依存関係を削除し、循環参照を回避
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current; if (!app) return;
