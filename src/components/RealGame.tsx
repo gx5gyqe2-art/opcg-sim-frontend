@@ -195,7 +195,8 @@ export const RealGame = () => {
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
-      <div style={{ absolute: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
+      {/* 修正箇所: absolute プロパティを position プロパティへ変更 */}
+      <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
         <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
         <div>GAME ID: {gameId}</div>
         <div>OBSERVER: {currentObserverId}</div>
