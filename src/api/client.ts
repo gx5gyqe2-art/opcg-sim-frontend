@@ -2,6 +2,7 @@ import type { GameActionRequest } from './types';
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
+import { logger } from '../utils/logger'; 
 
 const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
 
@@ -10,6 +11,14 @@ export const apiClient = {
   async checkHealth(): Promise<void> {
     const res = await fetch(`${BASE_URL}${ENDPOINTS.HEALTH}`);
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
+    
+    // 生存確認成功のログ
+    logger.log({
+      level: 'debug',
+      action: 'api.health_check',
+      msg: 'Server is alive',
+      sessionId: 'system'
+    });
   },
 
   /** ゲームの新規作成 */
@@ -29,11 +38,30 @@ export const apiClient = {
     });
 
     const data = await res.json();
-    // shared_constants.json を参照してステートを抽出
+
+    // ★ サーバーからの受信データを即座にログ出力
+    logger.log({
+      level: 'info',
+      action: 'api.receive_create',
+      msg: 'Received raw data from backend',
+      sessionId: data.game_id || 'no-id',
+      player: 'system',
+      payload: data
+    });
+
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey] || data.state;
     
-    if (!newState) throw new Error("Invalid Response Schema");
+    if (!newState) {
+      logger.log({
+        level: 'error',
+        action: 'api.schema_error',
+        msg: `Key "${stateKey}" not found in response`,
+        sessionId: data.game_id || 'unknown'
+      });
+      throw new Error("Invalid Response Schema");
+    }
+
     return { game_id: data.game_id, state: newState };
   },
 
@@ -46,6 +74,16 @@ export const apiClient = {
     });
 
     const result = await response.json();
+
+    // ★ アクションの結果をログ出力
+    logger.log({
+      level: 'info',
+      action: 'api.receive_action',
+      msg: `Action "${request.type}" processed`,
+      sessionId: gameId,
+      payload: result
+    });
+
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof result;
     const nextState = result[stateKey] || result.state;
 
