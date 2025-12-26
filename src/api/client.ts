@@ -1,5 +1,5 @@
-import { GameActionRequest } from './types';
-import { GameState } from '../game/types';
+import type { GameActionRequest } from './types';
+import type { GameState } from '../game/types';
 import CONST from '../../shared_constants.json';
 
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
