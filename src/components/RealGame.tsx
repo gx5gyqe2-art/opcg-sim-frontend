@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
-import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/game';
+import type { GameState } from '../types/game';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
 import { useGameAction } from '../hooks/useGameAction';
@@ -135,7 +135,6 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
       
-      // ZONESがCONST直下にないエラーへの対応（ハードコード回避しつつパス修正）
       const zones = p.zones || {};
       const fs = zones["field"] || []; 
       fs.forEach((c: any, i: number) => { 
@@ -196,7 +195,7 @@ export const RealGame = () => {
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
-      <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
+      <div style={{ absolute: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
         <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
         <div>GAME ID: {gameId}</div>
         <div>OBSERVER: {currentObserverId}</div>
