@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import type { GameState, CardInstance, LeaderCard, BoardCard } from '../types/game';
-import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
 import { useGameAction } from '../hooks/useGameAction';
@@ -16,23 +15,45 @@ type DrawTarget = CardInstance | LeaderCard | BoardCard | {
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const [gameState, setGameState] = useState<GameState>(initialGameResponse.state as unknown as GameState);
+
+  // 実サーバーから取得するため初期値は null
+  const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: DrawTarget, location: 'hand' | 'field' | 'other' } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
 
   const observerId = new URLSearchParams(window.location.search).get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  // 通信フックからトースト関連を取得
-  const { sendAction, isPending, errorToast, setErrorToast } = useGameAction('test-game-id', observerId, gameState, setGameState);
+  // 通信フックの初期化
+  const { sendAction, startGame, gameId, isPending, errorToast, setErrorToast } = useGameAction(
+    observerId, 
+    (state) => setGameState(state)
+  );
 
+  // 初回マウント時に自動でゲームセッションを作成
+  useEffect(() => {
+    if (!gameId) startGame();
+  }, [gameId, startGame]);
+
+  // アクション実行 (カードの個体識別子 uuid を使用)
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
-    const cardId = selectedCard.card.uuid;
-    if (actionType === 'PLAY_CARD') sendAction('PLAY_CARD', { card_id: cardId });
-    else if (actionType === 'ATTACK') sendAction('ATTACK', { card_id: cardId, target_ids: ['dummy'] });
-    else if (actionType === 'ATTACH_DON') sendAction('ATTACH_DON', { target_ids: [cardId], extra: { count: 1 } });
-    else if (actionType === 'ACTIVATE') sendAction('ACTIVATE', { card_id: cardId });
+    const cardUuid = selectedCard.card.uuid;
+
+    switch (actionType) {
+      case 'PLAY_CARD':
+        sendAction('PLAY_CARD', { card_id: cardUuid }); // サーバー側でuuidとして処理
+        break;
+      case 'ATTACK':
+        sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] });
+        break;
+      case 'ATTACH_DON':
+        sendAction('ATTACH_DON', { target_ids: [cardUuid], extra: { count: 1 } });
+        break;
+      case 'ACTIVATE':
+        sendAction('ACTIVATE', { card_id: cardUuid });
+        break;
+    }
     setSelectedCard(null);
   };
 
@@ -144,7 +165,7 @@ export const RealGame = () => {
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
       if (p.zones.stage) { const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); }
-      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
+      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, p.don_deck_count ?? 40, false, false, 'other');
       deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10, false, false, 'other');
@@ -162,6 +183,7 @@ export const RealGame = () => {
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
+  // Pixi アプリケーション初期化
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1, autoDensity: true, antialias: true });
@@ -172,33 +194,38 @@ export const RealGame = () => {
     return () => { window.removeEventListener('resize', handleResize); app.destroy(true); appRef.current = null; };
   }, []);
 
-  useEffect(() => { if (!appRef.current) return; drawLayout(gameState); }, [gameState, drawLayout]);
+  // 描画更新ループ
+  useEffect(() => { if (!appRef.current || !gameState) return; drawLayout(gameState); }, [gameState, drawLayout]);
+
+  // ローディング画面
+  if (!gameState) {
+    return (
+      <div style={{ color: 'white', background: 'black', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
+        <div style={{ fontSize: '20px', fontWeight: 'bold' }}>Connecting to Fleet Server...</div>
+        <div style={{ fontSize: '12px', opacity: 0.7 }}>Cloud Run: asia-northeast1</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
       
-      {/* 4. エラートースト通知UI */}
+      {/* デバッグ表示 */}
+      <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
+        <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
+        <div>GAME ID: {gameId}</div>
+      </div>
+
+      {/* 通信エラートースト */}
       {errorToast && (
-        <div style={{
-          position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
-          backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px',
-          borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px',
-          cursor: 'pointer'
-        }} onClick={() => setErrorToast(null)}>
+        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}
-          <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップで閉じる</div>
+          <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップして閉じる</div>
         </div>
       )}
 
-      {/* 5. 通信中インジケータ */}
-      {isPending && (
-        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', zIndex: 9000 }}>
-          通信中...
-        </div>
-      )}
-
+      {/* アクション/詳細 UI */}
       {selectedCard && !isDetailMode && (
         <ActionMenu cardName={selectedCard.card.name || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}
