@@ -3,6 +3,7 @@ import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger'; 
+import { sessionManager } from '../utils/session'; // ★追加
 
 const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
 
@@ -15,8 +16,7 @@ export const apiClient = {
     logger.log({
       level: 'debug',
       action: 'api.health_check',
-      msg: 'Server is alive',
-      sessionId: 'system'
+      msg: 'Server is alive'
     });
   },
 
@@ -36,13 +36,18 @@ export const apiClient = {
       }),
     });
 
+    // ★レスポンスヘッダーから Session ID を取得して同期
+    const sid = res.headers.get('X-Session-ID');
+    if (sid) {
+      sessionManager.setSessionId(sid);
+    }
+
     const data = await res.json();
 
     logger.log({
       level: 'info',
       action: 'api.receive_create',
       msg: 'Received raw data from backend',
-      sessionId: data.game_id || 'no-id',
       player: 'system',
       payload: data
     });
@@ -54,9 +59,7 @@ export const apiClient = {
       logger.log({
         level: 'error',
         action: 'api.schema_error',
-        // エラー回避: stateKey を String() で囲む
-        msg: `Key "${String(stateKey)}" not found in response`,
-        sessionId: data.game_id || 'unknown'
+        msg: `Key "${String(stateKey)}" not found in response`
       });
       throw new Error("Invalid Response Schema");
     }
@@ -77,8 +80,7 @@ export const apiClient = {
     logger.log({
       level: 'info',
       action: 'api.receive_action',
-      msg: `Action processed`, // request.type への参照を削除（型定義に合わせて調整）
-      sessionId: gameId,
+      msg: `Action processed`, 
       payload: result
     });
 
