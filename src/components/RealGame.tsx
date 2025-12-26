@@ -37,7 +37,6 @@ export const RealGame = () => {
   // --- プレイヤー特定ロジックの強化 ---
   const playerIds = gameState ? Object.keys(gameState.players) : [];
   const currentObserverId = playerIds.find(id => id === observerNameFromUrl) || playerIds[0];
-  const currentOpponentId = playerIds.find(id => id !== currentObserverId) || playerIds[1];
 
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
@@ -62,7 +61,8 @@ export const RealGame = () => {
     return '...';
   };
 
-  const renderCard = useCallback((card: DrawTarget, cw: number, ch: number, isOpponent: boolean = false, badgeCount?: number, isCountBadge: boolean = false, isWideName: boolean = false, locationType: 'hand' | 'field' | 'other' = 'other'): PIXI.Container => {
+  // renderCard の型を明示的に指定して循環参照エラーを回避
+  const renderCard: (card: DrawTarget, cw: number, ch: number, isOpponent?: boolean, badgeCount?: number, isCountBadge?: boolean, isWideName?: boolean, locationType?: 'hand' | 'field' | 'other') => PIXI.Container = useCallback((card, cw, ch, isOpponent = false, badgeCount, isCountBadge = false, isWideName = false, locationType = 'other') => {
     const container = new PIXI.Container();
     container.eventMode = 'static'; container.cursor = 'pointer';
     let pressTimer: any = null; let isLongPress = false;
@@ -128,7 +128,7 @@ export const RealGame = () => {
       bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
     return container;
-  }, [observerNameFromUrl, renderCard]);
+  }, []); // 依存配列から renderCard 自体を削除
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current; if (!app) return;
