@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GameActionRequest, ActionType } from '../types/api';
 import type { GameState } from '../types/game';
 
+// Cloud Run バックエンドのベースURL
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
 
 export const useGameAction = (
@@ -13,7 +14,7 @@ export const useGameAction = (
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // 1. 疎通確認（Health Check）
+  // 1. 疎通確認（Health Check）機能
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -30,7 +31,7 @@ export const useGameAction = (
     checkHealth();
   }, []);
 
-  // 2. ゲーム開始 (POST /api/game/create)
+  // 2. ゲーム開始 (v1.4 スキーマ同期)
   const startGame = useCallback(async () => {
     setIsPending(true);
     try {
@@ -40,19 +41,19 @@ export const useGameAction = (
         body: JSON.stringify({
           p1_deck: "imu.json",
           p2_deck: "nami.json",
-          p1_name: "Player 1",
+          p1_name: "Player 1", // バックエンドのキー名と一致させる
           p2_name: "Player 2"
         }),
       });
       const data = await res.json();
       
-      // v1.4 スキーマ対応: game_state キーを優先的に取得
+      // バックエンドの game_state キーからデータを取得
       const newState = data.game_state || data.state;
       
       if (data.success && newState) {
         setGameId(data.game_id);
-        setGameState(newState);
-        console.log("[API] GameState initialized:", newState.game_id);
+        setGameState(newState); 
+        console.log("[API] GameState synchronized via game_state key.");
       } else {
         throw new Error(data.error?.message || "Invalid Response Schema");
       }
@@ -63,7 +64,7 @@ export const useGameAction = (
     }
   }, [setGameState]);
 
-  // 3. アクション送信 (POST /api/game/{gameId}/action)
+  // 3. アクション送信
   const sendAction = useCallback(async (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
@@ -75,7 +76,7 @@ export const useGameAction = (
     const request: GameActionRequest = {
       request_id: uuidv4(),
       action_type: type,
-      player_id: playerId as "p1" | "p2",
+      player_id: playerId as any, // 修正: 動的なプレイヤー名に対応
       ...payload
     };
 
@@ -87,14 +88,11 @@ export const useGameAction = (
       });
 
       const result = await response.json();
-      
-      // レスポンスから最新の盤面状態を抽出
       const nextState = result.game_state || result.state;
 
       if (!response.ok || !result.success || !nextState) {
-        throw new Error(result.error?.message || `HTTP ${response.status}`);
+        throw new Error(result.error?.message || "Action failed");
       }
-
       setGameState(nextState);
     } catch (e: any) {
       console.error(e);
