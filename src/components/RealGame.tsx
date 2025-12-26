@@ -20,11 +20,13 @@ export const RealGame = () => {
   const [selectedCard, setSelectedCard] = useState<{ card: DrawTarget, location: 'hand' | 'field' | 'other' } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
 
-  const observerId = new URLSearchParams(window.location.search).get('observerId') || 'p1';
-  const opponentId = observerId === 'p1' ? 'p2' : 'p1';
+  // URLからobserverId（通常はプレイヤー名）を取得
+  const urlParams = new URLSearchParams(window.location.search);
+  const observerNameFromUrl = urlParams.get('observerId');
 
+  // 通信フックの初期化 (ここでは仮に observerId を渡すが、startGame後に再設定される)
   const { sendAction, startGame, gameId, errorToast, setErrorToast } = useGameAction(
-    observerId, 
+    observerNameFromUrl || 'Player 1', 
     (state) => setGameState(state)
   );
 
@@ -33,8 +35,14 @@ export const RealGame = () => {
   }, [gameId, startGame]);
 
   const handleActionSelect = (actionType: string) => {
-    if (!selectedCard || !selectedCard.card.uuid) return;
+    if (!selectedCard || !selectedCard.card.uuid || !gameState) return;
     const cardUuid = selectedCard.card.uuid;
+    
+    // 動的な observerId の決定
+    const playerIds = Object.keys(gameState.players);
+    const currentObserverId = observerNameFromUrl && playerIds.includes(observerNameFromUrl) 
+      ? observerNameFromUrl 
+      : (playerIds.find(id => id.includes('1')) || playerIds[0]);
 
     switch (actionType) {
       case 'PLAY_CARD':
@@ -133,11 +141,21 @@ export const RealGame = () => {
       bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
     return container;
-  }, [sendAction]);
+  }, [observerNameFromUrl, sendAction]);
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current; if (!app) return;
     app.stage.removeChildren();
+    
+    // プレイヤーIDの動的解決
+    const playerIds = Object.keys(state.players);
+    if (playerIds.length < 2) return;
+
+    const observerId = observerNameFromUrl && playerIds.includes(observerNameFromUrl) 
+      ? observerNameFromUrl 
+      : (playerIds.find(id => id.includes('1')) || playerIds[0]);
+    const opponentId = playerIds.find(id => id !== observerId) || playerIds[1];
+
     const W = app.renderer.width / app.renderer.resolution;
     const H = app.renderer.height / app.renderer.resolution;
     const coords = calculateCoordinates(W, H);
@@ -150,7 +168,6 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // 1. Field参照の修正 (zones.field)
       const fs = p.zones?.field || [];
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
@@ -158,16 +175,13 @@ export const RealGame = () => {
       });
 
       const r2Y = coords.getY(2, CH, V_GAP);
-      // 2. ライフ参照の修正 (zones.life)
       const lCount = p.zones?.life?.length || 0;
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lCount, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
-      // 3. リーダー参照の修正 (直下の leader)
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
-      // 4. ステージ参照の修正 (zones.stage)
       if (p.zones?.stage) { 
         const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
@@ -184,12 +198,10 @@ export const RealGame = () => {
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
 
-      // 5. トラッシュ参照の修正 (zones.trash)
       const ts = p.zones?.trash || [];
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
-      // 6. 手札参照の修正 (zones.hand)
       if (!isOpp) { 
         const hs = p.zones?.hand || [];
         hs.forEach((c: any, i: number) => { 
@@ -198,9 +210,10 @@ export const RealGame = () => {
         }); 
       }
     };
+
     renderSide(state.players[opponentId], true);
     renderSide(state.players[observerId], false);
-  }, [opponentId, observerId, renderCard]);
+  }, [observerNameFromUrl, renderCard]);
 
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
@@ -222,12 +235,19 @@ export const RealGame = () => {
     );
   }
 
+  // プレイヤーIDの動的取得 (デバッグ表示用)
+  const playerIds = Object.keys(gameState.players);
+  const currentObserverId = observerNameFromUrl && playerIds.includes(observerNameFromUrl) 
+    ? observerNameFromUrl 
+    : (playerIds.find(id => id.includes('1')) || playerIds[0]);
+
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
       <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
         <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
         <div>GAME ID: {gameId}</div>
+        <div>OBSERVER: {currentObserverId}</div>
       </div>
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
