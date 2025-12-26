@@ -65,10 +65,34 @@ export const RealGame = () => {
     container.eventMode = 'static'; container.cursor = 'pointer';
     const prop = CONST.CARD_PROPERTIES;
 
+    // --- 改修箇所: タップ vs 長押し判定ロジック ---
+    let pressTimer: ReturnType<typeof setTimeout> | null = null;
+    let isLongPress = false;
+
     container.on('pointerdown', () => {
       if (isOpponent) return;
-      setTimeout(() => { setSelectedCard({ card, location: locationType }); setIsDetailMode(true); }, 400);
+      isLongPress = false;
+      pressTimer = setTimeout(() => {
+        isLongPress = true;
+        setSelectedCard({ card, location: locationType });
+        setIsDetailMode(true); 
+      }, 500); // 500ms以上で詳細表示
     });
+
+    const handlePointerUp = () => {
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+      if (!isLongPress && !isOpponent) {
+        setSelectedCard({ card, location: locationType });
+        setIsDetailMode(false); // 通常タップでメニュー表示
+      }
+    };
+
+    container.on('pointerup', handlePointerUp);
+    container.on('pointerupoutside', handlePointerUp);
+    // --- 改修箇所終了 ---
     
     const isRest = card[prop.IS_REST];
     if (isRest) container.rotation = Math.PI / 2;
