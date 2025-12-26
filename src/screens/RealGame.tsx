@@ -15,6 +15,8 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 // 重要：shared_constants.json へのパス（階層が深くなったので ../../ ）
 import CONST from '../../shared_constants.json';
 
+// ... import に追加
+import { GAME_UI_CONFIG } from '../game/game.config';
 
 
 type DrawTarget = {
@@ -85,7 +87,7 @@ export const RealGame = () => {
         isLongPress = true;
         setSelectedCard({ card, location: locationType });
         setIsDetailMode(true); 
-      }, 500); // 500ms以上で詳細表示
+      }, GAME_UI_CONFIG.INTERACTION.LONG_PRESS_DURATION); // 500ms を定数化
     });
 
     const handlePointerUp = () => {
