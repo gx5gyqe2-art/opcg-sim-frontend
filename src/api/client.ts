@@ -1,4 +1,4 @@
-import { GameActionRequest, GameActionResult } from './types';
+import { GameActionRequest } from './types';
 import { GameState } from '../game/types';
 import CONST from '../../shared_constants.json';
 
