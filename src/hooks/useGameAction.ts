@@ -2,8 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid'; 
 import type { GameActionRequest, ActionType } from '../types/api';
 import type { GameState } from '../types/game';
+// 共通定数のインポート
+import CONST from '../../shared_constants.json';
 
-// Cloud Run バックエンドのベースURL
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
 
 export const useGameAction = (
@@ -14,16 +15,12 @@ export const useGameAction = (
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // 1. 疎通確認（Health Check）機能
   useEffect(() => {
     const checkHealth = async () => {
       try {
         const res = await fetch(`${BASE_URL}/health`);
-        if (res.ok) {
-          console.log("[API] Health Check Success.");
-        } else {
-          throw new Error(`Health check failed: ${res.status}`);
-        }
+        if (res.ok) console.log("[API] Health Check Success.");
+        else throw new Error(`Health check failed: ${res.status}`);
       } catch (e: any) {
         setErrorToast(`サーバーに接続できません: ${e.message}`);
       }
@@ -31,7 +28,6 @@ export const useGameAction = (
     checkHealth();
   }, []);
 
-  // 2. ゲーム開始 (v1.4 スキーマ同期)
   const startGame = useCallback(async () => {
     setIsPending(true);
     try {
@@ -41,19 +37,19 @@ export const useGameAction = (
         body: JSON.stringify({
           p1_deck: "imu.json",
           p2_deck: "nami.json",
-          p1_name: "Player 1", // バックエンドのキー名と一致させる
-          p2_name: "Player 2"
+          p1_name: CONST.PLAYER_KEYS.P1, // "Player 1"
+          p2_name: CONST.PLAYER_KEYS.P2
         }),
       });
       const data = await res.json();
       
-      // バックエンドの game_state キーからデータを取得
-      const newState = data.game_state || data.state;
+      // 定義されたルートキーを最優先で参照
+      const newState = data[CONST.API_ROOT_KEYS.GAME_STATE] || data.state;
       
       if (data.success && newState) {
         setGameId(data.game_id);
-        setGameState(newState); 
-        console.log("[API] GameState synchronized via game_state key.");
+        setGameState(newState);
+        console.log("[API] GameState synchronized using shared constants.");
       } else {
         throw new Error(data.error?.message || "Invalid Response Schema");
       }
@@ -64,19 +60,17 @@ export const useGameAction = (
     }
   }, [setGameState]);
 
-  // 3. アクション送信
   const sendAction = useCallback(async (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
   ) => {
     if (!gameId) return;
     setIsPending(true);
-    setErrorToast(null);
 
     const request: GameActionRequest = {
       request_id: uuidv4(),
       action_type: type,
-      player_id: playerId as any, // 修正: 動的なプレイヤー名に対応
+      player_id: playerId as any,
       ...payload
     };
 
@@ -88,15 +82,14 @@ export const useGameAction = (
       });
 
       const result = await response.json();
-      const nextState = result.game_state || result.state;
+      const nextState = result[CONST.API_ROOT_KEYS.GAME_STATE] || result.state;
 
       if (!response.ok || !result.success || !nextState) {
         throw new Error(result.error?.message || "Action failed");
       }
       setGameState(nextState);
     } catch (e: any) {
-      console.error(e);
-      setErrorToast(`通信失敗: ${e.message}`);
+      setErrorToast(`アクション失敗: ${e.message}`);
     } finally {
       setIsPending(false);
     }

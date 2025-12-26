@@ -6,6 +6,8 @@ import { calculateCoordinates } from '../utils/layoutEngine';
 import { useGameAction } from '../hooks/useGameAction';
 import { ActionMenu } from './ui/ActionMenu';
 import { CardDetailSheet } from './ui/CardDetailSheet';
+// 共通定数のインポート
+import CONST from '../../shared_constants.json';
 
 type DrawTarget = CardInstance | LeaderCard | BoardCard | { 
   name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number; 
@@ -15,16 +17,13 @@ type DrawTarget = CardInstance | LeaderCard | BoardCard | {
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: DrawTarget, location: 'hand' | 'field' | 'other' } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
 
-  // URLからobserverIdを取得、なければデフォルト名
   const urlParams = new URLSearchParams(window.location.search);
-  const observerNameFromUrl = urlParams.get('observerId') || 'Player 1';
+  const observerNameFromUrl = urlParams.get('observerId') || CONST.PLAYER_KEYS.P1;
 
-  // 通信フック
   const { sendAction, startGame, gameId, errorToast, setErrorToast } = useGameAction(
     observerNameFromUrl, 
     (state) => setGameState(state)
@@ -34,9 +33,11 @@ export const RealGame = () => {
     if (!gameId) startGame();
   }, [gameId, startGame]);
 
-  // --- プレイヤー特定ロジックの強化 ---
+  // --- プレイヤー特定ロジックの修正 ---
   const playerIds = gameState ? Object.keys(gameState.players) : [];
-  const currentObserverId = playerIds.find(id => id === observerNameFromUrl) || playerIds[0];
+  // CONST.PLAYER_KEYS.P1 ("Player 1") と完全に一致するキーを探す
+  const currentObserverId = playerIds.find(id => id === CONST.PLAYER_KEYS.P1) || playerIds[0];
+  const currentOpponentId = playerIds.find(id => id !== currentObserverId) || playerIds[1];
 
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
@@ -61,7 +62,6 @@ export const RealGame = () => {
     return '...';
   };
 
-  // renderCard の型を明示的に指定して循環参照エラーを回避
   const renderCard: (card: DrawTarget, cw: number, ch: number, isOpponent?: boolean, badgeCount?: number, isCountBadge?: boolean, isWideName?: boolean, locationType?: 'hand' | 'field' | 'other') => PIXI.Container = useCallback((card, cw, ch, isOpponent = false, badgeCount, isCountBadge = false, isWideName = false, locationType = 'other') => {
     const container = new PIXI.Container();
     container.eventMode = 'static'; container.cursor = 'pointer';
@@ -128,15 +128,14 @@ export const RealGame = () => {
       bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
     return container;
-  }, []); // 依存配列から renderCard 自体を削除
+  }, []);
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current; if (!app) return;
     app.stage.removeChildren();
     
-    // 現在のObserver/Opponentを動的に特定
     const pIds = Object.keys(state.players);
-    const obsId = pIds.find(id => id === observerNameFromUrl) || pIds[0];
+    const obsId = pIds.find(id => id === CONST.PLAYER_KEYS.P1) || pIds[0];
     const oppId = pIds.find(id => id !== obsId) || pIds[1];
 
     const W = app.renderer.width / app.renderer.resolution;
@@ -152,31 +151,26 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // 1. Field参照 (zones.field)
-      const fs = p.zones?.field || [];
+      // ゾーン参照の同期: CONST.ZONES を使用
+      const fs = p.zones[CONST.ZONES.FIELD] || [];
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
         card.x = coords.getFieldX(i, W, CW, fs.length); card.y = coords.getY(1, CH, V_GAP); side.addChild(card); 
       });
 
       const r2Y = coords.getY(2, CH, V_GAP);
-      // 2. Life参照 (zones.life)
-      const lCount = p.zones?.life?.length || 0;
-      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lCount, false, false, 'other');
+      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones[CONST.ZONES.LIFE]?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
-      // 3. Leader参照 (直下の leader)
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
-      // 4. Stage参照 (zones.stage)
-      if (p.zones?.stage) { 
-        const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); 
+      if (p.zones[CONST.ZONES.STAGE]) { 
+        const stg = renderCard(p.zones[CONST.ZONES.STAGE], CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
 
-      const deckCount = p.don_deck_count ?? 40;
-      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, deckCount, false, false, 'other');
+      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, p.don_deck_count ?? 40, false, false, 'other');
       deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
 
       const r3Y = coords.getY(3, CH, V_GAP);
@@ -186,14 +180,12 @@ export const RealGame = () => {
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
 
-      // 5. Trash参照 (zones.trash)
-      const ts = p.zones?.trash || [];
+      const ts = p.zones[CONST.ZONES.TRASH] || [];
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
-      // 6. Hand参照 (zones.hand)
       if (!isOpp) { 
-        const hs = p.zones?.hand || [];
+        const hs = p.zones[CONST.ZONES.HAND] || [];
         hs.forEach((c: any, i: number) => { 
           const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand'); 
           card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); side.addChild(card); 
@@ -201,12 +193,10 @@ export const RealGame = () => {
       }
     };
 
-    // 確定したIDで描画
     renderSide(state.players[oppId], true);
     renderSide(state.players[obsId], false);
   }, [observerNameFromUrl, renderCard]);
 
-  // Pixi アプリケーション初期化
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1, autoDensity: true, antialias: true });
@@ -216,7 +206,6 @@ export const RealGame = () => {
     return () => { window.removeEventListener('resize', handleResize); app.destroy(true); appRef.current = null; };
   }, []);
 
-  // 描画更新ループ
   useEffect(() => { if (!appRef.current || !gameState) return; drawLayout(gameState); }, [gameState, drawLayout]);
 
   if (!gameState) {
