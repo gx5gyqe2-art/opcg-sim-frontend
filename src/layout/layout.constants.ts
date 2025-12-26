@@ -14,4 +14,11 @@ export const COLORS = {
   TEXT_MAIN:   0x333333,
   BADGE_BG:    0xFF0000,
   BADGE_TEXT:  0xFFFFFF,
+
+  // --- RealGame.tsx の描画に不足している定義を追加 ---
+  CARD_BORDER: 0x999999, // ZONE_BORDERと合わせています
+  CARD_BG:     0xFFFFFF, // ZONE_FILLと合わせています
+  RESTED:      0xCCCCCC, // 休息状態の色
+  COST_BG:     0x2C3E50, // コストの背景色
+  BOARD_BG:    0xE0E0E0  // 盤面全体の背景色
 };
