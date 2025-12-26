@@ -11,7 +11,7 @@ export const GAME_UI_CONFIG = {
   // 表示関連
   FEEDBACK: {
     ERROR_TOAST_AUTO_CLOSE: 3000, // トーストを自動で閉じる場合の時間 (ms)
-  }
+  },
   
   // システムテキスト
   TEXT: {

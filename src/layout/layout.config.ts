@@ -31,7 +31,7 @@ export const LAYOUT_PARAMS = {
     DON_ACTIVE: 0.38,
     DON_REST: 0.60,
     TRASH: 0.85
-  }
+  },
   
   // カードの描画詳細
   CARD_STYLE: {
