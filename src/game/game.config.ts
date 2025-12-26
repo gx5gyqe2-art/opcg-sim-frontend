@@ -12,4 +12,15 @@ export const GAME_UI_CONFIG = {
   FEEDBACK: {
     ERROR_TOAST_AUTO_CLOSE: 3000, // トーストを自動で閉じる場合の時間 (ms)
   }
-} as const;
+  
+  // システムテキスト
+  TEXT: {
+    BACK_SIDE: "ONE\nPIECE",
+    LIFE_LABEL: "Life",
+    DECK_LABEL: "Deck",
+    DON_LABEL: "DON!!",
+    TRASH_LABEL: "Trash",
+    CONNECTING: "Connecting to Fleet Server...",
+    CLOUD_REGION: "Cloud Run: asia-northeast1"
+  }
+ } as const;
