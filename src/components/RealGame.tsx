@@ -165,9 +165,7 @@ export const RealGame = () => {
 
       const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
       const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
-      donDk.x = coords.getDonDeckX(W); 
-      donDk.y = r3Y;
-      side.addChild(donDk);
+      donDk.x = coords.getDonDeckX(W); donDk.y = r3Y; side.addChild(donDk);
 
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
@@ -214,7 +212,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* errorToast を使用してビルドエラーを解消 */}
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}

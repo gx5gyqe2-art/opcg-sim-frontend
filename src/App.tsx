@@ -1,11 +1,6 @@
-import { Component, useEffect, useState } from 'react';
+import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { RealGame } from './components/RealGame';
-
-// 🔧 デバッグモード切替スイッチ
-// true: 外部依存を排除したメンテナンス画面を表示
-// false: 本番のゲーム画面 (RealGame) を表示
-const IS_DEBUG_MODE = false;
 
 // --- Error Boundary (クラッシュ捕捉用コンポーネント) ---
 interface Props {
@@ -38,24 +33,19 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{
           padding: '20px',
-          backgroundColor: '#330000', // 暗い赤背景
+          backgroundColor: '#330000',
           color: '#ffaaaa',
-          height: '100%',
-          overflow: 'auto',
+          height: '100vh',
           fontFamily: 'monospace',
-          border: '2px solid red',
-          boxSizing: 'border-box'
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center'
         }}>
-          <h2 style={{ color: '#ff5555' }}>⚠️ CRITICAL RENDER ERROR</h2>
-          <div style={{ marginBottom: '20px', fontSize: '14px', fontWeight: 'bold' }}>
+          <h2 style={{ color: '#ff5555' }}>⚠️ RENDER ERROR</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>
             {this.state.error && this.state.error.toString()}
-          </div>
-          <details style={{ whiteSpace: 'pre-wrap', fontSize: '11px', lineHeight: '1.4' }}>
-            <summary style={{ cursor: 'pointer', marginBottom: '10px', color: '#fff' }}>
-              View Stack Trace
-            </summary>
-            {this.state.errorInfo && this.state.errorInfo.componentStack}
-          </details>
+          </pre>
         </div>
       );
     }
@@ -66,44 +56,6 @@ class ErrorBoundary extends Component<Props, State> {
 
 // --- Main App Component ---
 export default function App() {
-  const [logs, setLogs] = useState<string[]>([]);
-
-  // --- デバッグ機能: Consoleジャック & エラー捕捉 ---
-  useEffect(() => {
-    const originalLog = console.log;
-    const originalError = console.error;
-
-    const captureLog = (type: string, args: any[]) => {
-      try {
-        const message = args.map(arg => {
-          if (arg instanceof Error) return `${arg.name}: ${arg.message}\n${arg.stack}`;
-          if (typeof arg === 'object') return JSON.stringify(arg);
-          return String(arg);
-        }).join(' ');
-
-        setLogs(prev => [`[${type}] ${message}`, ...prev].slice(0, 50));
-      } catch (e) {
-        setLogs(prev => [`[INTERNAL_ERR] Log capture failed`, ...prev]);
-      }
-    };
-
-    console.log = (...args) => { originalLog(...args); captureLog('LOG', args); };
-    console.error = (...args) => { originalError(...args); captureLog('ERR', args); };
-
-    const handleError = (event: ErrorEvent) => {
-      captureLog('WIN_ERR', [`${event.message} at ${event.filename}:${event.lineno}`]);
-    };
-    window.addEventListener('error', handleError);
-
-    console.log(`--- APP STARTED (Mode: ${IS_DEBUG_MODE ? 'DEBUG' : 'GAME'}) ---`);
-
-    return () => {
-      console.log = originalLog;
-      console.error = originalError;
-      window.removeEventListener('error', handleError);
-    };
-  }, []);
-
   return (
     <div style={{
       width: '100vw',
@@ -115,62 +67,9 @@ export default function App() {
       left: 0,
       touchAction: 'none'
     }}>
-      
-      {/* --- メインコンテンツ切替 --- */}
-      {IS_DEBUG_MODE ? (
-        <div style={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          fontFamily: 'sans-serif'
-        }}>
-          <h1 style={{ color: '#ffcc00', border: '2px solid #ffcc00', padding: '10px' }}>
-            🔧 MAINTENANCE MODE
-          </h1>
-          <p>PixiJS is currently disabled.</p>
-        </div>
-      ) : (
-        // 🛡️ ErrorBoundary で RealGame をラップ
-        <ErrorBoundary>
-          <RealGame />
-        </ErrorBoundary>
-      )}
-
-      {/* --- Debug Overlay (最前面・常時表示) --- */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        width: '300px',
-        maxWidth: '50%',
-        height: '200px',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        color: '#0f0',
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        overflowY: 'auto',
-        zIndex: 9999,
-        pointerEvents: 'auto',
-        padding: '5px',
-        borderBottomLeftRadius: '5px'
-      }}>
-        <div style={{ borderBottom: '1px solid #444', marginBottom: '4px', fontWeight: 'bold' }}>
-          DEBUG LOG
-        </div>
-        {logs.map((log, i) => (
-          <div key={i} style={{ 
-            marginBottom: '2px', 
-            borderBottom: '1px solid #333',
-            color: log.includes('ERR') || log.includes('WIN_ERR') ? '#ff4444' : '#0f0' 
-          }}>
-            {log}
-          </div>
-        ))}
-      </div>
-
+      <ErrorBoundary>
+        <RealGame />
+      </ErrorBoundary>
     </div>
   );
 }
