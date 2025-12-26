@@ -1,23 +1,19 @@
-// 変更前: import type { GameState } from '../types/game';
-import type { GameState } from '../game/types';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import * as PIXI from 'pixi.js';
 
-// 変更前: import { LAYOUT, COLORS } from '../constants/layout';
+// パス修正：domainやlayout、actionsの新しい位置を指定
+import type { GameState } from '../game/types'; 
 import { LAYOUT, COLORS } from '../layout/layout.constants';
-
-// 変更前: import { calculateCoordinates } from '../utils/layoutEngine';
 import { calculateCoordinates } from '../layout/layoutEngine';
-
-// 変更前: import { useGameAction } from '../hooks/useGameAction';
 import { useGameAction } from '../game/actions';
 
-// 変更前: import { ActionMenu } from './ui/ActionMenu';
+// UI部品のパス修正
 import { ActionMenu } from '../ui/ActionMenu';
-
-// 変更前: import { CardDetailSheet } from './ui/CardDetailSheet';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 
-// 変更前: import CONST from '../../shared_constants.json';
-import CONST from '../../shared_constants.json'; 
+// 重要：shared_constants.json へのパス（階層が深くなったので ../../ ）
+import CONST from '../../shared_constants.json';
+
 
 
 type DrawTarget = {

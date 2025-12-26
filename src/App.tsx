@@ -1,6 +1,8 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { RealGame } from './components/RealGame';
+// 修正後
+import { RealGame } from './screens/RealGame';
+
 
 // --- Error Boundary (クラッシュ捕捉用コンポーネント) ---
 interface Props {
