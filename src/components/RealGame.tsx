@@ -6,12 +6,10 @@ import { calculateCoordinates } from '../utils/layoutEngine';
 import { useGameAction } from '../hooks/useGameAction';
 import { ActionMenu } from './ui/ActionMenu';
 import { CardDetailSheet } from './ui/CardDetailSheet';
-// 共通定数のインポート
 import CONST from '../../shared_constants.json';
 
 type DrawTarget = CardInstance | LeaderCard | BoardCard | { 
-  name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number; 
-  attribute?: string; counter?: number; attached_don?: number; uuid?: string; text?: string;
+  [key: string]: any;
 };
 
 export const RealGame = () => {
@@ -33,14 +31,14 @@ export const RealGame = () => {
     if (!gameId) startGame();
   }, [gameId, startGame]);
 
-  // --- プレイヤー特定ロジックの修正 ---
   const playerIds = gameState ? Object.keys(gameState.players) : [];
-  // CONST.PLAYER_KEYS.P1 ("Player 1") と完全に一致するキーを探す
   const currentObserverId = playerIds.find(id => id === CONST.PLAYER_KEYS.P1) || playerIds[0];
 
   const handleActionSelect = (actionType: string) => {
-    if (!selectedCard || !selectedCard.card.uuid) return;
-    const cardUuid = selectedCard.card.uuid;
+    const uuidKey = CONST.CARD_PROPERTIES.UUID; // 定数からキーを取得
+    if (!selectedCard || !selectedCard.card[uuidKey]) return;
+    const cardUuid = selectedCard.card[uuidKey];
+
     switch (actionType) {
       case 'PLAY_CARD': sendAction('PLAY_CARD', { card_id: cardUuid }); break;
       case 'ATTACK': sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] }); break;
@@ -64,27 +62,20 @@ export const RealGame = () => {
   const renderCard: (card: DrawTarget, cw: number, ch: number, isOpponent?: boolean, badgeCount?: number, isCountBadge?: boolean, isWideName?: boolean, locationType?: 'hand' | 'field' | 'other') => PIXI.Container = useCallback((card, cw, ch, isOpponent = false, badgeCount, isCountBadge = false, isWideName = false, locationType = 'other') => {
     const container = new PIXI.Container();
     container.eventMode = 'static'; container.cursor = 'pointer';
-    let pressTimer: any = null; let isLongPress = false;
+    const prop = CONST.CARD_PROPERTIES; // プロパティ定数参照
 
     container.on('pointerdown', () => {
       if (isOpponent) return;
-      isLongPress = false;
-      pressTimer = setTimeout(() => { isLongPress = true; setSelectedCard({ card, location: locationType }); setIsDetailMode(true); }, 400);
+      setTimeout(() => { setSelectedCard({ card, location: locationType }); setIsDetailMode(true); }, 400);
     });
-    container.on('pointerup', () => {
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-      if (isOpponent || isLongPress) return;
-      if (locationType !== 'other') { setSelectedCard({ card, location: locationType }); setIsDetailMode(false); }
-    });
-    container.on('pointerupoutside', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
     
-    const isRest = 'is_rest' in card && card.is_rest;
+    const isRest = card[prop.IS_REST]; // 定数を介したアクセス
     if (isRest) container.rotation = Math.PI / 2;
-    if (!isOpponent && 'attached_don' in card && (card.attached_don || 0) > 0) {
+    if (!isOpponent && card[prop.ATTACHED_DON] > 0) {
       const donBg = new PIXI.Graphics().lineStyle(1, 0x666666).beginFill(COLORS.CARD_BACK).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
       donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
-    const isBackSide = 'is_face_up' in card ? card.is_face_up === false : false;
+    const isBackSide = card[prop.IS_FACE_UP] === false;
     const g = new PIXI.Graphics().lineStyle(2, COLORS.ZONE_BORDER).beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
     container.addChild(g);
     const content = new PIXI.Container();
@@ -93,25 +84,20 @@ export const RealGame = () => {
     const textRotation = isRest ? -Math.PI / 2 : 0; const yDir = isOpponent ? -1 : 1;
 
     if (!isBackSide) {
-      const name = 'name' in card ? card.name : '';
-      const power = 'power' in card ? card.power : undefined;
-      const cost = 'cost' in card ? card.cost : undefined;
-      const attribute = 'attribute' in card ? (card.attribute as string) : undefined;
+      const name = card[prop.NAME] || '';
+      const power = card[prop.POWER];
+      const cost = card[prop.COST];
       if (power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center' });
         pTxt.anchor.set(0.5); pTxt.x = isRest ? (-ch / 2 - 10) * yDir : 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
         pTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(pTxt);
       }
       const nameStyle = new PIXI.TextStyle({ fontSize: (name === 'DON!!' || name === 'Trash') ? 11 : 9, fill: (name === 'DON!!' || name === 'Trash') ? 0x000000 : 0x333333, fontWeight: 'bold', align: 'center' });
-      const nTxt = new PIXI.Text(truncateText(name || '', nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
+      const nTxt = new PIXI.Text(truncateText(name, nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
       nTxt.anchor.set(0.5, (name === 'DON!!' || name === 'Trash') ? 0.5 : 0);
       nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir : 0;
       nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir;
       nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
-      if (attribute && power !== undefined) {
-        const aTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
-        aTxt.anchor.set(1, 0); aTxt.x = cw / 2 - 4; aTxt.y = -ch / 2 + 4; content.addChild(aTxt);
-      }
       if (cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         cBg.x = -cw / 2 + 10; cBg.y = -ch / 2 + 10;
@@ -132,11 +118,9 @@ export const RealGame = () => {
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current; if (!app) return;
     app.stage.removeChildren();
-    
     const pIds = Object.keys(state.players);
     const obsId = pIds.find(id => id === CONST.PLAYER_KEYS.P1) || pIds[0];
     const oppId = pIds.find(id => id !== obsId) || pIds[1];
-
     const W = app.renderer.width / app.renderer.resolution;
     const H = app.renderer.height / app.renderer.resolution;
     const coords = calculateCoordinates(W, H);
@@ -149,40 +133,30 @@ export const RealGame = () => {
       const side = new PIXI.Container();
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
-
-      // ゾーン参照の同期: CONST.ZONES を使用
-      const fs = p.zones[CONST.ZONES.FIELD] || [];
+      const fs = p.zones[CONST.ZONES.FIELD] || []; // ゾーン定数参照
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
         card.x = coords.getFieldX(i, W, CW, fs.length); card.y = coords.getY(1, CH, V_GAP); side.addChild(card); 
       });
-
       const r2Y = coords.getY(2, CH, V_GAP);
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones[CONST.ZONES.LIFE]?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
-
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
-
       if (p.zones[CONST.ZONES.STAGE]) { 
         const stg = renderCard(p.zones[CONST.ZONES.STAGE], CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
-
       const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, p.don_deck_count ?? 40, false, false, 'other');
       deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
-
       const r3Y = coords.getY(3, CH, V_GAP);
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
-
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
-
       const ts = p.zones[CONST.ZONES.TRASH] || [];
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
-
       if (!isOpp) { 
         const hs = p.zones[CONST.ZONES.HAND] || [];
         hs.forEach((c: any, i: number) => { 
@@ -191,7 +165,6 @@ export const RealGame = () => {
         }); 
       }
     };
-
     renderSide(state.players[oppId], true);
     renderSide(state.players[obsId], false);
   }, [observerNameFromUrl, renderCard]);
@@ -231,7 +204,7 @@ export const RealGame = () => {
         </div>
       )}
       {selectedCard && !isDetailMode && (
-        <ActionMenu cardName={selectedCard.card.name || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
+        <ActionMenu cardName={selectedCard.card[CONST.CARD_PROPERTIES.NAME] || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}
       {selectedCard && isDetailMode && (
         <CardDetailSheet card={selectedCard.card} onClose={() => setSelectedCard(null)} />

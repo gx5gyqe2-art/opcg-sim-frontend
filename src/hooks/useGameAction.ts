@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid'; 
 import type { GameActionRequest, ActionType } from '../types/api';
 import type { GameState } from '../types/game';
-// 共通定数のインポート
 import CONST from '../../shared_constants.json';
 
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
@@ -43,13 +42,12 @@ export const useGameAction = (
       });
       const data = await res.json();
       
-      // 定義されたルートキーを最優先で参照
+      // 共通定数のルートキーを使用してデータを抽出
       const newState = data[CONST.API_ROOT_KEYS.GAME_STATE] || data.state;
       
       if (data.success && newState) {
         setGameId(data.game_id);
         setGameState(newState);
-        console.log("[API] GameState synchronized using shared constants.");
       } else {
         throw new Error(data.error?.message || "Invalid Response Schema");
       }
