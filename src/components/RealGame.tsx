@@ -16,7 +16,6 @@ export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
 
-  // 実サーバーから取得するため初期値は null
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedCard, setSelectedCard] = useState<{ card: DrawTarget, location: 'hand' | 'field' | 'other' } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
@@ -24,25 +23,23 @@ export const RealGame = () => {
   const observerId = new URLSearchParams(window.location.search).get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  // 通信フックの初期化
-  const { sendAction, startGame, gameId, isPending, errorToast, setErrorToast } = useGameAction(
+  // 通信フックの初期化 (エラー回避のため isPending を削除)
+  const { sendAction, startGame, gameId, errorToast, setErrorToast } = useGameAction(
     observerId, 
     (state) => setGameState(state)
   );
 
-  // 初回マウント時に自動でゲームセッションを作成
   useEffect(() => {
     if (!gameId) startGame();
   }, [gameId, startGame]);
 
-  // アクション実行 (カードの個体識別子 uuid を使用)
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
     const cardUuid = selectedCard.card.uuid;
 
     switch (actionType) {
       case 'PLAY_CARD':
-        sendAction('PLAY_CARD', { card_id: cardUuid }); // サーバー側でuuidとして処理
+        sendAction('PLAY_CARD', { card_id: cardUuid });
         break;
       case 'ATTACK':
         sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] });
@@ -181,9 +178,8 @@ export const RealGame = () => {
     };
     renderSide(state.players[opponentId], true);
     renderSide(state.players[observerId], false);
-  }, [observerId, opponentId, renderCard]);
+  }, [opponentId, observerId, renderCard]);
 
-  // Pixi アプリケーション初期化
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1, autoDensity: true, antialias: true });
@@ -194,10 +190,8 @@ export const RealGame = () => {
     return () => { window.removeEventListener('resize', handleResize); app.destroy(true); appRef.current = null; };
   }, []);
 
-  // 描画更新ループ
   useEffect(() => { if (!appRef.current || !gameState) return; drawLayout(gameState); }, [gameState, drawLayout]);
 
-  // ローディング画面
   if (!gameState) {
     return (
       <div style={{ color: 'white', background: 'black', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
@@ -210,22 +204,16 @@ export const RealGame = () => {
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
-      
-      {/* デバッグ表示 */}
       <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
         <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
         <div>GAME ID: {gameId}</div>
       </div>
-
-      {/* 通信エラートースト */}
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}
           <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップして閉じる</div>
         </div>
       )}
-
-      {/* アクション/詳細 UI */}
       {selectedCard && !isDetailMode && (
         <ActionMenu cardName={selectedCard.card.name || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}

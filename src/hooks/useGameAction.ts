@@ -15,7 +15,6 @@ export const useGameAction = (
   const [gameId, setGameId] = useState<string | null>(null);
 
   // 1. 疎通確認（Health Check）機能
-  // アプリ起動時にサーバーが生きているか、CORSが通るかを確認
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -26,7 +25,6 @@ export const useGameAction = (
           throw new Error(`Health check failed: ${res.status}`);
         }
       } catch (e: any) {
-        // ネットワークエラーやMixed Contentエラーをキャッチ
         setErrorToast(`サーバーに接続できません: ${e.message}`);
       }
     };
@@ -34,7 +32,6 @@ export const useGameAction = (
   }, []);
 
   // 2. ゲーム開始 (POST /api/game/create)
-  // サーバー側で初期盤面を生成し game_id を取得
   const startGame = useCallback(async () => {
     setIsPending(true);
     try {
@@ -63,7 +60,6 @@ export const useGameAction = (
   }, [setGameState]);
 
   // 3. アクション送信 (POST /api/game/{gameId}/action)
-  // サーバー絶対権威に基づき、レスポンスの game_state で画面を更新
   const sendAction = useCallback(async (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
@@ -92,7 +88,6 @@ export const useGameAction = (
         throw new Error(result.error?.message || `HTTP ${response.status}`);
       }
 
-      // サーバーから返却された最新状態を適用
       setGameState(result.game_state);
     } catch (e: any) {
       console.error(e);
