@@ -8,7 +8,6 @@ import { ActionMenu } from './ui/ActionMenu';
 import { CardDetailSheet } from './ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 
-// インデックス署名を追加して動的アクセスを許可
 type DrawTarget = {
   [key: string]: any;
 };
@@ -76,7 +75,11 @@ export const RealGame = () => {
       const donBg = new PIXI.Graphics().lineStyle(1, 0x666666).beginFill(COLORS.CARD_BACK).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
       donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
-    const isBackSide = card[prop.IS_FACE_UP] === false;
+
+    // リーダーの場合は強制的に表向きとして描画
+    const isLeader = card[prop.TYPE] === prop.TYPE_LEADER;
+    const isBackSide = isLeader ? false : card[prop.IS_FACE_UP] === false;
+
     const g = new PIXI.Graphics().lineStyle(2, COLORS.ZONE_BORDER).beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
     container.addChild(g);
     const content = new PIXI.Container();
@@ -97,7 +100,6 @@ export const RealGame = () => {
       const nTxt = new PIXI.Text(truncateText(name, nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
       nTxt.anchor.set(0.5, (name === 'DON!!' || name === 'Trash') ? 0.5 : 0);
       nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : (ch / 2 + 2) * yDir ) : 0;
-      // 修正箇所: 三項演算子の構文エラーを修正
       nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : (ch / 2 + 2) * yDir );
       nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
       if (cost !== undefined) {
@@ -145,14 +147,20 @@ export const RealGame = () => {
       const r2Y = coords.getY(2, CH, V_GAP);
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, zones["life"]?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
+      
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
+
       if (zones["stage"]) { 
         const stg = renderCard(zones["stage"], CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
-      const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, p.don_deck_count ?? 40, false, false, 'other');
-      deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
+
+      // ドンデッキの描画: CONSTからキーと初期値を取得するように修正
+      const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
+      const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
+      donDk.x = coords.getDeckX(W); donDk.y = r2Y; side.addChild(donDk);
+
       const r3Y = coords.getY(3, CH, V_GAP);
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
@@ -171,7 +179,7 @@ export const RealGame = () => {
     };
     renderSide(state.players[oppId], true);
     renderSide(state.players[obsId], false);
-  }, [observerNameFromUrl, renderCard]);
+  }, [renderCard]);
 
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
@@ -188,6 +196,7 @@ export const RealGame = () => {
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
+      {/* 不要なUIを削除: ステータスパネルのみ残し、デバッグパネルを削除 */}
       {gameState && (
         <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
           <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
