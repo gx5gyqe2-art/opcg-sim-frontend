@@ -37,7 +37,6 @@ export const RealGame = () => {
   const playerIds = gameState ? Object.keys(gameState.players) : [];
   // CONST.PLAYER_KEYS.P1 ("Player 1") と完全に一致するキーを探す
   const currentObserverId = playerIds.find(id => id === CONST.PLAYER_KEYS.P1) || playerIds[0];
-  const currentOpponentId = playerIds.find(id => id !== currentObserverId) || playerIds[1];
 
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;

@@ -37,7 +37,7 @@ export const useGameAction = (
         body: JSON.stringify({
           p1_deck: "imu.json",
           p2_deck: "nami.json",
-          p1_name: CONST.PLAYER_KEYS.P1, // "Player 1"
+          p1_name: CONST.PLAYER_KEYS.P1, 
           p2_name: CONST.PLAYER_KEYS.P2
         }),
       });
