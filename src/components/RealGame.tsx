@@ -23,7 +23,6 @@ export const RealGame = () => {
   const observerId = new URLSearchParams(window.location.search).get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  // 通信フックの初期化 (エラー回避のため isPending を削除)
   const { sendAction, startGame, gameId, errorToast, setErrorToast } = useGameAction(
     observerId, 
     (state) => setGameState(state)
@@ -150,31 +149,65 @@ export const RealGame = () => {
     const { CH, CW, V_GAP, Y_CTRL_START } = coords;
     const bg = new PIXI.Graphics().beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, Y_CTRL_START).endFill().beginFill(COLORS.CONTROL_BG).drawRect(0, Y_CTRL_START, W, LAYOUT.H_CTRL).endFill().beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + LAYOUT.H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
+
     const renderSide = (p: any, isOpp: boolean) => {
       const side = new PIXI.Container();
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
-      const fs = p.zones.field || [];
-      fs.forEach((c: any, i: number) => { const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); card.x = coords.getFieldX(i, W, CW, fs.length); card.y = coords.getY(1, CH, V_GAP); side.addChild(card); });
+
+      // 1. フィールド (p.zones.field)
+      const fields = p.zones.field || [];
+      fields.forEach((c: any, i: number) => {
+        const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field');
+        card.x = coords.getFieldX(i, W, CW, fields.length); 
+        card.y = coords.getY(1, CH, V_GAP);
+        side.addChild(card);
+      });
+
       const r2Y = coords.getY(2, CH, V_GAP);
-      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0, false, false, 'other');
+
+      // 2. ライフ (p.zones.life)
+      const lifeCount = p.zones.life?.length || 0;
+      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lifeCount, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
+
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
-      if (p.zones.stage) { const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); }
+
+      // 3. ステージ (p.zones.stage)
+      if (p.zones.stage) { 
+        const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); 
+        stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
+      }
+
       const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, p.don_deck_count ?? 40, false, false, 'other');
       deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
+
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10, false, false, 'other');
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y; side.addChild(donDk);
+
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
+
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
-      const tCount = p.zones.trash?.length || 0;
-      const trash = renderCard(p.zones.trash?.[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount, false, false, 'other');
+
+      // 4. トラッシュ (p.zones.trash)
+      const trashCards = p.zones.trash || [];
+      const tCount = trashCards.length;
+      const trash = renderCard(trashCards[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
-      if (!isOpp) { (p.zones.hand || []).forEach((c: any, i: number) => { const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand'); card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); side.addChild(card); }); }
+
+      // 5. 手札 (p.zones.hand)
+      if (!isOpp) { 
+        const handCards = p.zones.hand || [];
+        handCards.forEach((c: any, i: number) => { 
+          const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand'); 
+          card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); 
+          side.addChild(card); 
+        }); 
+      }
     };
     renderSide(state.players[opponentId], true);
     renderSide(state.players[observerId], false);

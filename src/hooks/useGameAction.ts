@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GameActionRequest, ActionType } from '../types/api';
 import type { GameState } from '../types/game';
 
-// Cloud Run バックエンドのベースURL
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
 
 export const useGameAction = (
@@ -14,13 +13,13 @@ export const useGameAction = (
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // 1. 疎通確認（Health Check）機能
+  // 1. 疎通確認（Health Check）
   useEffect(() => {
     const checkHealth = async () => {
       try {
         const res = await fetch(`${BASE_URL}/health`);
         if (res.ok) {
-          console.log("[API] Health Check Success: Connected to Cloud Run.");
+          console.log("[API] Health Check Success.");
         } else {
           throw new Error(`Health check failed: ${res.status}`);
         }
@@ -46,11 +45,16 @@ export const useGameAction = (
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      
+      // v1.4 スキーマ対応: game_state キーを優先的に取得
+      const newState = data.game_state || data.state;
+      
+      if (data.success && newState) {
         setGameId(data.game_id);
-        setGameState(data.game_state);
+        setGameState(newState);
+        console.log("[API] GameState initialized:", newState.game_id);
       } else {
-        throw new Error(data.error?.message || "Failed to create game");
+        throw new Error(data.error?.message || "Invalid Response Schema");
       }
     } catch (e: any) {
       setErrorToast(`ゲーム開始エラー: ${e.message}`);
@@ -84,11 +88,14 @@ export const useGameAction = (
 
       const result = await response.json();
       
-      if (!response.ok || !result.success) {
+      // レスポンスから最新の盤面状態を抽出
+      const nextState = result.game_state || result.state;
+
+      if (!response.ok || !result.success || !nextState) {
         throw new Error(result.error?.message || `HTTP ${response.status}`);
       }
 
-      setGameState(result.game_state);
+      setGameState(nextState);
     } catch (e: any) {
       console.error(e);
       setErrorToast(`通信失敗: ${e.message}`);
