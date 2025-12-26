@@ -1,5 +1,3 @@
-import CONST from '../../shared_constants.json';
-
 /**
  * バックエンドと同期するセッションID（トレースID）を管理
  */
