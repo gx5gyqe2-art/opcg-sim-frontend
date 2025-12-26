@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import type { GameActionRequest, ActionType } from '../types/api';
 import type { GameState } from '../types/game';
 
-// Cloud Run バックエンドのベースURL
 const BASE_URL = 'https://opcg-sim-backend-282430682904.asia-northeast1.run.app';
 
 export const useGameAction = (
@@ -14,7 +13,7 @@ export const useGameAction = (
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
 
-  // 1. 疎通確認（Health Check）機能
+  // 1. 疎通確認（Health Check）
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -31,7 +30,7 @@ export const useGameAction = (
     checkHealth();
   }, []);
 
-  // 2. ゲーム開始 (v1.4 スキーマ同期)
+  // 2. ゲーム開始 (POST /api/game/create)
   const startGame = useCallback(async () => {
     setIsPending(true);
     try {
@@ -47,13 +46,13 @@ export const useGameAction = (
       });
       const data = await res.json();
       
-      // バックエンドの game_state キーからデータを取得
+      // v1.4 スキーマ対応: game_state キーを優先的に取得
       const newState = data.game_state || data.state;
       
       if (data.success && newState) {
         setGameId(data.game_id);
-        setGameState(newState); 
-        console.log("[API] GameState synchronized via game_state key.");
+        setGameState(newState);
+        console.log("[API] GameState initialized:", newState.game_id);
       } else {
         throw new Error(data.error?.message || "Invalid Response Schema");
       }
@@ -64,7 +63,7 @@ export const useGameAction = (
     }
   }, [setGameState]);
 
-  // 3. アクション送信
+  // 3. アクション送信 (POST /api/game/{gameId}/action)
   const sendAction = useCallback(async (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
@@ -88,12 +87,14 @@ export const useGameAction = (
       });
 
       const result = await response.json();
+      
       // レスポンスから最新の盤面状態を抽出
       const nextState = result.game_state || result.state;
 
       if (!response.ok || !result.success || !nextState) {
-        throw new Error(result.error?.message || "Action failed");
+        throw new Error(result.error?.message || `HTTP ${response.status}`);
       }
+
       setGameState(nextState);
     } catch (e: any) {
       console.error(e);

@@ -38,12 +38,6 @@ export const RealGame = () => {
     if (!selectedCard || !selectedCard.card.uuid || !gameState) return;
     const cardUuid = selectedCard.card.uuid;
     
-    // 動的な observerId の決定
-    const playerIds = Object.keys(gameState.players);
-    const currentObserverId = observerNameFromUrl && playerIds.includes(observerNameFromUrl) 
-      ? observerNameFromUrl 
-      : (playerIds.find(id => id.includes('1')) || playerIds[0]);
-
     switch (actionType) {
       case 'PLAY_CARD':
         sendAction('PLAY_CARD', { card_id: cardUuid });
@@ -141,7 +135,7 @@ export const RealGame = () => {
       bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
     return container;
-  }, [observerNameFromUrl, sendAction]);
+  }, [observerNameFromUrl, renderCard]);
 
   const drawLayout = useCallback((state: GameState) => {
     const app = appRef.current; if (!app) return;
@@ -168,6 +162,7 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
+      // 1. Field参照の修正 (zones.field)
       const fs = p.zones?.field || [];
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
@@ -175,13 +170,16 @@ export const RealGame = () => {
       });
 
       const r2Y = coords.getY(2, CH, V_GAP);
+      // 2. ライフ参照の修正 (zones.life)
       const lCount = p.zones?.life?.length || 0;
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lCount, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
+      // 3. リーダー参照の修正 (直下の leader)
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
+      // 4. ステージ参照の修正 (zones.stage)
       if (p.zones?.stage) { 
         const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
@@ -198,10 +196,12 @@ export const RealGame = () => {
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
 
+      // 5. トラッシュ参照の修正 (zones.trash)
       const ts = p.zones?.trash || [];
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
+      // 6. 手札参照の修正 (zones.hand)
       if (!isOpp) { 
         const hs = p.zones?.hand || [];
         hs.forEach((c: any, i: number) => { 
