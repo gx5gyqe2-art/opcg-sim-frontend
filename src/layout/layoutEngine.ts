@@ -1,6 +1,5 @@
-// 変更前: import { LAYOUT } from '../constants/layout';
-import { LAYOUT } from './layout.constants'; // 同階層
-
+import { LAYOUT } from './layout.constants';
+import { LAYOUT_PARAMS } from './layout.config'; // パラメータを読み込み
 
 export interface LayoutCoords {
   CH: number;
@@ -28,29 +27,28 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const V_GAP = CH * 0.30;
   const Y_CTRL_START = LAYOUT.MARGIN_TOP + AVAIL_H_HALF;
 
+  const P = LAYOUT_PARAMS; // 短縮参照用
+
   return {
     CH, CW, V_GAP, Y_CTRL_START,
-    getLifeX: (width) => width * 0.15,
-    getLeaderX: (width) => width * 0.43,
-    getStageX: (width) => width * 0.65,
-    getDeckX: (width) => width * 0.85,
-    // 復元: ドン!!デッキを左端（ライフと同じ垂直ライン）に戻す
-    getDonDeckX: (width) => width * 0.15,
-    getDonActiveX: (width) => width * 0.38,
-    getDonRestX: (width) => width * 0.60,
-    getTrashX: (width) => width * 0.85,
+    getLifeX: (width) => width * P.X_RATIOS.LIFE,
+    getLeaderX: (width) => width * P.X_RATIOS.LEADER,
+    getStageX: (width) => width * P.X_RATIOS.STAGE,
+    getDeckX: (width) => width * P.X_RATIOS.DECK,
+    getDonDeckX: (width) => width * P.X_RATIOS.DON_DECK,
+    getDonActiveX: (width) => width * P.X_RATIOS.DON_ACTIVE,
+    getDonRestX: (width) => width * P.X_RATIOS.DON_REST,
+    getTrashX: (width) => width * P.X_RATIOS.TRASH,
     
     getFieldX: (i, width, cardWidth, totalCards) => {
-      const gap = 35;
-      const totalW = totalCards * cardWidth + (totalCards - 1) * gap;
-      const startX = (width - totalW) / 2 + 20; 
-      return startX + i * (cardWidth + gap);
+      const totalW = totalCards * cardWidth + (totalCards - 1) * P.FIELD.GAP;
+      const startX = (width - totalW) / 2 + P.FIELD.X_OFFSET; 
+      return startX + i * (cardWidth + P.FIELD.GAP);
     },
 
-    getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
+    getHandX: (i, width) => width * P.HAND.X_START_RATIO + (i * CW * P.HAND.OVERLAP_RATIO),
     getY: (row, h, g) => {
-      // 復元: 各行の垂直オフセットを昔の正常な値に戻す
-      const offset = row === 1 ? 0.2 : (row - 0.55); 
+      const offset = row === 1 ? P.ROWS.ROW1_Y_OFFSET : (row - P.ROWS.DEFAULT_MULTIPLIER); 
       return offset * (h + g);
     },
   };
