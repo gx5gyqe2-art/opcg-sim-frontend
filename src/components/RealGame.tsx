@@ -5,164 +5,79 @@ import { initialGameResponse } from '../mocks/gameState';
 import { LAYOUT, COLORS } from '../constants/layout';
 import { calculateCoordinates } from '../utils/layoutEngine';
 import { useGameAction } from '../hooks/useGameAction';
-
-// UIコンポーネントのインポート
 import { ActionMenu } from './ui/ActionMenu';
 import { CardDetailSheet } from './ui/CardDetailSheet';
 
 type DrawTarget = CardInstance | LeaderCard | BoardCard | { 
-  name: string; 
-  is_face_up?: boolean; 
-  is_rest?: boolean; 
-  power?: number; 
-  cost?: number; 
-  attribute?: string; 
-  counter?: number; 
-  attached_don?: number;
-  uuid?: string;
-  text?: string;
+  name: string; is_face_up?: boolean; is_rest?: boolean; power?: number; cost?: number; 
+  attribute?: string; counter?: number; attached_don?: number; uuid?: string; text?: string;
 };
 
 export const RealGame = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-
   const [gameState, setGameState] = useState<GameState>(initialGameResponse.state as unknown as GameState);
-  
-  // UI用のState
   const [selectedCard, setSelectedCard] = useState<{ card: DrawTarget, location: 'hand' | 'field' | 'other' } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const observerId = urlParams.get('observerId') || 'p1';
+  const observerId = new URLSearchParams(window.location.search).get('observerId') || 'p1';
   const opponentId = observerId === 'p1' ? 'p2' : 'p1';
 
-  const { sendAction } = useGameAction('test-game-id', observerId, gameState, setGameState);
+  // 通信フックからトースト関連を取得
+  const { sendAction, isPending, errorToast, setErrorToast } = useGameAction('test-game-id', observerId, gameState, setGameState);
 
-  // アクション選択時のハンドラ
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
     const cardId = selectedCard.card.uuid;
-
-    switch (actionType) {
-      case 'PLAY_CARD':
-        sendAction('PLAY_CARD', { card_id: cardId });
-        break;
-      case 'ATTACK':
-        sendAction('ATTACK', { card_id: cardId, target_ids: ['dummy'] });
-        break;
-      case 'ATTACH_DON':
-        sendAction('ATTACH_DON', { target_ids: [cardId], extra: { count: 1 } });
-        break;
-      case 'ACTIVATE':
-        sendAction('ACTIVATE', { card_id: cardId });
-        break;
-    }
-    // メニューを閉じる
+    if (actionType === 'PLAY_CARD') sendAction('PLAY_CARD', { card_id: cardId });
+    else if (actionType === 'ATTACK') sendAction('ATTACK', { card_id: cardId, target_ids: ['dummy'] });
+    else if (actionType === 'ATTACH_DON') sendAction('ATTACH_DON', { target_ids: [cardId], extra: { count: 1 } });
+    else if (actionType === 'ACTIVATE') sendAction('ACTIVATE', { card_id: cardId });
     setSelectedCard(null);
   };
 
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
     if (metrics.width <= maxWidth) return text;
-
     let truncated = text;
     while (truncated.length > 0) {
       truncated = truncated.slice(0, -1);
-      const check = truncated + '...';
-      if (PIXI.TextMetrics.measureText(check, style).width <= maxWidth) return check;
+      if (PIXI.TextMetrics.measureText(truncated + '...', style).width <= maxWidth) return truncated + '...';
     }
     return '...';
   };
 
-  const renderCard = useCallback((
-    card: DrawTarget, 
-    cw: number, 
-    ch: number, 
-    isOpponent: boolean = false, 
-    badgeCount?: number,
-    isCountBadge: boolean = false,
-    isWideName: boolean = false,
-    locationType: 'hand' | 'field' | 'other' = 'other'
-  ): PIXI.Container => {
+  const renderCard = useCallback((card: DrawTarget, cw: number, ch: number, isOpponent: boolean = false, badgeCount?: number, isCountBadge: boolean = false, isWideName: boolean = false, locationType: 'hand' | 'field' | 'other' = 'other'): PIXI.Container => {
     const container = new PIXI.Container();
-    
-    // タップ/長押しイベントの実装
     container.eventMode = 'static';
     container.cursor = 'pointer';
-
-    // イベント用変数
     let pressTimer: any = null;
     let isLongPress = false;
 
-    // A. 押し込み開始
     container.on('pointerdown', () => {
-      if (isOpponent) return; // 相手カードは操作不可
-      isLongPress = false;
-      
-      // 400ms後に詳細モードで開くタイマーセット
-      pressTimer = setTimeout(() => {
-        isLongPress = true;
-        setSelectedCard({ card, location: locationType });
-        setIsDetailMode(true);
-      }, 400);
-    });
-
-    // B. 指を離した（タップ終了）
-    container.on('pointerup', () => {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-      }
-      
       if (isOpponent) return;
-
-      // 長押しでなければ、通常タップ（アクションメニュー）として処理
-      if (!isLongPress) {
-        if (locationType !== 'other') {
-          setSelectedCard({ card, location: locationType });
-          setIsDetailMode(false);
-        }
-      }
+      isLongPress = false;
+      pressTimer = setTimeout(() => { isLongPress = true; setSelectedCard({ card, location: locationType }); setIsDetailMode(true); }, 400);
     });
-
-    // C. 領域外に出たらキャンセル
-    container.on('pointerupoutside', () => {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-      }
+    container.on('pointerup', () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      if (isOpponent || isLongPress) return;
+      if (locationType !== 'other') { setSelectedCard({ card, location: locationType }); setIsDetailMode(false); }
     });
+    container.on('pointerupoutside', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
     
-    // ... 描画ロジック ...
     const isRest = 'is_rest' in card && card.is_rest;
-    if (isRest) {
-      container.rotation = Math.PI / 2;
-    }
-
+    if (isRest) container.rotation = Math.PI / 2;
     if (!isOpponent && 'attached_don' in card && (card.attached_don || 0) > 0) {
-      const donBg = new PIXI.Graphics();
-      donBg.lineStyle(1, 0x666666);
-      donBg.beginFill(COLORS.CARD_BACK); 
-      donBg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
-      donBg.endFill();
-      donBg.x = 6;
-      donBg.y = 6;
-      container.addChild(donBg);
+      const donBg = new PIXI.Graphics().lineStyle(1, 0x666666).beginFill(COLORS.CARD_BACK).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
+      donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
-
     const isBackSide = 'is_face_up' in card ? card.is_face_up === false : false;
-    const g = new PIXI.Graphics();
-    g.lineStyle(2, COLORS.ZONE_BORDER);
-    g.beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
-    g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
-    g.endFill();
+    const g = new PIXI.Graphics().lineStyle(2, COLORS.ZONE_BORDER).beginFill(isBackSide ? COLORS.CARD_BACK : COLORS.ZONE_FILL).drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6).endFill();
     container.addChild(g);
-
     const content = new PIXI.Container();
-    if (isOpponent) content.rotation = Math.PI; 
+    if (isOpponent) content.rotation = Math.PI;
     container.addChild(content);
-
     const textRotation = isRest ? -Math.PI / 2 : 0;
     const yDir = isOpponent ? -1 : 1;
 
@@ -172,238 +87,123 @@ export const RealGame = () => {
       const cost = 'cost' in card ? card.cost : undefined;
       const attribute = 'attribute' in card ? (card.attribute as string) : undefined;
       const counter = 'counter' in card ? card.counter : undefined;
-
       if (power !== undefined) {
-        const powerTxt = new PIXI.Text(`POWER ${power}`, { 
-          fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
-        });
-        powerTxt.anchor.set(0.5); 
-        if (isRest) {
-          powerTxt.x = (-ch / 2 - 10) * yDir; powerTxt.y = 0;
-        } else {
-          powerTxt.x = 0; powerTxt.y = (-ch / 2 - 10) * yDir;
-        }
-        powerTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
-        container.addChild(powerTxt);
+        const pTxt = new PIXI.Text(`POWER ${power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center' });
+        pTxt.anchor.set(0.5); pTxt.x = isRest ? (-ch / 2 - 10) * yDir : 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
+        pTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(pTxt);
       }
-
-      const nameStr = name || '';
-      const isResource = nameStr === 'DON!!' || nameStr === 'Trash' || nameStr === 'Deck';
-      const nameStyle = new PIXI.TextStyle({ 
-        fontSize: isResource ? 11 : 9, fill: isResource ? 0x000000 : 0x333333, fontWeight: 'bold', align: 'center',
-      });
-      const maxNameWidth = isWideName ? cw * 2.2 : cw * 1.8;
-      const displayName = truncateText(nameStr, nameStyle, maxNameWidth);
-      const nameTxt = new PIXI.Text(displayName, nameStyle);
-      nameTxt.anchor.set(0.5, isResource ? 0.5 : 0);
-      const nameOffset = 2; 
-      if (isRest) {
-        nameTxt.x = (isResource ? 0 : ch / 2 + nameOffset) * yDir; nameTxt.y = 0;
-      } else {
-        nameTxt.x = 0; nameTxt.y = (isResource ? 0 : ch / 2 + nameOffset) * yDir;
-      }
-      nameTxt.rotation = textRotation + (isOpponent ? Math.PI : 0);
-      container.addChild(nameTxt);
-
+      const nameStyle = new PIXI.TextStyle({ fontSize: (name === 'DON!!' || name === 'Trash') ? 11 : 9, fill: (name === 'DON!!' || name === 'Trash') ? 0x000000 : 0x333333, fontWeight: 'bold', align: 'center' });
+      const nTxt = new PIXI.Text(truncateText(name || '', nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
+      nTxt.anchor.set(0.5, (name === 'DON!!' || name === 'Trash') ? 0.5 : 0);
+      nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir : 0;
+      nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir;
+      nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
       if (counter !== undefined) {
-        const counterTxt = new PIXI.Text(`+${counter}`, {
-          fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
-        });
-        counterTxt.anchor.set(0.5);
-        counterTxt.x = -cw / 2 + 8; counterTxt.y = 0; counterTxt.rotation = -Math.PI / 2;
-        content.addChild(counterTxt);
+        const cTxt = new PIXI.Text(`+${counter}`, { fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold' });
+        cTxt.anchor.set(0.5); cTxt.x = -cw / 2 + 8; cTxt.y = 0; cTxt.rotation = -Math.PI / 2; content.addChild(cTxt);
       }
-
       if (attribute && power !== undefined) {
-        const attrTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
-        attrTxt.anchor.set(1, 0);
-        attrTxt.x = cw / 2 - 4; attrTxt.y = -ch / 2 + 4;
-        content.addChild(attrTxt);
+        const aTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
+        aTxt.anchor.set(1, 0); aTxt.x = cw / 2 - 4; aTxt.y = -ch / 2 + 4; content.addChild(aTxt);
       }
-
       if (cost !== undefined) {
-        const costBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
-        costBg.x = -cw / 2 + 10; costBg.y = -ch / 2 + 10;
-        const costTxt = new PIXI.Text(cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
-        costTxt.anchor.set(0.5);
-        costBg.addChild(costTxt);
-        content.addChild(costBg);
+        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
+        cBg.x = -cw / 2 + 10; cBg.y = -ch / 2 + 10;
+        const cTxt = new PIXI.Text(cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
+        cTxt.anchor.set(0.5); cBg.addChild(cTxt); content.addChild(cBg);
       }
-    } else {
-      const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
-      backTxt.anchor.set(0.5);
-      backTxt.rotation = textRotation; 
-      container.addChild(backTxt); 
     }
-
     if (badgeCount !== undefined) {
-      const badgeR = 9; const margin = 2; const offset = badgeR + margin;
-      const badge = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, badgeR).endFill();
-      const localW = cw / 2 - offset; const localH = ch / 2 - offset;
-      let bx = 0, by = 0;
-      if (isRest) {
-         const restX = isCountBadge ? -localW : localW; const restY = -localH; 
-         bx = restX * yDir; by = restY * yDir;
-      } else {
-         const normX = localW; const normY = isCountBadge ? -localH : localH;
-         bx = normX * yDir; by = normY * yDir;
-      }
-      badge.x = bx; badge.y = by;
-      const bTxt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
-      bTxt.anchor.set(0.5);
-      badge.rotation = -container.rotation + (isOpponent ? Math.PI : 0);
-      badge.addChild(bTxt);
-      container.addChild(badge);
+      const b = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 9).endFill();
+      b.x = isRest ? (ch / 2) * yDir : (cw / 2) * yDir;
+      b.y = isRest ? (isCountBadge ? -cw / 2 : cw / 2) * yDir : (isCountBadge ? -ch / 2 : ch / 2) * yDir;
+      const bt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
+      bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
-
     return container;
-  }, [sendAction]); 
+  }, [sendAction]);
 
   const drawLayout = useCallback((state: GameState) => {
-    const app = appRef.current;
-    if (!app) return;
+    const app = appRef.current; if (!app) return;
     app.stage.removeChildren();
-
     const W = app.renderer.width / app.renderer.resolution;
     const H = app.renderer.height / app.renderer.resolution;
     const coords = calculateCoordinates(W, H);
     const { CH, CW, V_GAP, Y_CTRL_START } = coords;
-
-    const bg = new PIXI.Graphics();
-    bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, Y_CTRL_START).endFill();
-    bg.beginFill(COLORS.CONTROL_BG).drawRect(0, Y_CTRL_START, W, LAYOUT.H_CTRL).endFill();
-    bg.beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + LAYOUT.H_CTRL, W, H).endFill();
+    const bg = new PIXI.Graphics().beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, Y_CTRL_START).endFill().beginFill(COLORS.CONTROL_BG).drawRect(0, Y_CTRL_START, W, LAYOUT.H_CTRL).endFill().beginFill(COLORS.PLAYER_BG).drawRect(0, Y_CTRL_START + LAYOUT.H_CTRL, W, H).endFill();
     app.stage.addChild(bg);
-
     const renderSide = (p: any, isOpp: boolean) => {
       const side = new PIXI.Container();
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
-
-      // Row 1: Field
-      const fields = p.zones.field || [];
-      fields.forEach((c: any, i: number) => {
-        const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field');
-        card.x = coords.getFieldX(i, W, CW, fields.length); 
-        card.y = coords.getY(1, CH, V_GAP);
-        side.addChild(card);
-      });
-
-      // Row 2: 司令部
+      const fs = p.zones.field || [];
+      fs.forEach((c: any, i: number) => { const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); card.x = coords.getFieldX(i, W, CW, fs.length); card.y = coords.getY(1, CH, V_GAP); side.addChild(card); });
       const r2Y = coords.getY(2, CH, V_GAP);
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, p.zones.life?.length || 0, false, false, 'other');
-      life.x = coords.getLifeX(W); life.y = r2Y;
-      side.addChild(life);
-
+      life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
-      ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
-      side.addChild(ldr);
-
-      if (p.zones.stage) {
-        const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field');
-        stg.x = coords.getStageX(W); stg.y = r2Y;
-        side.addChild(stg);
-      }
-
+      ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
+      if (p.zones.stage) { const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); }
       const deck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
-      deck.x = coords.getDeckX(W); deck.y = r2Y;
-      side.addChild(deck);
-
-      // Row 3: ドン!! & トラッシュ
+      deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
       const r3Y = coords.getY(3, CH, V_GAP);
       const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10, false, false, 'other');
-      donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
-      side.addChild(donDk);
-
+      donDk.x = coords.getDonDeckX(W); donDk.y = r3Y; side.addChild(donDk);
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
-      donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
-      side.addChild(donAct);
-
+      donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
-      donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
-      side.addChild(donRst);
-
+      donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
       const tCount = p.zones.trash?.length || 0;
       const trash = renderCard(p.zones.trash?.[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount, false, false, 'other');
-      trash.x = coords.getTrashX(W); trash.y = r3Y;
-      side.addChild(trash);
-
-      // Row 4: Hand
-      if (!isOpp) {
-        (p.zones.hand || []).forEach((c: any, i: number) => {
-          const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand');
-          card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP);
-          side.addChild(card);
-        });
-      }
+      trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
+      if (!isOpp) { (p.zones.hand || []).forEach((c: any, i: number) => { const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand'); card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); side.addChild(card); }); }
     };
-
     renderSide(state.players[opponentId], true);
     renderSide(state.players[observerId], false);
   }, [observerId, opponentId, renderCard]);
 
-  // 1. Pixi App Initialization (Once)
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
-
-    const app = new PIXI.Application({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      backgroundColor: 0xFFFFFF,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
-      antialias: true,
-    });
-
+    const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1, autoDensity: true, antialias: true });
     containerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
-
-    const handleResize = () => {
-      app.renderer.resize(window.innerWidth, window.innerHeight);
-    };
+    const handleResize = () => app.renderer.resize(window.innerWidth, window.innerHeight);
     window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      app.destroy(true);
-      appRef.current = null;
-    };
+    return () => { window.removeEventListener('resize', handleResize); app.destroy(true); appRef.current = null; };
   }, []);
 
-  // 2. Draw Loop (On State Change)
-  useEffect(() => {
-    if (!appRef.current) return;
-    drawLayout(gameState);
-  }, [gameState, drawLayout]);
+  useEffect(() => { if (!appRef.current) return; drawLayout(gameState); }, [gameState, drawLayout]);
 
   return (
     <div style={{ position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100vw', height: '100vh' }} />
       
-      {/* デバッグ情報 */}
-      <div style={{
-        position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)',
-        color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none'
-      }}>
-        <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
-      </div>
-
-      {/* アクションメニュー */}
-      {selectedCard && !isDetailMode && (
-        <ActionMenu 
-          cardName={selectedCard.card.name || ''} 
-          location={selectedCard.location}
-          onSelect={handleActionSelect}
-          onClose={() => setSelectedCard(null)}
-        />
+      {/* 4. エラートースト通知UI */}
+      {errorToast && (
+        <div style={{
+          position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+          backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px',
+          borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px',
+          cursor: 'pointer'
+        }} onClick={() => setErrorToast(null)}>
+          {errorToast}
+          <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップで閉じる</div>
+        </div>
       )}
 
-      {/* カード詳細シート */}
+      {/* 5. 通信中インジケータ */}
+      {isPending && (
+        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', zIndex: 9000 }}>
+          通信中...
+        </div>
+      )}
+
+      {selectedCard && !isDetailMode && (
+        <ActionMenu cardName={selectedCard.card.name || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
+      )}
       {selectedCard && isDetailMode && (
-        <CardDetailSheet 
-          card={selectedCard.card} 
-          onClose={() => setSelectedCard(null)}
-        />
+        <CardDetailSheet card={selectedCard.card} onClose={() => setSelectedCard(null)} />
       )}
     </div>
   );
