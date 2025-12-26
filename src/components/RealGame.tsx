@@ -150,7 +150,7 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // 1. フィールド参照の修正 (zones.field)
+      // 1. Field参照の修正 (zones.field)
       const fs = p.zones?.field || [];
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
@@ -236,4 +236,11 @@ export const RealGame = () => {
         </div>
       )}
       {selectedCard && !isDetailMode && (
-        <ActionMenu cardName={selectedCard.card.name || ''
+        <ActionMenu cardName={selectedCard.card.name || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
+      )}
+      {selectedCard && isDetailMode && (
+        <CardDetailSheet card={selectedCard.card} onClose={() => setSelectedCard(null)} />
+      )}
+    </div>
+  );
+};
