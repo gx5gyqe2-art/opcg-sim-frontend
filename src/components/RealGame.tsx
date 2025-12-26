@@ -76,7 +76,7 @@ export const RealGame = () => {
       donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
 
-    // リーダーの場合は強制的に表向きとして描画
+    // リーダーカードを強制的に表向きにする
     const isLeader = card[prop.TYPE] === prop.TYPE_LEADER;
     const isBackSide = isLeader ? false : card[prop.IS_FACE_UP] === false;
 
@@ -156,7 +156,7 @@ export const RealGame = () => {
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
 
-      // ドンデッキの描画: CONSTからキーと初期値を取得するように修正
+      // ドン!!デッキの表示復旧
       const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
       const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
       donDk.x = coords.getDeckX(W); donDk.y = r2Y; side.addChild(donDk);
@@ -196,15 +196,16 @@ export const RealGame = () => {
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* 不要なUIを削除: ステータスパネルのみ残し、デバッグパネルを削除 */}
+      {/* ステータスパネル (不要なデバッグパネルは削除) */}
       {gameState && (
-        <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none', zIndex: 100 }}>
           <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
           <div>GAME ID: {gameId}</div>
           <div>OBSERVER: {currentObserverId}</div>
         </div>
       )}
 
+      {/* UI要素の zIndex を PixiJS より前面に設定 */}
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}
