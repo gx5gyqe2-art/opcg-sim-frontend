@@ -12,7 +12,6 @@ export const apiClient = {
     const res = await fetch(`${BASE_URL}${ENDPOINTS.HEALTH}`);
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
     
-    // 生存確認成功のログ
     logger.log({
       level: 'debug',
       action: 'api.health_check',
@@ -39,7 +38,6 @@ export const apiClient = {
 
     const data = await res.json();
 
-    // ★ サーバーからの受信データを即座にログ出力
     logger.log({
       level: 'info',
       action: 'api.receive_create',
@@ -56,7 +54,8 @@ export const apiClient = {
       logger.log({
         level: 'error',
         action: 'api.schema_error',
-        msg: `Key "${stateKey}" not found in response`,
+        // エラー回避: stateKey を String() で囲む
+        msg: `Key "${String(stateKey)}" not found in response`,
         sessionId: data.game_id || 'unknown'
       });
       throw new Error("Invalid Response Schema");
@@ -75,11 +74,10 @@ export const apiClient = {
 
     const result = await response.json();
 
-    // ★ アクションの結果をログ出力
     logger.log({
       level: 'info',
       action: 'api.receive_action',
-      msg: `Action "${request.type}" processed`,
+      msg: `Action processed`, // request.type への参照を削除（型定義に合わせて調整）
       sessionId: gameId,
       payload: result
     });
