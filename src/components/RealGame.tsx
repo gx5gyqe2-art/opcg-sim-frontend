@@ -76,7 +76,6 @@ export const RealGame = () => {
       donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
 
-    // リーダー判定の修正: 強制的に表面化
     const isLeader = card["type"] === "LEADER" || card[prop.TYPE] === "LEADER";
     const isBackSide = isLeader ? false : card[prop.IS_FACE_UP] === false;
 
@@ -144,14 +143,12 @@ export const RealGame = () => {
       const r3Y = coords.getY(3, CH, V_GAP);
       const r4Y = coords.getY(4, CH, V_GAP);
 
-      // Row 1: フィールド
       const fs = zones["field"] || []; 
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
         card.x = coords.getFieldX(i, W, CW, fs.length); card.y = r1Y; side.addChild(card); 
       });
 
-      // Row 2: ライフ、リーダー、ステージ、メインデッキ
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, zones["life"]?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
@@ -166,8 +163,6 @@ export const RealGame = () => {
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
-      // Row 3: ドン!!デッキ、アクティブ、レスト、トラッシュ
-      // 復元: ドン!!デッキを r3Y に戻す
       const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
       const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
       donDk.x = coords.getDonDeckX(W); 
@@ -184,7 +179,6 @@ export const RealGame = () => {
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
-      // Row 4: 手札
       if (!isOpp) { 
         const hs = zones["hand"] || [];
         hs.forEach((c: any, i: number) => { 
@@ -217,6 +211,14 @@ export const RealGame = () => {
           <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
           <div>GAME ID: {gameId}</div>
           <div>OBSERVER: {currentObserverId}</div>
+        </div>
+      )}
+
+      {/* errorToast を使用してビルドエラーを解消 */}
+      {errorToast && (
+        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
+          {errorToast}
+          <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップして閉じる</div>
         </div>
       )}
 
