@@ -96,8 +96,9 @@ export const RealGame = () => {
       const nameStyle = new PIXI.TextStyle({ fontSize: (name === 'DON!!' || name === 'Trash') ? 11 : 9, fill: (name === 'DON!!' || name === 'Trash') ? 0x000000 : 0x333333, fontWeight: 'bold', align: 'center' });
       const nTxt = new PIXI.Text(truncateText(name, nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
       nTxt.anchor.set(0.5, (name === 'DON!!' || name === 'Trash') ? 0.5 : 0);
-      nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir : 0;
-      nTxt.y = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir;
+      nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : (ch / 2 + 2) * yDir ) : 0;
+      // 修正箇所: 三項演算子の構文エラーを修正
+      nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : (ch / 2 + 2) * yDir );
       nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
       if (cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
@@ -183,13 +184,10 @@ export const RealGame = () => {
 
   useEffect(() => { if (!appRef.current || !gameState) return; drawLayout(gameState); }, [gameState, drawLayout]);
 
-  // JSX構造をオーバーレイ方式に変更
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      {/* 1. PixiJS キャンバス用コンテナ（常にレンダリングする） */}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* 2. デバッグ情報（データがある時のみ表示） */}
       {gameState && (
         <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none' }}>
           <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
@@ -198,7 +196,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* 3. 通信エラートースト */}
       {errorToast && (
         <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
           {errorToast}
@@ -206,7 +203,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* 4. ローディング画面（データがない時だけ上に被せる） */}
       {!gameState && (
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -218,7 +214,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* 5. アクション/詳細 UI */}
       {selectedCard && !isDetailMode && (
         <ActionMenu cardName={selectedCard.card[CONST.CARD_PROPERTIES.NAME] || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}
