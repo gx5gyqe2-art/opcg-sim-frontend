@@ -1,17 +1,13 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
 
-// 自作モジュール
+// 各種定数・ロジックのインポート
 import { COLORS } from '../layout/layout.constants';
 import { LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
-
-// UI部品
 import { CardDetailSheet } from '../ui/CardDetailSheet';
-
-// 共通マスター
 import CONST from '../../shared_constants.json';
 
 // 短縮参照
@@ -30,6 +26,7 @@ export const RealGame = () => {
     setGameState
   );
 
+  // --- カード描画関数 ---
   const renderCard = useCallback((
     card: any, 
     x: number, 
@@ -52,6 +49,7 @@ export const RealGame = () => {
     container.addChild(bg);
 
     if (card.faceUp) {
+      // パワー
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(card.power.toString(), {
           fontSize: S.FONT_SIZE.POWER,
@@ -63,6 +61,7 @@ export const RealGame = () => {
         container.addChild(pTxt);
       }
 
+      // 名前
       const nTxt = new PIXI.Text(card.name || "", {
         fontSize: card.type === 'RESOURCE' ? S.FONT_SIZE.NAME_RESOURCE : S.FONT_SIZE.NAME,
         fill: COLORS.TEXT_MAIN,
@@ -73,6 +72,7 @@ export const RealGame = () => {
       nTxt.y = S.OFFSET.NAME_Y;
       container.addChild(nTxt);
 
+      // コスト
       if (card.cost !== undefined) {
         const cBg = new PIXI.Graphics()
           .beginFill(COLORS.COST_BG)
@@ -92,6 +92,7 @@ export const RealGame = () => {
         container.addChild(cTxt);
       }
     } else {
+      // 裏面
       const backTxt = new PIXI.Text(T.BACK_SIDE, {
         fontSize: S.FONT_SIZE.BACK,
         fill: 0xFFFFFF,
@@ -102,6 +103,7 @@ export const RealGame = () => {
       container.addChild(backTxt);
     }
 
+    // 枚数バッジ
     if (badgeCount > 0) {
       const bG = new PIXI.Graphics()
         .beginFill(COLORS.BADGE_BG)
@@ -121,7 +123,6 @@ export const RealGame = () => {
 
     container.eventMode = 'static';
     container.cursor = 'pointer';
-    
     let pressTimer: any;
     container.on('pointerdown', () => {
       pressTimer = setTimeout(() => {
@@ -135,6 +136,7 @@ export const RealGame = () => {
     return container;
   }, []);
 
+  // --- PIXI アプリケーションの構築 ---
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -163,18 +165,42 @@ export const RealGame = () => {
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
 
-      // --- ライフ描画テスト ---
-      if (gameState.p1?.life) {
-        gameState.p1.life.forEach((card: any, i: number) => {
-          const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
-          const y = coords.getY(1, H, coords.V_GAP);
-          mainContainer.addChild(renderCard(card, x, y, coords.CW, coords.CH, false, 'life'));
-        });
+      // --- P1 (自分) の描画 ---
+      const p1 = gameState.p1;
+      
+      // Life
+      p1.life?.forEach((card: any, i: number) => {
+        const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
+        mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
+      });
+
+      // Leader
+      if (p1.leader) {
+        mainContainer.addChild(renderCard(p1.leader, coords.getLeaderX(W), coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'leader'));
       }
+
+      // Field
+      p1.field?.forEach((card: any, i: number) => {
+        const x = coords.getFieldX(i, W, coords.CW, p1.field.length);
+        mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'field'));
+      });
+
+      // Hand
+      p1.hand?.forEach((card: any, i: number) => {
+        mainContainer.addChild(renderCard(card, coords.getHandX(i, W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
+      });
+
+      // Deck & Trash
+      mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.deck?.length));
+      const topTrash = p1.trash?.[p1.trash.length - 1] || { faceUp: false };
+      mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.trash?.length));
+
+      // --- P2 (相手) の描画 (Y座標反転等はEngineで吸収している前提) ---
+      // ※ 簡易化のため同様のロジックでP2も描画（座標計算側で調整が必要な場合は Engine を修正）
     });
 
     return () => app.destroy(true, true);
-  }, [gameState, renderCard]);
+  }, [gameState, renderCard, startGame, isPending]);
 
   return (
     <div ref={pixiContainerRef} className="game-screen">
@@ -183,10 +209,7 @@ export const RealGame = () => {
       )}
       {errorToast && <div className="error-toast">{errorToast}</div>}
       {isDetailMode && selectedCard && (
-        <CardDetailSheet 
-          card={selectedCard.card} 
-          onClose={() => setIsDetailMode(false)} 
-        />
+        <CardDetailSheet card={selectedCard.card} onClose={() => setIsDetailMode(false)} />
       )}
     </div>
   );
