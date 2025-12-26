@@ -54,7 +54,8 @@ export const RealGame = () => {
     let truncated = text;
     while (truncated.length > 0) {
       truncated = truncated.slice(0, -1);
-      if (PIXI.TextMetrics.measureText(truncated + '...', style).width <= maxWidth) return truncated + '...';
+      const check = truncated + '...';
+      if (PIXI.TextMetrics.measureText(check, style).width <= maxWidth) return check; // 2枚目の判定ロジック
     }
     return '...';
   };
@@ -90,28 +91,62 @@ export const RealGame = () => {
       const name = card[prop.NAME] || '';
       const power = card[prop.POWER];
       const cost = card[prop.COST];
+      const attribute = card[prop.ATTRIBUTE]; // 追加
+      const counter = card[prop.COUNTER];     // 追加
+
+      // 1. パワー (1枚目の引数/条件を維持しつつ座標計算のみ整理)
       if (power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center' });
         pTxt.anchor.set(0.5); pTxt.x = isRest ? (-ch / 2 - 10) * yDir : 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
         pTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(pTxt);
       }
-      const nameStyle = new PIXI.TextStyle({ fontSize: (name === 'DON!!' || name === 'Trash') ? 11 : 9, fill: (name === 'DON!!' || name === 'Trash') ? 0x000000 : 0x333333, fontWeight: 'bold', align: 'center' });
+
+      // 2. 名前 (2枚目のリソース判定と詳細オフセットを採用)
+      const isResource = name === 'DON!!' || name === 'Trash' || name === 'Deck';
+      const nameStyle = new PIXI.TextStyle({ fontSize: isResource ? 11 : 9, fill: isResource ? 0x000000 : 0x333333, fontWeight: 'bold', align: 'center' });
       const nTxt = new PIXI.Text(truncateText(name, nameStyle, isWideName ? cw * 2.2 : cw * 1.8), nameStyle);
-      nTxt.anchor.set(0.5, (name === 'DON!!' || name === 'Trash') ? 0.5 : 0);
-      nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : (ch / 2 + 2) * yDir ) : 0;
-      nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : (ch / 2 + 2) * yDir );
+      nTxt.anchor.set(0.5, isResource ? 0.5 : 0);
+      nTxt.x = isRest ? (isResource ? 0 : (ch / 2 + 2) * yDir) : 0;
+      nTxt.y = isRest ? 0 : (isResource ? 0 : (ch / 2 + 2) * yDir);
       nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
+
+      // 3. カウンター (2枚目から移植)
+      if (counter !== undefined && counter > 0) {
+        const cntTxt = new PIXI.Text(`+${counter}`, { fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold' });
+        cntTxt.anchor.set(0.5); cntTxt.x = -cw / 2 + 8; cntTxt.y = 0; cntTxt.rotation = -Math.PI / 2;
+        content.addChild(cntTxt);
+      }
+
+      // 4. 属性 (2枚目から移植)
+      if (attribute && power !== undefined) {
+        const attrTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
+        attrTxt.anchor.set(1, 0); attrTxt.x = cw / 2 - 4; attrTxt.y = -ch / 2 + 4;
+        content.addChild(attrTxt);
+      }
+
+      // 5. コスト (1枚目の描画方法を維持)
       if (cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         cBg.x = -cw / 2 + 10; cBg.y = -ch / 2 + 10;
         const cTxt = new PIXI.Text(cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
         cTxt.anchor.set(0.5); cBg.addChild(cTxt); content.addChild(cBg);
       }
+    } else {
+      // 背面テキスト (2枚目から移植)
+      const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
+      backTxt.anchor.set(0.5); backTxt.rotation = textRotation; container.addChild(backTxt);
     }
+
+    // バッジ (2枚目の詳細な配置ロジックを移植)
     if (badgeCount !== undefined) {
-      const b = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, 9).endFill();
-      b.x = isRest ? (ch / 2) * yDir : (cw / 2) * yDir;
-      b.y = isRest ? (isCountBadge ? -cw / 2 : cw / 2) * yDir : (isCountBadge ? -ch / 2 : ch / 2) * yDir;
+      const bR = 9; const offset = bR + 2;
+      const b = new PIXI.Graphics().beginFill(isCountBadge ? 0x333333 : COLORS.BADGE_BG).drawCircle(0, 0, bR).endFill();
+      const lW = cw / 2 - offset; const lH = ch / 2 - offset;
+      if (isRest) {
+        b.x = (isCountBadge ? -lW : lW) * yDir; b.y = -lH * yDir;
+      } else {
+        b.x = lW * yDir; b.y = (isCountBadge ? -lH : lH) * yDir;
+      }
       const bt = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bt.anchor.set(0.5); b.rotation = -container.rotation + (isOpponent ? Math.PI : 0); b.addChild(bt); container.addChild(b);
     }
@@ -142,6 +177,7 @@ export const RealGame = () => {
       const r2Y = coords.getY(2, CH, V_GAP);
       const r3Y = coords.getY(3, CH, V_GAP);
       const r4Y = coords.getY(4, CH, V_GAP);
+      const prop = CONST.CARD_PROPERTIES;
 
       const fs = zones["field"] || []; 
       fs.forEach((c: any, i: number) => { 
@@ -149,7 +185,7 @@ export const RealGame = () => {
         card.x = coords.getFieldX(i, W, CW, fs.length); card.y = r1Y; side.addChild(card); 
       });
 
-      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, zones["life"]?.length || 0, false, false, 'other');
+      const life = renderCard({ [prop.IS_FACE_UP]: false, [prop.NAME]: 'Life' }, CW, CH, isOpp, zones["life"]?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
       if (zones["stage"]) { 
@@ -157,24 +193,24 @@ export const RealGame = () => {
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
 
-      const mainDeck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
+      const mainDeck = renderCard({ [prop.IS_FACE_UP]: false, [prop.NAME]: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
       mainDeck.x = coords.getDeckX(W); mainDeck.y = r2Y; side.addChild(mainDeck);
 
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
       const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
-      const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
+      const donDk = renderCard({ [prop.NAME]: 'DON!!', [prop.IS_FACE_UP]: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
       donDk.x = coords.getDonDeckX(W); donDk.y = r3Y; side.addChild(donDk);
 
-      const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
+      const donAct = renderCard({ [prop.NAME]: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
 
-      const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
+      const donRst = renderCard({ [prop.NAME]: 'DON!!', [prop.IS_REST]: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
 
       const ts = zones["trash"] || [];
-      const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
+      const trash = renderCard(ts[ts.length - 1] || { [prop.NAME]: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
       if (!isOpp) { 
@@ -234,7 +270,7 @@ export const RealGame = () => {
         <ActionMenu cardName={selectedCard.card[CONST.CARD_PROPERTIES.NAME] || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}
       {selectedCard && isDetailMode && (
-        <CardDetailSheet card={selectedCard.card} onClose={() => setSelectedCard(null)} />
+        <CardDetailSheet card={selectedCard.card} onClose={() => { setSelectedCard(null); setIsDetailMode(false); }} />
       )}
     </div>
   );
