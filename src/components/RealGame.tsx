@@ -8,7 +8,6 @@ import { ActionMenu } from './ui/ActionMenu';
 import { CardDetailSheet } from './ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 
-// インデックス署名を追加して動的アクセスを許可
 type DrawTarget = {
   [key: string]: any;
 };
@@ -77,7 +76,7 @@ export const RealGame = () => {
       donBg.x = 6; donBg.y = 6; container.addChild(donBg);
     }
 
-    // 1. リーダー判定の修正: 直接 "type" を参照して確実に表面化
+    // リーダー判定の修正: 強制的に表面化
     const isLeader = card["type"] === "LEADER" || card[prop.TYPE] === "LEADER";
     const isBackSide = isLeader ? false : card[prop.IS_FACE_UP] === false;
 
@@ -140,48 +139,57 @@ export const RealGame = () => {
       app.stage.addChild(side);
       
       const zones = p.zones || {};
+      const r1Y = coords.getY(1, CH, V_GAP);
+      const r2Y = coords.getY(2, CH, V_GAP);
+      const r3Y = coords.getY(3, CH, V_GAP);
+      const r4Y = coords.getY(4, CH, V_GAP);
+
+      // Row 1: フィールド
       const fs = zones["field"] || []; 
       fs.forEach((c: any, i: number) => { 
         const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
-        card.x = coords.getFieldX(i, W, CW, fs.length); card.y = coords.getY(1, CH, V_GAP); side.addChild(card); 
+        card.x = coords.getFieldX(i, W, CW, fs.length); card.y = r1Y; side.addChild(card); 
       });
-      const r2Y = coords.getY(2, CH, V_GAP);
+
+      // Row 2: ライフ、リーダー、ステージ、メインデッキ
       const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, zones["life"]?.length || 0, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
-      
-      const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
-      ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
       if (zones["stage"]) { 
         const stg = renderCard(zones["stage"], CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
 
-      // 2. ドン!!デッキの座標修正: getDonDeckX を使用してメインデッキとの重なりを解消
+      const mainDeck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
+      mainDeck.x = coords.getDeckX(W); mainDeck.y = r2Y; side.addChild(mainDeck);
+
+      const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
+      ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
+
+      // Row 3: ドン!!デッキ、アクティブ、レスト、トラッシュ
+      // 復元: ドン!!デッキを r3Y に戻す
       const donDkCount = p[CONST.PLAYER_PROPERTIES.DON_DECK_COUNT] ?? CONST.GAME_CONFIG.INITIAL_DON_COUNT;
       const donDk = renderCard({ name: 'DON!!', is_face_up: false }, CW, CH, isOpp, donDkCount, false, false, 'other');
       donDk.x = coords.getDonDeckX(W); 
-      donDk.y = r2Y;
+      donDk.y = r3Y;
       side.addChild(donDk);
 
-      const mainDeck = renderCard({ is_face_up: false, name: 'Deck' }, CW, CH, isOpp, 40, false, false, 'other');
-      mainDeck.x = coords.getDeckX(W);
-      mainDeck.y = r2Y;
-      side.addChild(mainDeck);
-
-      const r3Y = coords.getY(3, CH, V_GAP);
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
+
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
+
       const ts = zones["trash"] || [];
       const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
+
+      // Row 4: 手札
       if (!isOpp) { 
         const hs = zones["hand"] || [];
         hs.forEach((c: any, i: number) => { 
           const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand'); 
-          card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); side.addChild(card); 
+          card.x = coords.getHandX(i, W); card.y = r4Y; side.addChild(card); 
         }); 
       }
     };
@@ -204,7 +212,6 @@ export const RealGame = () => {
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* ステータスパネル (zIndexを確保) */}
       {gameState && (
         <div style={{ position: 'absolute', top: 40, left: 5, background: 'rgba(0,0,0,0.7)', color: '#fff', padding: '4px 8px', fontSize: '10px', borderRadius: '4px', pointerEvents: 'none', zIndex: 100 }}>
           <div>TURN: {gameState.turn_info.turn_count} ({gameState.turn_info.current_phase})</div>
@@ -213,15 +220,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* エラートースト */}
-      {errorToast && (
-        <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ff3b30', color: 'white', padding: '12px 20px', borderRadius: '8px', zIndex: 9999, fontSize: '12px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', width: '90%', maxWidth: '400px', cursor: 'pointer' }} onClick={() => setErrorToast(null)}>
-          {errorToast}
-          <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>タップして閉じる</div>
-        </div>
-      )}
-
-      {/* ローディング幕 */}
       {!gameState && (
         <div style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -233,7 +231,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* 3. zIndexを考慮した UI コンポーネント */}
       {selectedCard && !isDetailMode && (
         <ActionMenu cardName={selectedCard.card[CONST.CARD_PROPERTIES.NAME] || ''} location={selectedCard.location} onSelect={handleActionSelect} onClose={() => setSelectedCard(null)} />
       )}

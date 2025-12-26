@@ -32,22 +32,22 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getLeaderX: (width) => width * 0.43,
     getStageX: (width) => width * 0.65,
     getDeckX: (width) => width * 0.85,
+    // 復元: ドン!!デッキを左端（ライフと同じ垂直ライン）に戻す
     getDonDeckX: (width) => width * 0.15,
     getDonActiveX: (width) => width * 0.38,
     getDonRestX: (width) => width * 0.60,
     getTrashX: (width) => width * 0.85,
     
-    // 修正: 左端の制限を撤廃し、単純なセンタリング + 視覚補正(20px) に変更
     getFieldX: (i, width, cardWidth, totalCards) => {
       const gap = 35;
       const totalW = totalCards * cardWidth + (totalCards - 1) * gap;
-      // 単純な中央寄せ計算 + 視覚バランス調整
       const startX = (width - totalW) / 2 + 20; 
       return startX + i * (cardWidth + gap);
     },
 
     getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
     getY: (row, h, g) => {
+      // 復元: 各行の垂直オフセットを昔の正常な値に戻す
       const offset = row === 1 ? 0.2 : (row - 0.55); 
       return offset * (h + g);
     },
