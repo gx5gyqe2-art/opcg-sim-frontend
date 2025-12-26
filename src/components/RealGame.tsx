@@ -35,20 +35,11 @@ export const RealGame = () => {
   const handleActionSelect = (actionType: string) => {
     if (!selectedCard || !selectedCard.card.uuid) return;
     const cardUuid = selectedCard.card.uuid;
-
     switch (actionType) {
-      case 'PLAY_CARD':
-        sendAction('PLAY_CARD', { card_id: cardUuid });
-        break;
-      case 'ATTACK':
-        sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] });
-        break;
-      case 'ATTACH_DON':
-        sendAction('ATTACH_DON', { target_ids: [cardUuid], extra: { count: 1 } });
-        break;
-      case 'ACTIVATE':
-        sendAction('ACTIVATE', { card_id: cardUuid });
-        break;
+      case 'PLAY_CARD': sendAction('PLAY_CARD', { card_id: cardUuid }); break;
+      case 'ATTACK': sendAction('ATTACK', { card_id: cardUuid, target_ids: ['dummy'] }); break;
+      case 'ATTACH_DON': sendAction('ATTACH_DON', { target_ids: [cardUuid], extra: { count: 1 } }); break;
+      case 'ACTIVATE': sendAction('ACTIVATE', { card_id: cardUuid }); break;
     }
     setSelectedCard(null);
   };
@@ -66,10 +57,8 @@ export const RealGame = () => {
 
   const renderCard = useCallback((card: DrawTarget, cw: number, ch: number, isOpponent: boolean = false, badgeCount?: number, isCountBadge: boolean = false, isWideName: boolean = false, locationType: 'hand' | 'field' | 'other' = 'other'): PIXI.Container => {
     const container = new PIXI.Container();
-    container.eventMode = 'static';
-    container.cursor = 'pointer';
-    let pressTimer: any = null;
-    let isLongPress = false;
+    container.eventMode = 'static'; container.cursor = 'pointer';
+    let pressTimer: any = null; let isLongPress = false;
 
     container.on('pointerdown', () => {
       if (isOpponent) return;
@@ -95,15 +84,13 @@ export const RealGame = () => {
     const content = new PIXI.Container();
     if (isOpponent) content.rotation = Math.PI;
     container.addChild(content);
-    const textRotation = isRest ? -Math.PI / 2 : 0;
-    const yDir = isOpponent ? -1 : 1;
+    const textRotation = isRest ? -Math.PI / 2 : 0; const yDir = isOpponent ? -1 : 1;
 
     if (!isBackSide) {
       const name = 'name' in card ? card.name : '';
       const power = 'power' in card ? card.power : undefined;
       const cost = 'cost' in card ? card.cost : undefined;
       const attribute = 'attribute' in card ? (card.attribute as string) : undefined;
-      const counter = 'counter' in card ? card.counter : undefined;
       if (power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center' });
         pTxt.anchor.set(0.5); pTxt.x = isRest ? (-ch / 2 - 10) * yDir : 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
@@ -115,10 +102,6 @@ export const RealGame = () => {
       nTxt.x = isRest ? ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir : 0;
       nTxt.y = isRest ? 0 : ( (name === 'DON!!' || name === 'Trash') ? 0 : ch / 2 + 2 ) * yDir;
       nTxt.rotation = textRotation + (isOpponent ? Math.PI : 0); container.addChild(nTxt);
-      if (counter !== undefined) {
-        const cTxt = new PIXI.Text(`+${counter}`, { fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold' });
-        cTxt.anchor.set(0.5); cTxt.x = -cw / 2 + 8; cTxt.y = 0; cTxt.rotation = -Math.PI / 2; content.addChild(cTxt);
-      }
       if (attribute && power !== undefined) {
         const aTxt = new PIXI.Text(attribute, { fontSize: 7, fill: 0x666666 });
         aTxt.anchor.set(1, 0); aTxt.x = cw / 2 - 4; aTxt.y = -ch / 2 + 4; content.addChild(aTxt);
@@ -155,27 +138,25 @@ export const RealGame = () => {
       isOpp ? (side.x = W, side.y = Y_CTRL_START, side.rotation = Math.PI) : side.y = Y_CTRL_START + LAYOUT.H_CTRL;
       app.stage.addChild(side);
 
-      // 1. フィールド (p.zones.field)
-      const fields = p.zones.field || [];
-      fields.forEach((c: any, i: number) => {
-        const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field');
-        card.x = coords.getFieldX(i, W, CW, fields.length); 
-        card.y = coords.getY(1, CH, V_GAP);
-        side.addChild(card);
+      // 1. Field (zones.field)
+      const fs = p.zones?.field || [];
+      fs.forEach((c: any, i: number) => { 
+        const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'field'); 
+        card.x = coords.getFieldX(i, W, CW, fs.length); card.y = coords.getY(1, CH, V_GAP); side.addChild(card); 
       });
 
       const r2Y = coords.getY(2, CH, V_GAP);
-
-      // 2. ライフ (p.zones.life)
-      const lifeCount = p.zones.life?.length || 0;
-      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lifeCount, false, false, 'other');
+      // 2. Life (zones.life)
+      const lCount = p.zones?.life?.length || 0;
+      const life = renderCard({ is_face_up: false, name: 'Life' }, CW, CH, isOpp, lCount, false, false, 'other');
       life.x = coords.getLifeX(W); life.y = r2Y; side.addChild(life);
 
+      // 3. Leader (直下の leader)
       const ldr = renderCard(p.leader, CW, CH, isOpp, undefined, false, true, 'field');
       ldr.x = coords.getLeaderX(W); ldr.y = r2Y; side.addChild(ldr);
 
-      // 3. ステージ (p.zones.stage)
-      if (p.zones.stage) { 
+      // 4. Stage (zones.stage)
+      if (p.zones?.stage) { 
         const stg = renderCard(p.zones.stage, CW, CH, isOpp, undefined, false, true, 'field'); 
         stg.x = coords.getStageX(W); stg.y = r2Y; side.addChild(stg); 
       }
@@ -184,28 +165,23 @@ export const RealGame = () => {
       deck.x = coords.getDeckX(W); deck.y = r2Y; side.addChild(deck);
 
       const r3Y = coords.getY(3, CH, V_GAP);
-      const donDk = renderCard({ name: 'Don!!', is_face_up: false }, CW, CH, isOpp, 10, false, false, 'other');
-      donDk.x = coords.getDonDeckX(W); donDk.y = r3Y; side.addChild(donDk);
-
       const donAct = renderCard({ name: 'DON!!' }, CW, CH, isOpp, p.don_active?.length || 0, true, false, 'other');
       donAct.x = coords.getDonActiveX(W); donAct.y = r3Y; side.addChild(donAct);
 
       const donRst = renderCard({ name: 'DON!!', is_rest: true }, CW, CH, isOpp, p.don_rested?.length || 0, true, false, 'other');
       donRst.x = coords.getDonRestX(W); donRst.y = r3Y; side.addChild(donRst);
 
-      // 4. トラッシュ (p.zones.trash)
-      const trashCards = p.zones.trash || [];
-      const tCount = trashCards.length;
-      const trash = renderCard(trashCards[tCount - 1] || { name: 'Trash' }, CW, CH, isOpp, tCount, false, false, 'other');
+      // 5. Trash (zones.trash)
+      const ts = p.zones?.trash || [];
+      const trash = renderCard(ts[ts.length - 1] || { name: 'Trash' }, CW, CH, isOpp, ts.length, false, false, 'other');
       trash.x = coords.getTrashX(W); trash.y = r3Y; side.addChild(trash);
 
-      // 5. 手札 (p.zones.hand)
+      // 6. Hand (zones.hand)
       if (!isOpp) { 
-        const handCards = p.zones.hand || [];
-        handCards.forEach((c: any, i: number) => { 
+        const hs = p.zones?.hand || [];
+        hs.forEach((c: any, i: number) => { 
           const card = renderCard(c, CW, CH, isOpp, undefined, false, false, 'hand'); 
-          card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); 
-          side.addChild(card); 
+          card.x = coords.getHandX(i, W); card.y = coords.getY(4, CH, V_GAP); side.addChild(card); 
         }); 
       }
     };
@@ -216,8 +192,7 @@ export const RealGame = () => {
   useEffect(() => {
     if (!containerRef.current || appRef.current) return;
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: 0xFFFFFF, resolution: window.devicePixelRatio || 1, autoDensity: true, antialias: true });
-    containerRef.current.appendChild(app.view as HTMLCanvasElement);
-    appRef.current = app;
+    containerRef.current.appendChild(app.view as HTMLCanvasElement); appRef.current = app;
     const handleResize = () => app.renderer.resize(window.innerWidth, window.innerHeight);
     window.addEventListener('resize', handleResize);
     return () => { window.removeEventListener('resize', handleResize); app.destroy(true); appRef.current = null; };
