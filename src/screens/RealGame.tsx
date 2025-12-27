@@ -15,38 +15,6 @@ export const RealGame = () => {
 
   const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
 
-  // 【完全版】共通アクション送信関数
-  const handleAction = async (type: string, payload: any = {}) => {
-    // gameState.id が存在しない（ゲーム未開始）場合は処理しない
-    if (!gameState?.id) return;
-
-    // クライアント・サーバー間インターフェース定義（c_to_s_interface）に準拠
-    const body = {
-      request_id: crypto.randomUUID(),
-      action_type: type,
-      player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-      ...payload
-    };
-
-    try {
-      const res = await fetch(`/api/game/${gameState.id}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // 成功時に最新のゲーム状態を反映（game_state キーを定数参照）
-        if (data[CONST.API_ROOT_KEYS.GAME_STATE]) {
-          setGameState(data[CONST.API_ROOT_KEYS.GAME_STATE]);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to send action:", err);
-    }
-  };
-
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
     if (metrics.width <= maxWidth) return text;
@@ -56,6 +24,83 @@ export const RealGame = () => {
       if (PIXI.TextMetrics.measureText(truncated + '...', style).width <= maxWidth) return truncated + '...';
     }
     return '...';
+  };
+
+  // 共通アクション送信関数（ロガー統合版）
+  const handleAction = async (type: string, payload: any = {}) => {
+    if (!gameState?.id) return;
+
+    const requestId = crypto.randomUUID();
+    const actionBody = {
+      request_id: requestId,
+      action_type: type,
+      player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+      ...payload
+    };
+
+    // 1. 送信開始をサーバーログに記録
+    await fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: "FE",
+        player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+        action: "api.send_action",
+        level: "info",
+        sessionId: gameState.id,
+        msg: `Sending action trigger: ${type}`,
+        payload: actionBody,
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    try {
+      const res = await fetch(`/api/game/${gameState.id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(actionBody),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        
+        // 2. 成功をサーバーログに記録
+        await fetch('/api/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: "FE",
+            player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+            action: "api.receive_update_success",
+            level: "info",
+            sessionId: gameState.id,
+            msg: `Action ${type} processed successfully`,
+            timestamp: new Date().toISOString()
+          })
+        });
+
+        if (data[CONST.API_ROOT_KEYS.GAME_STATE]) {
+          setGameState(data[CONST.API_ROOT_KEYS.GAME_STATE]);
+        }
+      } else {
+        throw new Error(`Server returned status: ${res.status}`);
+      }
+    } catch (err: any) {
+      // 3. 失敗をサーバーログに記録
+      await fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: "FE",
+          player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+          action: "api.action_error",
+          level: "error",
+          sessionId: gameState.id,
+          msg: err.message || "Unknown error during action",
+          timestamp: new Date().toISOString()
+        })
+      });
+    }
   };
 
   const renderCard = useCallback((
@@ -101,78 +146,47 @@ export const RealGame = () => {
 
     if (!isBack) {
       if (card.power !== undefined) {
-        const pTxt = new PIXI.Text(`POWER ${card.power}`, { 
-          fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
-        });
+        const pTxt = new PIXI.Text(`POWER ${card.power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold' });
         pTxt.anchor.set(0.5); 
-        if (isRest) {
-          pTxt.x = (-ch / 2 - 10) * yDir; pTxt.y = 0;
-        } else {
-          pTxt.x = 0; pTxt.y = (-ch / 2 - 10) * yDir;
-        }
+        pTxt.x = 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
+        if (isRest) pTxt.x = (-ch / 2 - 10) * yDir;
         pTxt.rotation = textRotation;
         container.addChild(pTxt);
       }
 
-      const nameStyle = new PIXI.TextStyle({ 
-        fontSize: isResource ? 11 : 9, 
-        fontWeight: 'bold', 
-        fill: isResource ? 0x000000 : 0x333333,
-        align: 'center'
-      });
-      const maxNW = isWide ? cw * 2.2 : cw * 1.8;
-      const displayName = truncateText(cardName, nameStyle, maxNW);
+      const nameStyle = new PIXI.TextStyle({ fontSize: isResource ? 11 : 9, fontWeight: 'bold', fill: isResource ? 0x000000 : 0x333333 });
+      const displayName = truncateText(cardName, nameStyle, isWide ? cw * 2.2 : cw * 1.8);
       const nTxt = new PIXI.Text(displayName, nameStyle);
-      
       nTxt.anchor.set(0.5, isResource ? 0.5 : 0);
-      if (isRest) {
-        nTxt.x = (isResource ? 0 : ch / 2 + 2) * yDir; nTxt.y = 0;
-      } else {
-        nTxt.x = 0; nTxt.y = (ch / 2 + 2) * yDir;
-      }
+      nTxt.x = 0; nTxt.y = isRest ? 0 : (ch / 2 + 2) * yDir;
+      if (isRest) nTxt.x = (isResource ? 0 : ch / 2 + 2) * yDir;
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
 
       if (card.counter !== undefined && card.counter > 0) {
-        const cTxt = new PIXI.Text(`+${card.counter}`, {
-          fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
-        });
-        cTxt.anchor.set(0.5);
-        cTxt.x = -cw / 2 + 8;
-        cTxt.y = 0;
-        cTxt.rotation = -Math.PI / 2;
+        const cTxt = new PIXI.Text(`+${card.counter}`, { fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold' });
+        cTxt.anchor.set(0.5); cTxt.x = -cw / 2 + 8; cTxt.y = 0; cTxt.rotation = -Math.PI / 2;
         container.addChild(cTxt);
       }
 
       if (card.cost !== undefined) {
-        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
-        cBg.x = -cw / 2 + 10;
-        cBg.y = -ch / 2 + 10;
+        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw / 2 + 10, -ch / 2 + 10, 7).endFill();
         const cTxt = new PIXI.Text(card.cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
-        cTxt.anchor.set(0.5);
-        cBg.addChild(cTxt);
-        container.addChild(cBg);
+        cTxt.anchor.set(0.5); cTxt.position.set(-cw / 2 + 10, -ch / 2 + 10);
+        container.addChild(cBg, cTxt);
       }
       
       if (card.attribute && card.power !== undefined) {
         let attrColor = 0x666666;
-        const attr = card.attribute;
-        if (attr === 'SLASH' || attr === '斬') attrColor = 0xc0392b;
-        if (attr === 'STRIKE' || attr === '打') attrColor = 0x2980b9;
-        if (attr === 'RANGED' || attr === '突') attrColor = 0x27ae60;
-        if (attr === 'SPECIAL' || attr === '特') attrColor = 0x8e44ad;
-        if (attr === 'WISDOM' || attr === '知') attrColor = 0xd35400;
-
-        const aTxt = new PIXI.Text(attr, { fontSize: 7, fill: attrColor, fontWeight: 'bold' });
-        aTxt.anchor.set(1, 0);
-        aTxt.x = cw / 2 - 4;
-        aTxt.y = -ch / 2 + 4;
+        if (card.attribute === '斬') attrColor = 0xc0392b;
+        if (card.attribute === '打') attrColor = 0x2980b9;
+        const aTxt = new PIXI.Text(card.attribute, { fontSize: 7, fill: attrColor, fontWeight: 'bold' });
+        aTxt.anchor.set(1, 0); aTxt.x = cw / 2 - 4; aTxt.y = -ch / 2 + 4;
         container.addChild(aTxt);
       }
     } else {
       const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
-      backTxt.anchor.set(0.5);
-      backTxt.rotation = textRotation;
+      backTxt.anchor.set(0.5); backTxt.rotation = textRotation;
       container.addChild(backTxt);
     }
 
@@ -180,22 +194,15 @@ export const RealGame = () => {
       const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(0, 0, 9).endFill();
       const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bT.anchor.set(0.5);
-      if (isRest) {
-        bG.x = (cw / 2 - 9) * yDir; bG.y = (ch / 2 - 9) * yDir;
-      } else {
-        bG.x = cw / 2 - 9; bG.y = ch / 2 - 9;
-      }
-      bG.addChild(bT);
-      container.addChild(bG);
+      if (isRest) { bG.x = (cw / 2 - 9) * yDir; bG.y = (ch / 2 - 9) * yDir; } 
+      else { bG.x = cw / 2 - 9; bG.y = ch / 2 - 9; }
+      bG.addChild(bT); container.addChild(bG);
     }
 
     container.eventMode = 'static';
     container.cursor = 'pointer';
     container.on('pointerdown', () => {
-      setSelectedCard({ 
-        card, 
-        location: card.location || (isOpp ? 'opponent' : 'player') 
-      });
+      setSelectedCard({ card, location: card.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
 
@@ -204,10 +211,7 @@ export const RealGame = () => {
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-    const app = new PIXI.Application({ 
-      background: 0xFFFFFF, resizeTo: window, antialias: true,
-      resolution: window.devicePixelRatio || 1, autoDensity: true
-    });
+    const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     appRef.current = app;
     pixiContainerRef.current.appendChild(app.view as any);
 
@@ -224,13 +228,11 @@ export const RealGame = () => {
       bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
       app.stage.addChild(bg);
 
-      // 【完全版】ターン終了ボタン（中央右側に配置）
-      const turnEndBtn = new PIXI.Graphics()
-        .beginFill(0x333333).drawRoundedRect(W - 110, midY - 20, 100, 40, 8).endFill();
+      // ターン終了ボタン
+      const turnEndBtn = new PIXI.Graphics().beginFill(0x333333).drawRoundedRect(W - 110, midY - 20, 100, 40, 8).endFill();
       turnEndBtn.eventMode = 'static';
       turnEndBtn.cursor = 'pointer';
       turnEndBtn.on('pointerdown', () => handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END));
-      
       const btnTxt = new PIXI.Text("TURN END", { fontSize: 14, fill: 0xFFFFFF, fontWeight: 'bold' });
       btnTxt.anchor.set(0.5); btnTxt.position.set(W - 60, midY);
       turnEndBtn.addChild(btnTxt);
@@ -238,11 +240,8 @@ export const RealGame = () => {
 
       const renderSide = (p: any, isOpp: boolean) => {
         const side = new PIXI.Container();
-        if (isOpp) {
-          side.x = W; side.y = midY - 40; side.rotation = Math.PI;
-        } else {
-          side.y = midY + 40;
-        }
+        if (isOpp) { side.x = W; side.y = midY - 40; side.rotation = Math.PI; } 
+        else { side.y = midY + 40; }
         app.stage.addChild(side);
 
         (p.zones?.field || []).forEach((c: any, i: number) => {
@@ -280,8 +279,7 @@ export const RealGame = () => {
         donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
         side.addChild(donRst);
 
-        const trashArr = p.zones?.trash || [];
-        const trash = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, trashArr.length);
+        const trash = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, (p.zones?.trash || []).length);
         trash.x = coords.getTrashX(W); trash.y = r3Y;
         side.addChild(trash);
 
@@ -309,7 +307,7 @@ export const RealGame = () => {
         <CardDetailSheet 
           card={selectedCard.card} 
           location={selectedCard.location}
-          onAction={handleAction} // 詳細画面からアクションを実行可能に
+          onAction={handleAction}
           onClose={() => setIsDetailMode(false)} 
         />
       )}
