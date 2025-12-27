@@ -42,13 +42,11 @@ export const RealGame = () => {
                    card.location !== 'leader' && 
                    !(!isOpp && card.location === 'hand');
     
-    // 【復元】ドン!!付与（アタッチ）の視覚効果
-    // 過去ソースに基づき、付与されているドン!!の数だけ背後にカードの縁をずらして描画
     const attachedDon = card.attached_don || 0;
     if (attachedDon > 0 && !isBack) {
       for (let i = 0; i < Math.min(attachedDon, 3); i++) {
         const donG = new PIXI.Graphics();
-        donG.lineStyle(2, 0x000000); // ドン!!用の黒い縁
+        donG.lineStyle(2, 0x000000);
         donG.beginFill(0xFFFFFF);
         const offset = (i + 1) * 4;
         donG.drawRoundedRect(-cw / 2 + offset, -ch / 2 - offset, cw, ch, 6);
@@ -70,7 +68,6 @@ export const RealGame = () => {
     const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck' || cardName === 'Don!!';
 
     if (!isBack) {
-      // 1. パワー
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${card.power}`, { 
           fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
@@ -85,7 +82,6 @@ export const RealGame = () => {
         container.addChild(pTxt);
       }
 
-      // 2. 名前
       const nameStyle = new PIXI.TextStyle({ 
         fontSize: isResource ? 11 : 9, 
         fontWeight: 'bold', 
@@ -105,7 +101,6 @@ export const RealGame = () => {
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
 
-      // 3. カウンター
       if (card.counter !== undefined && card.counter > 0) {
         const cTxt = new PIXI.Text(`+${card.counter}`, {
           fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
@@ -117,7 +112,6 @@ export const RealGame = () => {
         container.addChild(cTxt);
       }
 
-      // 4. コスト
       if (card.cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         cBg.x = -cw / 2 + 10;
@@ -128,9 +122,8 @@ export const RealGame = () => {
         container.addChild(cBg);
       }
       
-      // 5. 属性 (色分けの復元)
       if (card.attribute && card.power !== undefined) {
-        let attrColor = 0x666666; // デフォルト
+        let attrColor = 0x666666;
         const attr = card.attribute;
         if (attr === 'SLASH' || attr === '斬') attrColor = 0xc0392b;
         if (attr === 'STRIKE' || attr === '打') attrColor = 0x2980b9;
@@ -151,25 +144,27 @@ export const RealGame = () => {
       container.addChild(backTxt);
     }
 
-    // 枚数バッジ
     if (badgeCount !== undefined && (badgeCount > 0 || isResource)) {
       const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(0, 0, 9).endFill();
       const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bT.anchor.set(0.5);
-      
       if (isRest) {
         bG.x = (cw / 2 - 9) * yDir; bG.y = (ch / 2 - 9) * yDir;
       } else {
         bG.x = cw / 2 - 9; bG.y = ch / 2 - 9;
       }
-      
       bG.addChild(bT);
       container.addChild(bG);
     }
 
+    // 【復元】タッチアクションの最適化
     container.eventMode = 'static';
+    container.cursor = 'pointer'; // 指マークを表示
     container.on('pointerdown', () => {
-      setSelectedCard({ card });
+      setSelectedCard({ 
+        card, 
+        location: card.location || (isOpp ? 'opponent' : 'player') // 場所情報を引き継ぐ
+      });
       setIsDetailMode(true);
     });
 
@@ -208,7 +203,7 @@ export const RealGame = () => {
         app.stage.addChild(side);
 
         (p.zones?.field || []).forEach((c: any, i: number) => {
-          const card = renderCard(c, coords.CW, coords.CH, isOpp);
+          const card = renderCard({ ...c, location: 'field' }, coords.CW, coords.CH, isOpp);
           card.x = coords.getFieldX(i, W, coords.CW, p.zones.field.length);
           card.y = coords.getY(1, coords.CH, coords.V_GAP);
           side.addChild(card);
@@ -221,29 +216,29 @@ export const RealGame = () => {
           side.addChild(ldr);
         }
 
-        const life = renderCard({ name: 'Life', is_face_up: false }, coords.CW, coords.CH, isOpp, p.zones?.life?.length);
+        const life = renderCard({ name: 'Life', is_face_up: false, location: 'life' }, coords.CW, coords.CH, isOpp, p.zones?.life?.length);
         life.x = coords.getLifeX(W); life.y = r2Y;
         side.addChild(life);
 
-        const deck = renderCard({ name: 'Deck', is_face_up: false }, coords.CW, coords.CH, isOpp, 40);
+        const deck = renderCard({ name: 'Deck', is_face_up: false, location: 'deck' }, coords.CW, coords.CH, isOpp, 40);
         deck.x = coords.getDeckX(W); deck.y = r2Y;
         side.addChild(deck);
 
         const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
-        const donDk = renderCard({ name: 'Don!!', is_face_up: false }, coords.CW, coords.CH, isOpp, 10);
+        const donDk = renderCard({ name: 'Don!!', is_face_up: false, location: 'don_deck' }, coords.CW, coords.CH, isOpp, 10);
         donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
         side.addChild(donDk);
 
-        const donAct = renderCard({ name: 'DON!!' }, coords.CW, coords.CH, isOpp, p.don_active?.length);
+        const donAct = renderCard({ name: 'DON!!', location: 'don_active' }, coords.CW, coords.CH, isOpp, p.don_active?.length);
         donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
         side.addChild(donAct);
 
-        const donRst = renderCard({ name: 'DON!!', is_rest: true }, coords.CW, coords.CH, isOpp, p.don_rested?.length);
+        const donRst = renderCard({ name: 'DON!!', is_rest: true, location: 'don_rest' }, coords.CW, coords.CH, isOpp, p.don_rested?.length);
         donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
         side.addChild(donRst);
 
         const trashArr = p.zones?.trash || [];
-        const trash = renderCard({ name: 'Trash' }, coords.CW, coords.CH, isOpp, trashArr.length);
+        const trash = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, trashArr.length);
         trash.x = coords.getTrashX(W); trash.y = r3Y;
         side.addChild(trash);
 
