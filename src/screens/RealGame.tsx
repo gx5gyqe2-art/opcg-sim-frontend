@@ -9,6 +9,8 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
+import { logger } from '../utils/logger'; // ★ この行を追加してください
+
 
 // 短縮参照
 const S = LAYOUT_PARAMS.CARD_STYLE;
