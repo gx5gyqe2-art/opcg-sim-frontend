@@ -166,10 +166,10 @@ export const RealGame = () => {
       const coords = calculateCoordinates(W, H);
 
       // --- P1 (自分) の描画 ---
-      const p1 = gameState.p1;
+      const p1 = gameState.players.p1;
       
       // Life
-      p1.life?.forEach((card: any, i: number) => {
+      p1.zones.life?.forEach((card: any, i: number) => {
         const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
       });
@@ -192,7 +192,7 @@ export const RealGame = () => {
 
       // Deck & Trash
       mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.deck?.length));
-      const topTrash = p1.trash?.[p1.trash.length - 1] || { faceUp: false };
+      const topTrash = p1.zones.trash?.[p1.trash.length - 1] || { faceUp: false };
       mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.trash?.length));
 
       // --- P2 (相手) の描画 (Y座標反転等はEngineで吸収している前提) ---
