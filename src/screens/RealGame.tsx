@@ -198,6 +198,33 @@ export const RealGame = () => {
       // --- P2 (相手) の描画 (Y座標反転等はEngineで吸収している前提) ---
       // ※ 簡易化のため同様のロジックでP2も描画（座標計算側で調整が必要な場合は Engine を修正）
     });
+      // --- P2 (相手) の描画 ---
+      const p2 = gameState.players.p2;
+      if (!p2) return;
+
+      // Life (相手)
+      p2.zones.life?.forEach((card: any, i: number) => {
+        const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
+        // 1行目に描画（ Engine が P2 用の Y 座標を計算する前提、または P1 と対称に配置）
+        mainContainer.addChild(renderCard(card, x, coords.getY(0.2, H, coords.V_GAP), coords.CW, coords.CH, true, 'life'));
+      });
+
+      // Leader (相手)
+      if (p2.leader) {
+        mainContainer.addChild(renderCard(p2.leader, coords.getLeaderX(W), coords.getY(0.2, H, coords.V_GAP), coords.CW, coords.CH, true, 'leader'));
+      }
+
+      // Field (相手)
+      p2.field?.forEach((card: any, i: number) => {
+        const x = coords.getFieldX(i, W, coords.CW, p2.field.length);
+        mainContainer.addChild(renderCard(card, x, coords.getY(0.2, H, coords.V_GAP), coords.CW, coords.CH, true, 'field'));
+      });
+
+      // Hand (相手 - 枚数のみ表示される想定)
+      for (let i = 0; i < (p2.hand_count ?? 0); i++) {
+        const x = coords.getHandX(i, W);
+        mainContainer.addChild(renderCard({ faceUp: false }, x, coords.getY(-0.5, H, coords.V_GAP), coords.CW, coords.CH, true, 'hand'));
+      }
 
     return () => app.destroy(true, true);
   }, [gameState, renderCard, startGame, isPending]);
