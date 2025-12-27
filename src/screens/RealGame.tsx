@@ -15,6 +15,38 @@ export const RealGame = () => {
 
   const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
 
+  // 【完全版】共通アクション送信関数
+  const handleAction = async (type: string, payload: any = {}) => {
+    // gameState.id が存在しない（ゲーム未開始）場合は処理しない
+    if (!gameState?.id) return;
+
+    // クライアント・サーバー間インターフェース定義（c_to_s_interface）に準拠
+    const body = {
+      request_id: crypto.randomUUID(),
+      action_type: type,
+      player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+      ...payload
+    };
+
+    try {
+      const res = await fetch(`/api/game/${gameState.id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // 成功時に最新のゲーム状態を反映（game_state キーを定数参照）
+        if (data[CONST.API_ROOT_KEYS.GAME_STATE]) {
+          setGameState(data[CONST.API_ROOT_KEYS.GAME_STATE]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to send action:", err);
+    }
+  };
+
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
     if (metrics.width <= maxWidth) return text;
@@ -157,13 +189,12 @@ export const RealGame = () => {
       container.addChild(bG);
     }
 
-    // 【復元】タッチアクションの最適化
     container.eventMode = 'static';
-    container.cursor = 'pointer'; // 指マークを表示
+    container.cursor = 'pointer';
     container.on('pointerdown', () => {
       setSelectedCard({ 
         card, 
-        location: card.location || (isOpp ? 'opponent' : 'player') // 場所情報を引き継ぐ
+        location: card.location || (isOpp ? 'opponent' : 'player') 
       });
       setIsDetailMode(true);
     });
@@ -192,6 +223,18 @@ export const RealGame = () => {
       bg.beginFill(COLORS.CONTROL_BG).drawRect(0, midY - 40, W, 80).endFill();
       bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
       app.stage.addChild(bg);
+
+      // 【完全版】ターン終了ボタン（中央右側に配置）
+      const turnEndBtn = new PIXI.Graphics()
+        .beginFill(0x333333).drawRoundedRect(W - 110, midY - 20, 100, 40, 8).endFill();
+      turnEndBtn.eventMode = 'static';
+      turnEndBtn.cursor = 'pointer';
+      turnEndBtn.on('pointerdown', () => handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END));
+      
+      const btnTxt = new PIXI.Text("TURN END", { fontSize: 14, fill: 0xFFFFFF, fontWeight: 'bold' });
+      btnTxt.anchor.set(0.5); btnTxt.position.set(W - 60, midY);
+      turnEndBtn.addChild(btnTxt);
+      app.stage.addChild(turnEndBtn);
 
       const renderSide = (p: any, isOpp: boolean) => {
         const side = new PIXI.Container();
@@ -262,7 +305,14 @@ export const RealGame = () => {
   return (
     <div ref={pixiContainerRef} className="game-screen">
       {!gameState && !isPending && <button onClick={startGame} className="start-btn">Game Start</button>}
-      {isDetailMode && selectedCard && <CardDetailSheet card={selectedCard.card} onClose={() => setIsDetailMode(false)} />}
+      {isDetailMode && selectedCard && (
+        <CardDetailSheet 
+          card={selectedCard.card} 
+          location={selectedCard.location}
+          onAction={handleAction} // 詳細画面からアクションを実行可能に
+          onClose={() => setIsDetailMode(false)} 
+        />
+      )}
     </div>
   );
 };

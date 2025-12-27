@@ -47,5 +47,20 @@
       "MESSAGE": "msg",
       "PAYLOAD": "payload"
     }
+  },
+  "c_to_s_interface": {
+    "PLAYER_KEYS": {
+      "P1": "p1",
+      "P2": "p2"
+    },
+    "GAME_ACTIONS": {
+      "TYPES": {
+        "PLAY": "PLAY",
+        "ATTACK": "ATTACK",
+        "ACTIVATE_MAIN": "ACTIVATE_MAIN",
+        "ATTACH_DON": "ATTACH_DON",
+        "TURN_END": "TURN_END"
+      }
+    }
   }
 }
