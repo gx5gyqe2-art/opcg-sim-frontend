@@ -16,13 +16,13 @@ export interface LayoutCoords {
   getTrashX: (width: number) => number;
   getFieldX: (i: number, width: number, cardWidth: number, totalCards: number) => number;
   getHandX: (i: number, width: number) => number;
-  getY: (row: number, h: number, g: number) => number;
+  getY: (row: number, ch: number, gap: number) => number;
 }
 
 export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
   
-  // カードサイズを画像2のバランスに合わせて調整
+  // 過去の正常なサイズ感（倍率 3.8）を再現
   const CH = Math.min(AVAIL_H_HALF / 3.8, (W / 6.5) * 1.4); 
   const CW = CH / 1.4;
   const V_GAP = CH * 0.15;
@@ -32,7 +32,6 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
 
   return {
     CH, CW, V_GAP, Y_CTRL_START,
-    
     getLifeX: (width) => width * P.X_RATIOS.LIFE,
     getLeaderX: (width) => width * P.X_RATIOS.LEADER,
     getStageX: (width) => width * P.X_RATIOS.STAGE,
@@ -43,28 +42,19 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getTrashX: (width) => width * P.X_RATIOS.TRASH,
     
     getFieldX: (i, width, cardWidth, totalCards) => {
-      const gap = 12; 
+      const gap = 12; // 以前の密度
       const totalW = totalCards * cardWidth + (totalCards - 1) * gap;
-      const startX = (width - totalW) / 2; 
-      return startX + i * (cardWidth + gap);
+      return (width - totalW) / 2 + i * (cardWidth + gap);
     },
 
-    // 修正: 重なり幅を CW * 1.1 に変更し、右に広げる
-    getHandX: (i, width) => width * 0.10 + (i * CW * 1.1),
+    // 過去の重なり具合（0.75倍）を再現
+    getHandX: (i, width) => width * 0.08 + (i * CW * 0.75),
 
-    /**
-     * 行（row）の高さ調整
-     * 画像4で見切れていた手札を少し上に上げ、間隔を画像2に近づける
-     */
-    getY: (row, h, _g) => {
-      const midPoint = h / 2;
-      switch(row) {
-        case -1: return midPoint - (CH * 1.8); // 相手の手札
-        case 0:  return midPoint - (CH * 0.7); // 相手の場
-        case 1:  return midPoint + (CH * 0.7); // 自分の場
-        case 2:  return midPoint + (CH * 1.8); // 自分の手札（476pxから少し上げます）
-        default: return midPoint;
-      }
+    // 行(Row)の計算: 中央(midPoint)から外側に向かって配置
+    getY: (row, ch, gap) => {
+      const step = ch + gap;
+      // 1: Field, 2: Leader/Life, 3: Don/Trash, 4: Hand
+      return (row - 0.5) * step + gap;
     },
   };
 };
