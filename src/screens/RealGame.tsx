@@ -49,8 +49,9 @@ export const RealGame = () => {
     container.addChild(g);
 
     const textRotation = isRest ? -Math.PI / 2 : 0;
-    // 過去ソースの座標方向フラグ
     const yDir = isOpp ? -1 : 1;
+    const cardName = card.name || "";
+    const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck';
 
     if (!isBack) {
       // 1. パワー (枠外・上部)
@@ -69,7 +70,6 @@ export const RealGame = () => {
       }
 
       // 2. 名前 (枠外・下部)
-      const isResource = card.name === 'DON!!' || card.name === 'Trash' || card.name === 'Deck';
       const nameStyle = new PIXI.TextStyle({ 
         fontSize: isResource ? 11 : 9, 
         fontWeight: 'bold', 
@@ -77,7 +77,7 @@ export const RealGame = () => {
         align: 'center'
       });
       const maxNW = isWide ? cw * 2.2 : cw * 1.8;
-      const displayName = truncateText(card.name || "", nameStyle, maxNW);
+      const displayName = truncateText(cardName, nameStyle, maxNW);
       const nTxt = new PIXI.Text(displayName, nameStyle);
       
       nTxt.anchor.set(0.5, isResource ? 0.5 : 0);
@@ -127,13 +127,12 @@ export const RealGame = () => {
       container.addChild(backTxt);
     }
 
-    // 枚数バッジ
+    // 枚数バッジ (修正: isResource を定義済みの変数として使用)
     if (badgeCount !== undefined && (badgeCount > 0 || isResource)) {
       const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(0, 0, 9).endFill();
       const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bT.anchor.set(0.5);
       
-      // レスト状態に合わせてバッジ位置を調整
       if (isRest) {
         bG.x = (cw / 2 - 9) * yDir; bG.y = (ch / 2 - 9) * yDir;
       } else {
