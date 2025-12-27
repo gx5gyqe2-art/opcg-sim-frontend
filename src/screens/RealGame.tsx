@@ -11,7 +11,7 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger'; 
+import { logger } from '../utils/logger'; // インポートを保持
 
 // 短縮参照
 const S = LAYOUT_PARAMS.CARD_STYLE;
@@ -46,7 +46,7 @@ export const RealGame = () => {
 
     const bg = new PIXI.Graphics();
     bg.lineStyle(S.BORDER_WIDTH, COLORS.CARD_BORDER);
-    // 修正: card.isUpright === false -> card.is_rest === true
+    // 修正: card.isUpright -> card.is_rest
     bg.beginFill(card.is_rest === true ? COLORS.RESTED : COLORS.CARD_BG);
     bg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, S.CORNER_RADIUS);
     bg.endFill();
@@ -167,13 +167,27 @@ export const RealGame = () => {
         return;
       }
 
+      // デバッグログの追加（ビルドエラー回避と構造確認のため）
+      if (Math.random() < 0.001) { // 負荷軽減のため低頻度で出力
+        logger.log({
+          level: 'debug',
+          action: 'ui.render_loop_check',
+          msg: 'Verifying data structure in render loop',
+          payload: {
+            p1_has_zones: !!gameState.players.p1.zones,
+            p1_hand_count: gameState.players.p1.zones?.hand?.length,
+            p1_leader_name: gameState.players.p1.leader?.name
+          }
+        });
+      }
+
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
 
       // --- P1 (自分) の描画 ---
       const p1 = gameState.players.p1;
       
-      // Life: 修正(参照先を zones.life へ)
+      // Life: 参照先を zones.life へ修正
       p1.zones?.life?.forEach((card: any, i: number) => {
         const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
@@ -184,13 +198,13 @@ export const RealGame = () => {
         mainContainer.addChild(renderCard(p1.leader, coords.getLeaderX(W), coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'leader'));
       }
 
-      // Field: 修正(参照先を zones.field へ)
+      // Field: 参照先を zones.field へ修正
       p1.zones?.field?.forEach((card: any, i: number) => {
         const x = coords.getFieldX(i, W, coords.CW, p1.zones.field.length);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'field'));
       });
 
-      // Hand: 修正(参照先を zones.hand へ)
+      // Hand: 参照先を zones.hand へ修正
       p1.zones?.hand?.forEach((card: any, i: number) => {
         mainContainer.addChild(renderCard(card, coords.getHandX(i, W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
       });
