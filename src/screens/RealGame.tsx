@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { COLORS } from '../layout/layout.constants';
-import { LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
@@ -45,7 +44,7 @@ export const RealGame = () => {
     const g = new PIXI.Graphics();
     g.lineStyle(2, COLORS.ZONE_BORDER);
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
-    g.drawRoundedRect(-cw/2, -ch/2, cw, ch, 6);
+    g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
     g.endFill();
     container.addChild(g);
 
@@ -55,7 +54,7 @@ export const RealGame = () => {
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(card.power, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold' });
         pTxt.anchor.set(0.5);
-        pTxt.y = -ch/2 + 10;
+        pTxt.y = -ch / 2 + 10;
         pTxt.rotation = textRotation;
         container.addChild(pTxt);
       }
@@ -68,10 +67,10 @@ export const RealGame = () => {
       container.addChild(nTxt);
 
       if (card.cost !== undefined) {
-        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw/2+10, -ch/2+10, 7).endFill();
+        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw / 2 + 10, -ch / 2 + 10, 7).endFill();
         const cTxt = new PIXI.Text(card.cost, { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
         cTxt.anchor.set(0.5);
-        cTxt.position.set(-cw/2+10, -ch/2+10);
+        cTxt.position.set(-cw / 2 + 10, -ch / 2 + 10);
         cTxt.rotation = textRotation;
         container.addChild(cBg, cTxt);
       }
@@ -83,10 +82,10 @@ export const RealGame = () => {
     }
 
     if (badgeCount !== undefined) {
-      const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(cw/2-9, ch/2-9, 9).endFill();
+      const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(cw / 2 - 9, ch / 2 - 9, 9).endFill();
       const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF });
       bT.anchor.set(0.5);
-      bT.position.set(cw/2-9, ch/2-9);
+      bT.position.set(cw / 2 - 9, ch / 2 - 9);
       bT.rotation = textRotation;
       container.addChild(bG, bT);
     }
