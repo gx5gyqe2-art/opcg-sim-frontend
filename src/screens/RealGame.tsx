@@ -35,12 +35,28 @@ export const RealGame = () => {
     isWide = false
   ) => {
     const container = new PIXI.Container();
-    
     const isRest = card.is_rest === true;
     if (isRest) container.rotation = Math.PI / 2;
 
-    const isBack = card.is_face_up === false && !(!isOpp && card.location === 'hand');
+    const isBack = card.is_face_up === false && 
+                   card.location !== 'leader' && 
+                   !(!isOpp && card.location === 'hand');
     
+    // 【復元】ドン!!付与（アタッチ）の視覚効果
+    // 過去ソースに基づき、付与されているドン!!の数だけ背後にカードの縁をずらして描画
+    const attachedDon = card.attached_don || 0;
+    if (attachedDon > 0 && !isBack) {
+      for (let i = 0; i < Math.min(attachedDon, 3); i++) {
+        const donG = new PIXI.Graphics();
+        donG.lineStyle(2, 0x000000); // ドン!!用の黒い縁
+        donG.beginFill(0xFFFFFF);
+        const offset = (i + 1) * 4;
+        donG.drawRoundedRect(-cw / 2 + offset, -ch / 2 - offset, cw, ch, 6);
+        donG.endFill();
+        container.addChild(donG);
+      }
+    }
+
     const g = new PIXI.Graphics();
     g.lineStyle(2, COLORS.ZONE_BORDER);
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
@@ -51,10 +67,10 @@ export const RealGame = () => {
     const textRotation = isRest ? -Math.PI / 2 : 0;
     const yDir = isOpp ? -1 : 1;
     const cardName = card.name || "";
-    const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck';
+    const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck' || cardName === 'Don!!';
 
     if (!isBack) {
-      // 1. パワー (枠外・上部)
+      // 1. パワー
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${card.power}`, { 
           fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
@@ -69,7 +85,7 @@ export const RealGame = () => {
         container.addChild(pTxt);
       }
 
-      // 2. 名前 (枠外・下部)
+      // 2. 名前
       const nameStyle = new PIXI.TextStyle({ 
         fontSize: isResource ? 11 : 9, 
         fontWeight: 'bold', 
@@ -84,12 +100,12 @@ export const RealGame = () => {
       if (isRest) {
         nTxt.x = (isResource ? 0 : ch / 2 + 2) * yDir; nTxt.y = 0;
       } else {
-        nTxt.x = 0; nTxt.y = (isResource ? 0 : ch / 2 + 2) * yDir;
+        nTxt.x = 0; nTxt.y = (ch / 2 + 2) * yDir;
       }
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
 
-      // 3. カウンター (左端・回転表示)
+      // 3. カウンター
       if (card.counter !== undefined && card.counter > 0) {
         const cTxt = new PIXI.Text(`+${card.counter}`, {
           fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
@@ -101,7 +117,7 @@ export const RealGame = () => {
         container.addChild(cTxt);
       }
 
-      // 4. コスト (左上・円背景)
+      // 4. コスト
       if (card.cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
         cBg.x = -cw / 2 + 10;
@@ -112,9 +128,17 @@ export const RealGame = () => {
         container.addChild(cBg);
       }
       
-      // 5. 属性 (右上)
+      // 5. 属性 (色分けの復元)
       if (card.attribute && card.power !== undefined) {
-        const aTxt = new PIXI.Text(card.attribute, { fontSize: 7, fill: 0x666666 });
+        let attrColor = 0x666666; // デフォルト
+        const attr = card.attribute;
+        if (attr === 'SLASH' || attr === '斬') attrColor = 0xc0392b;
+        if (attr === 'STRIKE' || attr === '打') attrColor = 0x2980b9;
+        if (attr === 'RANGED' || attr === '突') attrColor = 0x27ae60;
+        if (attr === 'SPECIAL' || attr === '特') attrColor = 0x8e44ad;
+        if (attr === 'WISDOM' || attr === '知') attrColor = 0xd35400;
+
+        const aTxt = new PIXI.Text(attr, { fontSize: 7, fill: attrColor, fontWeight: 'bold' });
         aTxt.anchor.set(1, 0);
         aTxt.x = cw / 2 - 4;
         aTxt.y = -ch / 2 + 4;
@@ -127,7 +151,7 @@ export const RealGame = () => {
       container.addChild(backTxt);
     }
 
-    // 枚数バッジ (修正: isResource を定義済みの変数として使用)
+    // 枚数バッジ
     if (badgeCount !== undefined && (badgeCount > 0 || isResource)) {
       const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(0, 0, 9).endFill();
       const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
@@ -191,9 +215,11 @@ export const RealGame = () => {
         });
 
         const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
-        const ldr = renderCard(p.leader, coords.CW, coords.CH, isOpp, undefined, true);
-        ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
-        side.addChild(ldr);
+        if (p.leader) {
+          const ldr = renderCard({ ...p.leader, location: 'leader' }, coords.CW, coords.CH, isOpp, undefined, true);
+          ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
+          side.addChild(ldr);
+        }
 
         const life = renderCard({ name: 'Life', is_face_up: false }, coords.CW, coords.CH, isOpp, p.zones?.life?.length);
         life.x = coords.getLifeX(W); life.y = r2Y;
@@ -204,6 +230,10 @@ export const RealGame = () => {
         side.addChild(deck);
 
         const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
+        const donDk = renderCard({ name: 'Don!!', is_face_up: false }, coords.CW, coords.CH, isOpp, 10);
+        donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
+        side.addChild(donDk);
+
         const donAct = renderCard({ name: 'DON!!' }, coords.CW, coords.CH, isOpp, p.don_active?.length);
         donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
         side.addChild(donAct);
