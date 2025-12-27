@@ -49,7 +49,7 @@ export const RealGame = () => {
   };
 
   const handleAction = async (type: string, payload: any = {}) => {
-    // 【デバッグ追加】
+    // 【修正1】関数の開始直後にデバッグログを追加
     await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
 
     if (!gameState?.id) return;
@@ -225,9 +225,14 @@ export const RealGame = () => {
 
     container.eventMode = 'static';
     container.cursor = 'pointer';
-    container.on('pointerdown', () => {
-      // 【デバッグ追加】
-      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { uuid: card.uuid, location: card.location });
+
+    // 【修正2】pointerdown イベントを強化（伝播停止と詳細ログ）
+    container.on('pointerdown', (e) => {
+      e.stopPropagation(); // 必須：重なりによる検知ミスを防止
+      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { 
+        uuid: card.uuid, 
+        location: card.location || 'not_set' 
+      });
       setSelectedCard({ card, location: card.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
@@ -239,6 +244,11 @@ export const RealGame = () => {
     if (!pixiContainerRef.current) return;
     const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     appRef.current = app;
+
+    // 【修正3】PIXI初期化直後にヒットエリアを設定
+    app.stage.eventMode = 'static';
+    app.stage.hitArea = app.screen;
+
     pixiContainerRef.current.appendChild(app.view as any);
 
     app.ticker.add(() => {
