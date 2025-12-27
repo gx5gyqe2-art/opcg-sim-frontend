@@ -15,6 +15,28 @@ export const RealGame = () => {
 
   const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
 
+  // 【追加】調査用デバッグロガー（既存ロガーとは別に、特定の通過点を確認するために使用）
+  const sendDebugLog = async (action: string, msg: string, payload: any = {}) => {
+    try {
+      await fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: "FE_DEBUG",
+          player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+          action: action,
+          level: "debug",
+          sessionId: gameState?.id || "no_session",
+          msg: msg,
+          payload: payload,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      console.warn("Debug logger failed", e);
+    }
+  };
+
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text, style);
     if (metrics.width <= maxWidth) return text;
@@ -26,8 +48,11 @@ export const RealGame = () => {
     return '...';
   };
 
-  // 共通アクション送信関数（ロガー統合版）
+  // 共通アクション送信関数（既存のロガーを維持し、デバッグ用を追加）
   const handleAction = async (type: string, payload: any = {}) => {
+    // 【デバッグ追加】詳細画面等から呼び出されたことを記録
+    await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
+
     if (!gameState?.id) return;
 
     const requestId = crypto.randomUUID();
@@ -202,12 +227,18 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     container.on('pointerdown', () => {
+      // 【デバッグ追加】PIXI上でのクリック検知を記録
+      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { 
+        uuid: card.uuid, 
+        location: card.location || 'not_set' 
+      });
+
       setSelectedCard({ card, location: card.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
 
     return container;
-  }, [truncateText]);
+  }, [truncateText, sendDebugLog]);
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
@@ -298,7 +329,7 @@ export const RealGame = () => {
     });
 
     return () => app.destroy(true, true);
-  }, [gameState, renderCard]);
+  }, [gameState, renderCard, handleAction]); // handleActionを依存関係に追加
 
   return (
     <div ref={pixiContainerRef} className="game-screen">
