@@ -44,13 +44,18 @@ export const apiClient = {
 
     const data = await res.json();
 
-    logger.log({
-      level: 'info',
-      action: 'api.receive_create',
-      msg: 'Received raw data from backend',
-      player: 'system',
-      payload: data
-    });
+// ここに詳細ログを追加
+logger.log({
+  level: 'info',
+  action: 'api.receive_create_detail',
+  msg: 'Full payload check',
+  payload: {
+    has_game_state: !!data.game_state,
+    p1_zones: data.game_state?.players?.p1?.zones, // ここに zones があるか確認
+    p1_hand: data.game_state?.players?.p1?.hand,   // または直下にあるか確認
+  }
+});
+
 
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey] || data.state;

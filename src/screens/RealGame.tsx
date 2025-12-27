@@ -167,7 +167,22 @@ export const RealGame = () => {
 
       // --- P1 (自分) の描画 ---
       const p1 = gameState.players.p1;
-      
+
+  // 100フレームに1回程度、現在の参照先が正しいかログを出す
+  if (Math.random() < 0.01) {
+    logger.log({
+      level: 'debug',
+      action: 'ui.render_check',
+      msg: 'Checking P1 data structure',
+      payload: {
+        hand_direct: !!p1.hand,       // 現在のコードが参照している場所
+        hand_via_zones: !!p1.zones?.hand, // 電文で送られてきている場所
+        leader_exists: !!p1.leader
+      }
+    });
+  }
+  // ... (以下描画処理)
+  
       // Life
       p1.zones.life?.forEach((card: any, i: number) => {
         const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
