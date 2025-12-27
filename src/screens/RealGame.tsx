@@ -15,7 +15,7 @@ export const RealGame = () => {
 
   const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
 
-  // 【追加】調査用デバッグロガー（既存ロガーとは別に、特定の通過点を確認するために使用）
+  // 【追加】原因特定用デバッグロガー
   const sendDebugLog = async (action: string, msg: string, payload: any = {}) => {
     try {
       await fetch('/api/log', {
@@ -48,9 +48,8 @@ export const RealGame = () => {
     return '...';
   };
 
-  // 共通アクション送信関数（既存のロガーを維持し、デバッグ用を追加）
   const handleAction = async (type: string, payload: any = {}) => {
-    // 【デバッグ追加】詳細画面等から呼び出されたことを記録
+    // 【デバッグ追加】
     await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
 
     if (!gameState?.id) return;
@@ -63,7 +62,7 @@ export const RealGame = () => {
       ...payload
     };
 
-    // 1. 送信開始をサーバーログに記録
+    // 1. 送信開始をサーバーログに記録（既存ロガー）
     await fetch('/api/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,7 +88,7 @@ export const RealGame = () => {
       if (res.ok) {
         const data = await res.json();
         
-        // 2. 成功をサーバーログに記録
+        // 2. 成功をサーバーログに記録（既存ロガー）
         await fetch('/api/log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -111,7 +110,7 @@ export const RealGame = () => {
         throw new Error(`Server returned status: ${res.status}`);
       }
     } catch (err: any) {
-      // 3. 失敗をサーバーログに記録
+      // 3. 失敗をサーバーログに記録（既存ロガー）
       await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,12 +226,8 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
     container.on('pointerdown', () => {
-      // 【デバッグ追加】PIXI上でのクリック検知を記録
-      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { 
-        uuid: card.uuid, 
-        location: card.location || 'not_set' 
-      });
-
+      // 【デバッグ追加】
+      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { uuid: card.uuid, location: card.location });
       setSelectedCard({ card, location: card.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
@@ -329,7 +324,7 @@ export const RealGame = () => {
     });
 
     return () => app.destroy(true, true);
-  }, [gameState, renderCard, handleAction]); // handleActionを依存関係に追加
+  }, [gameState, renderCard, handleAction]);
 
   return (
     <div ref={pixiContainerRef} className="game-screen">
