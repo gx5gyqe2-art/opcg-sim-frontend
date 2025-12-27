@@ -43,12 +43,14 @@ export const RealGame = () => {
 
     const bg = new PIXI.Graphics();
     bg.lineStyle(S.BORDER_WIDTH, COLORS.CARD_BORDER);
-    bg.beginFill(card.isUpright === false ? COLORS.RESTED : COLORS.CARD_BG);
+    // バックエンドのプロパティ名 is_rest に対応
+    bg.beginFill(card.is_rest === true ? COLORS.RESTED : COLORS.CARD_BG);
     bg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, S.CORNER_RADIUS);
     bg.endFill();
     container.addChild(bg);
 
-    if (card.faceUp) {
+    // card.faceUp (FE) または card.is_face_up (BE) に対応
+    if (card.faceUp || card.is_face_up) {
       // パワー
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(card.power.toString(), {
@@ -153,34 +155,8 @@ export const RealGame = () => {
 
     app.ticker.add(() => {
       mainContainer.removeChildren();
-
-      // --- デバッグ用ログここから ---
-      if (gameState) {
-        const p1 = gameState.players?.p1;
-        const { width: W, height: H } = app.screen;
-        const coords = calculateCoordinates(W, H);
-        const yPos = coords.getY(1, H, coords.V_GAP);
-
-        // loggerを使用して状態を記録
-        import('../utils/logger').then(({ logger }) => {
-          logger.log({
-            level: 'debug',
-            action: 'debug.check_p1',
-            msg: `P1 Data check`,
-            payload: {
-              hasP1: !!p1,
-              handCount: p1?.hand?.length,
-              screenSize: { W, H },
-              calculatedY: yPos,
-              // Y座標が画面外（0未満またはH以上）になっていないか判定
-              isOffScreen: yPos < 0 || yPos > H
-            }
-          });
-        });
-      }
-      // --- デバッグ用ログここまで ---
-  
-      if (!gameState) {
+      // players 階層の存在をチェック
+      if (!gameState || !gameState.players) {
         const loading = new PIXI.Text(T.CONNECTING, { fill: COLORS.TEXT_MAIN, fontSize: 14 });
         loading.anchor.set(0.5);
         loading.x = app.screen.width / 2;
@@ -193,62 +169,67 @@ export const RealGame = () => {
       const coords = calculateCoordinates(W, H);
 
       // --- P1 (自分) の描画 ---
+      // 階層を gameState.players.p1 に修正
       const p1 = gameState.players.p1;
-      
-      // Life
-      p1.zones.life?.forEach((card: any, i: number) => {
-        const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
-        mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
-      });
+      if (p1) {
+        // Life: row を 1.2 に下げて画面下半分へ
+        p1.zones.life?.forEach((card: any, i: number) => {
+          const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
+          mainContainer.addChild(renderCard(card, x, coords.getY(1.2, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
+        });
 
-      // Leader
-      if (p1.leader) {
-        mainContainer.addChild(renderCard(p1.leader, coords.getLeaderX(W), coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'leader'));
+        // Leader
+        if (p1.leader) {
+          mainContainer.addChild(renderCard(p1.leader, coords.getLeaderX(W), coords.getY(1.2, H, coords.V_GAP), coords.CW, coords.CH, false, 'leader'));
+        }
+
+        // Field
+        p1.field?.forEach((card: any, i: number) => {
+          const x = coords.getFieldX(i, W, coords.CW, p1.field.length);
+          mainContainer.addChild(renderCard(card, x, coords.getY(1.2, H, coords.V_GAP), coords.CW, coords.CH, false, 'field'));
+        });
+
+        // Hand: row を 1.5 に下げて配置
+        p1.hand?.forEach((card: any, i: number) => {
+          // 自分には見えるので強制表示用フラグを付与
+          const mappedCard = { ...card, faceUp: true };
+          mainContainer.addChild(renderCard(mappedCard, coords.getHandX(i, W), coords.getY(1.5, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
+        });
+
+        // Deck & Trash: バックエンドの don_deck_count を参照
+        mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(1.5, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.don_deck_count));
+        const trashCards = p1.zones.trash || [];
+        const topTrash = trashCards[trashCards.length - 1] || { faceUp: false };
+        mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(1.5, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', trashCards.length));
       }
 
-      // Field
-      p1.field?.forEach((card: any, i: number) => {
-        const x = coords.getFieldX(i, W, coords.CW, p1.field.length);
-        mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'field'));
-      });
-
-      // Hand
-      p1.hand?.forEach((card: any, i: number) => {
-        mainContainer.addChild(renderCard(card, coords.getHandX(i, W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
-      });
-
-      // Deck & Trash
-      mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.deck_count));
-      const topTrash = p1.zones.trash?.[p1.zones.trash.length - 1] || { faceUp: false };
-      mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.zones.trash?.length));
-
+      // --- P2 (相手) の描画 ---
+      // 階層を gameState.players.p2 に修正
       const p2 = gameState.players.p2;
-      if (!p2) return;
+      if (p2) {
+        // Life: row 0.8 で画面上側に配置
+        p2.zones.life?.forEach((card: any, i: number) => {
+          const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
+          mainContainer.addChild(renderCard(card, x, coords.getY(0.8, H, coords.V_GAP), coords.CW, coords.CH, true, 'life'));
+        });
 
-      // Life (相手)
-      p2.zones.life?.forEach((card: any, i: number) => {
-        const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
-        // 1行目に描画（ Engine が P2 用の Y 座標を計算する前提、または P1 と対称に配置）
-        mainContainer.addChild(renderCard(card, x, coords.getY(0.2, H, coords.V_GAP), coords.CW, coords.CH, true, 'life'));
-      });
+        if (p2.leader) {
+          mainContainer.addChild(renderCard(p2.leader, coords.getLeaderX(W), coords.getY(0.8, H, coords.V_GAP), coords.CW, coords.CH, true, 'leader'));
+        }
 
-      // Leader (相手)
-      if (p2.leader) {
-        mainContainer.addChild(renderCard(p2.leader, coords.getLeaderX(W), coords.getY(0.2, H, coords.V_GAP), coords.CW, coords.CH, true, 'leader'));
-      }
+        p2.field?.forEach((card: any, i: number) => {
+          const x = coords.getFieldX(i, W, coords.CW, p2.field.length);
+          mainContainer.addChild(renderCard(card, x, coords.getY(0.8, H, coords.V_GAP), coords.CW, coords.CH, true, 'field'));
+        });
 
-      // Field (相手)
-      p2.field?.forEach((card: any, i: number) => {
-        const x = coords.getFieldX(i, W, coords.CW, p2.field.length);
-        mainContainer.addChild(renderCard(card, x, coords.getY(0.2, H, coords.V_GAP), coords.CW, coords.CH, true, 'field'));
-      });
-
-      // Hand (相手 - 枚数のみ表示される想定)
-      for (let i = 0; i < (p2.hand_count ?? 0); i++) {
-        const x = coords.getHandX(i, W);
-        mainContainer.addChild(renderCard({ faceUp: false }, x, coords.getY(-0.5, H, coords.V_GAP), coords.CW, coords.CH, true, 'hand'));
+        // Hand: row 0.5 で最上部へ配置
+        for (let i = 0; i < (p2.hand_count ?? 0); i++) {
+          const x = coords.getHandX(i, W);
+          mainContainer.addChild(renderCard({ faceUp: false }, x, coords.getY(0.5, H, coords.V_GAP), coords.CW, coords.CH, true, 'hand'));
+        }
       }
     });
+
     return () => app.destroy(true, true);
   }, [gameState, renderCard, startGame, isPending]);
 
