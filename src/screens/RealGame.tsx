@@ -44,15 +44,11 @@ export const RealGame = () => {
 
     const bg = new PIXI.Graphics();
     bg.lineStyle(S.BORDER_WIDTH, COLORS.CARD_BORDER);
-    // 電文のスネークケース is_rest を参照
     bg.beginFill(card.is_rest === true ? COLORS.RESTED : COLORS.CARD_BG);
     bg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, S.CORNER_RADIUS);
     bg.endFill();
     container.addChild(bg);
 
-    // 【重要】可視化判定: 
-    // 1. 電文が is_face_up: true 
-    // 2. または、自分の手札(locationType='hand' かつ !isOpponent) なら表向きとする
     const isVisible = card.is_face_up === true || (locationType === 'hand' && !isOpponent);
 
     if (isVisible) {
@@ -68,7 +64,6 @@ export const RealGame = () => {
       }
 
       const nTxt = new PIXI.Text(card.name || "", {
-        // 電文の type: 'STAGE' 等に対応
         fontSize: (card.type === 'STAGE' || card.type === 'RESOURCE') ? S.FONT_SIZE.NAME_RESOURCE : S.FONT_SIZE.NAME,
         fill: COLORS.TEXT_MAIN,
         wordWrap: true,
@@ -139,7 +134,6 @@ export const RealGame = () => {
     return container;
   }, []);
 
-  // --- PIXI アプリケーションの構築 ---
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -154,8 +148,12 @@ export const RealGame = () => {
     const mainContainer = new PIXI.Container();
     app.stage.addChild(mainContainer);
 
+    let frameCount = 0; // ループ回数管理用
+
     app.ticker.add(() => {
+      frameCount++;
       mainContainer.removeChildren();
+
       if (!gameState) {
         const loading = new PIXI.Text(T.CONNECTING, { fill: COLORS.TEXT_MAIN, fontSize: 14 });
         loading.anchor.set(0.5);
@@ -167,6 +165,31 @@ export const RealGame = () => {
 
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
+
+      // 【診断ログ】データ構造と座標の整合性をチェック (最初の1回のみ)
+      if (frameCount === 1) {
+        logger.log({
+          level: 'debug',
+          action: 'ui.diagnostics_audit',
+          msg: 'Verifying data structure vs layout engine',
+          payload: {
+            screen: { width: W, height: H },
+            p1_keys: Object.keys(gameState.players?.p1 || {}),
+            p1_zones_exist: !!gameState.players?.p1?.zones,
+            p1_hand_sample: gameState.players?.p1?.zones?.hand?.[0] ? {
+              keys: Object.keys(gameState.players.p1.zones.hand[0]),
+              is_face_up: gameState.players.p1.zones.hand[0].is_face_up
+            } : 'EMPTY',
+            computed_coords: {
+              CW: coords.CW,
+              CH: coords.CH,
+              leaderX: coords.getLeaderX(W),
+              leaderY: coords.getY(1, H, coords.V_GAP),
+              handX_0: coords.getHandX(0, W)
+            }
+          }
+        });
+      }
 
       // --- P2 (相手) の描画 ---
       const p2 = gameState.players.p2;
@@ -190,29 +213,24 @@ export const RealGame = () => {
       // --- P1 (自分) の描画 ---
       const p1 = gameState.players.p1;
       
-      // Life
       p1.zones?.life?.forEach((card: any, i: number) => {
         const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
       });
 
-      // Leader
       if (p1.leader) {
         mainContainer.addChild(renderCard(p1.leader, coords.getLeaderX(W), coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'leader'));
       }
 
-      // Field
       p1.zones?.field?.forEach((card: any, i: number) => {
         const x = coords.getFieldX(i, W, coords.CW, p1.zones.field.length);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'field'));
       });
 
-      // Hand
       p1.zones?.hand?.forEach((card: any, i: number) => {
         mainContainer.addChild(renderCard(card, coords.getHandX(i, W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
       });
 
-      // Deck & Trash (電文の don_deck_count 等の数値をバッジに表示)
       mainContainer.addChild(renderCard({ is_face_up: false }, coords.getDonDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'don_deck', p1.don_deck_count));
       
       const trashArr = p1.zones?.trash || [];
