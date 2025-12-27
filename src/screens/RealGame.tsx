@@ -191,9 +191,9 @@ export const RealGame = () => {
       });
 
       // Deck & Trash
-      mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.deck?.length));
-      const topTrash = p1.zones.trash?.[p1.trash.length - 1] || { faceUp: false };
-      mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.trash?.length));
+      mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.deck_count));
+      const topTrash = p1.zones.trash?.[p1.zones.trash.length - 1] || { faceUp: false };
+      mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.zones.trash?.length));
 
       // --- P2 (相手) の描画 (Y座標反転等はEngineで吸収している前提) ---
       // ※ 簡易化のため同様のロジックでP2も描画（座標計算側で調整が必要な場合は Engine を修正）
