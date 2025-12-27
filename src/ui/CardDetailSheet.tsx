@@ -78,14 +78,15 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   );
 };
 
-// スタイル定義（インラインスタイルオブジェクト）
+// スタイル定義の修正
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   top: 0, left: 0, right: 0, bottom: 0,
   backgroundColor: 'rgba(0,0,0,0.7)',
-  display: 'flex', justifyContent: 'center', align: 'center',
-  zIndex: 1000,
-  paddingTop: '20%' // スマホで見やすいように少し上に配置
+  display: 'flex', 
+  justifyContent: 'center', 
+  alignItems: 'center', // 修正: align から alignItems へ
+  zIndex: 1000
 };
 
 const contentStyle: React.CSSProperties = {
