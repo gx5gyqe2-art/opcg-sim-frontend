@@ -195,10 +195,6 @@ export const RealGame = () => {
       const topTrash = p1.zones.trash?.[p1.zones.trash.length - 1] || { faceUp: false };
       mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.zones.trash?.length));
 
-      // --- P2 (相手) の描画 (Y座標反転等はEngineで吸収している前提) ---
-      // ※ 簡易化のため同様のロジックでP2も描画（座標計算側で調整が必要な場合は Engine を修正）
-    });
-      // --- P2 (相手) の描画 ---
       const p2 = gameState.players.p2;
       if (!p2) return;
 
@@ -225,7 +221,7 @@ export const RealGame = () => {
         const x = coords.getHandX(i, W);
         mainContainer.addChild(renderCard({ faceUp: false }, x, coords.getY(-0.5, H, coords.V_GAP), coords.CW, coords.CH, true, 'hand'));
       }
-
+    });
     return () => app.destroy(true, true);
   }, [gameState, renderCard, startGame, isPending]);
 
