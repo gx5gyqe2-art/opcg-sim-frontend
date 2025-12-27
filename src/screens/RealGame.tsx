@@ -1,13 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
-import { COLORS, LAYOUT } from '../layout/layout.constants';
+import { COLORS } from '../layout/layout.constants';
 import { LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
-
-const S = LAYOUT_PARAMS.CARD_STYLE;
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +40,6 @@ export const RealGame = () => {
     const isRest = card.is_rest === true;
     if (isRest) container.rotation = Math.PI / 2;
 
-    // 自分(P1)の手札は常に表向きにするロジックを統合
     const isBack = card.is_face_up === false && !(!isOpp && card.location === 'hand');
     
     const g = new PIXI.Graphics();
@@ -55,7 +52,6 @@ export const RealGame = () => {
     const textRotation = isRest ? -Math.PI / 2 : 0;
 
     if (!isBack) {
-      // 1. パワー
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(card.power, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold' });
         pTxt.anchor.set(0.5);
@@ -64,7 +60,6 @@ export const RealGame = () => {
         container.addChild(pTxt);
       }
 
-      // 2. 名前（省略ロジック込み）
       const nameStyle = new PIXI.TextStyle({ fontSize: 9, fontWeight: 'bold', fill: 0x333333 });
       const displayName = truncateText(card.name || "", nameStyle, isWide ? cw * 2.0 : cw * 1.5);
       const nTxt = new PIXI.Text(displayName, nameStyle);
@@ -72,7 +67,6 @@ export const RealGame = () => {
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
 
-      // 3. コスト
       if (card.cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw/2+10, -ch/2+10, 7).endFill();
         const cTxt = new PIXI.Text(card.cost, { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
@@ -120,7 +114,6 @@ export const RealGame = () => {
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
 
-      // 背景の塗り分け（画像2の完全再現）
       const bg = new PIXI.Graphics();
       bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
       bg.beginFill(COLORS.CONTROL_BG).drawRect(0, midY - 40, W, 80).endFill();
@@ -129,7 +122,6 @@ export const RealGame = () => {
 
       const renderSide = (p: any, isOpp: boolean) => {
         const side = new PIXI.Container();
-        // 相手側なら中央から上に180度反転
         if (isOpp) {
           side.x = W; side.y = midY - 40; side.rotation = Math.PI;
         } else {
@@ -137,7 +129,6 @@ export const RealGame = () => {
         }
         app.stage.addChild(side);
 
-        // Row 1: Field (キャラクター)
         (p.zones?.field || []).forEach((c: any, i: number) => {
           const card = renderCard(c, coords.CW, coords.CH, isOpp);
           card.x = coords.getFieldX(i, W, coords.CW, p.zones.field.length);
@@ -145,7 +136,6 @@ export const RealGame = () => {
           side.addChild(card);
         });
 
-        // Row 2: Commander (Leader, Life, Stage, Deck)
         const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
         const ldr = renderCard(p.leader, coords.CW, coords.CH, isOpp, undefined, true);
         ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
@@ -159,7 +149,6 @@ export const RealGame = () => {
         deck.x = coords.getDeckX(W); deck.y = r2Y;
         side.addChild(deck);
 
-        // Row 3: Resources (Don!!, Trash)
         const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
         const donAct = renderCard({ name: 'DON!!' }, coords.CW, coords.CH, isOpp, p.don_active?.length);
         donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
@@ -174,7 +163,6 @@ export const RealGame = () => {
         trash.x = coords.getTrashX(W); trash.y = r3Y;
         side.addChild(trash);
 
-        // Row 4: Hand (手札)
         (p.zones?.hand || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'hand' }, coords.CW, coords.CH, isOpp);
           card.x = coords.getHandX(i, W);
