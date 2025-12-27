@@ -153,6 +153,33 @@ export const RealGame = () => {
 
     app.ticker.add(() => {
       mainContainer.removeChildren();
+
+      // --- デバッグ用ログここから ---
+      if (gameState) {
+        const p1 = gameState.players?.p1;
+        const { width: W, height: H } = app.screen;
+        const coords = calculateCoordinates(W, H);
+        const yPos = coords.getY(1, H, coords.V_GAP);
+
+        // loggerを使用して状態を記録
+        import('../utils/logger').then(({ logger }) => {
+          logger.log({
+            level: 'debug',
+            action: 'debug.check_p1',
+            msg: `P1 Data check`,
+            payload: {
+              hasP1: !!p1,
+              handCount: p1?.hand?.length,
+              screenSize: { W, H },
+              calculatedY: yPos,
+              // Y座標が画面外（0未満またはH以上）になっていないか判定
+              isOffScreen: yPos < 0 || yPos > H
+            }
+          });
+        });
+      }
+      // --- デバッグ用ログここまで ---
+  
       if (!gameState) {
         const loading = new PIXI.Text(T.CONNECTING, { fill: COLORS.TEXT_MAIN, fontSize: 14 });
         loading.anchor.set(0.5);
