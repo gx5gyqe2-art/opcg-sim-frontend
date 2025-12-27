@@ -1,3 +1,5 @@
+// src/screens/RealGame.tsx
+
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
 
@@ -9,8 +11,7 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger'; // ★ この行を追加してください
-
+import { logger } from '../utils/logger'; 
 
 // 短縮参照
 const S = LAYOUT_PARAMS.CARD_STYLE;
@@ -45,12 +46,14 @@ export const RealGame = () => {
 
     const bg = new PIXI.Graphics();
     bg.lineStyle(S.BORDER_WIDTH, COLORS.CARD_BORDER);
-    bg.beginFill(card.isUpright === false ? COLORS.RESTED : COLORS.CARD_BG);
+    // 修正: card.isUpright === false -> card.is_rest === true
+    bg.beginFill(card.is_rest === true ? COLORS.RESTED : COLORS.CARD_BG);
     bg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, S.CORNER_RADIUS);
     bg.endFill();
     container.addChild(bg);
 
-    if (card.faceUp) {
+    // 修正: card.faceUp -> card.is_face_up
+    if (card.is_face_up) {
       // パワー
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(card.power.toString(), {
@@ -169,24 +172,9 @@ export const RealGame = () => {
 
       // --- P1 (自分) の描画 ---
       const p1 = gameState.players.p1;
-
-  // 100フレームに1回程度、現在の参照先が正しいかログを出す
-  if (Math.random() < 0.01) {
-    logger.log({
-      level: 'debug',
-      action: 'ui.render_check',
-      msg: 'Checking P1 data structure',
-      payload: {
-        hand_direct: !!p1.hand,       // 現在のコードが参照している場所
-        hand_via_zones: !!p1.zones?.hand, // 電文で送られてきている場所
-        leader_exists: !!p1.leader
-      }
-    });
-  }
-  // ... (以下描画処理)
-  
-      // Life
-      p1.zones.life?.forEach((card: any, i: number) => {
+      
+      // Life: 修正(参照先を zones.life へ)
+      p1.zones?.life?.forEach((card: any, i: number) => {
         const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
       });
@@ -196,28 +184,27 @@ export const RealGame = () => {
         mainContainer.addChild(renderCard(p1.leader, coords.getLeaderX(W), coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'leader'));
       }
 
-      // Field
-      p1.field?.forEach((card: any, i: number) => {
-        const x = coords.getFieldX(i, W, coords.CW, p1.field.length);
+      // Field: 修正(参照先を zones.field へ)
+      p1.zones?.field?.forEach((card: any, i: number) => {
+        const x = coords.getFieldX(i, W, coords.CW, p1.zones.field.length);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'field'));
       });
 
-      // Hand
-      p1.hand?.forEach((card: any, i: number) => {
+      // Hand: 修正(参照先を zones.hand へ)
+      p1.zones?.hand?.forEach((card: any, i: number) => {
         mainContainer.addChild(renderCard(card, coords.getHandX(i, W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
       });
 
-      // Deck & Trash
-      mainContainer.addChild(renderCard({ faceUp: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.deck?.length));
-      const topTrash = p1.zones.trash?.[p1.trash.length - 1] || { faceUp: false };
-      mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', p1.trash?.length));
-
-      // --- P2 (相手) の描画 (Y座標反転等はEngineで吸収している前提) ---
-      // ※ 簡易化のため同様のロジックでP2も描画（座標計算側で調整が必要な場合は Engine を修正）
+      // Deck & Trash: 修正(枚数参照先を電文に合わせる)
+      mainContainer.addChild(renderCard({ is_face_up: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.don_deck_count));
+      
+      const trashArr = p1.zones?.trash || [];
+      const topTrash = trashArr.length > 0 ? trashArr[trashArr.length - 1] : { is_face_up: false };
+      mainContainer.addChild(renderCard(topTrash, coords.getTrashX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'trash', trashArr.length));
     });
 
     return () => app.destroy(true, true);
-  }, [gameState, renderCard, startGame, isPending]);
+  }, [gameState, renderCard]);
 
   return (
     <div ref={pixiContainerRef} className="game-screen">
