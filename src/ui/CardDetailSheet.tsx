@@ -11,48 +11,43 @@ interface CardDetailSheetProps {
 export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, onAction, onClose }) => {
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
-  // アクション実行ハンドラ
   const handleExecute = async (type: string, extra: any = {}) => {
     await onAction(type, {
       card_id: card.uuid,
       ...extra
     });
-    onClose(); // アクション送信後にシートを閉じる
+    onClose();
   };
 
-  // 場所に応じたボタンの出し分けロジック (過去ソースの仕様を反映)
   const renderButtons = () => {
     const buttons = [];
 
     if (location === 'hand') {
       buttons.push(
-        <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} className="action-btn play">
+        <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
           登場させる
         </button>
       );
     }
 
     if (location === 'field' || location === 'leader') {
-      // アタックボタン（レスト中でない場合）
       if (!card.is_rest) {
         buttons.push(
-          <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} className="action-btn attack">
+          <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
             アタック
           </button>
         );
       }
       
-      // ドン!!付与ボタン（自分のターン中などの条件はバックエンドで判定）
       buttons.push(
-        <button key="attach" onClick={() => handleExecute(ACTIONS.ATTACH_DON, { extra: { count: 1 } })} className="action-btn attach">
+        <button key="attach" onClick={() => handleExecute(ACTIONS.ATTACH_DON, { extra: { count: 1 } })} style={btnStyle("#f1c40f", "black")}>
           ドン!!を1枚付与
         </button>
       );
 
-      // 起動メイン
-      if (card.text && card.text.includes('『起動メイン』')) {
+      if (card.text && card.text.includes('起動メイン')) {
         buttons.push(
-          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} className="action-btn main">
+          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
             効果発動
           </button>
         );
@@ -63,48 +58,53 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   };
 
   return (
-    <div className="card-detail-overlay" onClick={onClose}>
-      <div className="card-detail-content" onClick={(e) => e.stopPropagation()}>
-        <div className="card-info">
-          <h2>{card.name}</h2>
-          <p className="card-text">{card.text}</p>
-          <div className="card-stats">
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={contentStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={{ marginBottom: '20px' }}>
+          <h2 style={{ margin: '0 0 10px 0', fontSize: '1.2rem' }}>{card.name}</h2>
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.4' }}>{card.text}</p>
+          <div style={{ marginTop: '10px', fontWeight: 'bold', display: 'flex', gap: '15px' }}>
             {card.power !== undefined && <span>POWER: {card.power}</span>}
             {card.cost !== undefined && <span>COST: {card.cost}</span>}
           </div>
         </div>
 
-        <div className="action-menu">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {renderButtons()}
-          <button onClick={onClose} className="action-btn close">閉じる</button>
+          <button onClick={onClose} style={btnStyle("#95a5a6", "white")}>閉じる</button>
         </div>
       </div>
-
-      <style jsx>{`
-        .card-detail-overlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.7);
-          display: flex; justify-content: center; align-items: center;
-          z-index: 1000;
-        }
-        .card-detail-content {
-          background: white; padding: 20px; border-radius: 12px;
-          width: 80%; max-width: 400px;
-        }
-        .action-menu {
-          display: flex; flex-direction: column; gap: 10px; margin-top: 20px;
-        }
-        .action-btn {
-          padding: 12px; border: none; border-radius: 6px;
-          font-weight: bold; cursor: pointer;
-        }
-        .play { background: #2ecc71; color: white; }
-        .attack { background: #e74c3c; color: white; }
-        .attach { background: #f1c40f; color: black; }
-        .main { background: #3498db; color: white; }
-        .close { background: #95a5a6; color: white; }
-      `}</style>
     </div>
   );
 };
+
+// スタイル定義（インラインスタイルオブジェクト）
+const overlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 0, left: 0, right: 0, bottom: 0,
+  backgroundColor: 'rgba(0,0,0,0.7)',
+  display: 'flex', justifyContent: 'center', align: 'center',
+  zIndex: 1000,
+  paddingTop: '20%' // スマホで見やすいように少し上に配置
+};
+
+const contentStyle: React.CSSProperties = {
+  backgroundColor: 'white',
+  padding: '20px',
+  borderRadius: '12px',
+  width: '85%',
+  maxWidth: '350px',
+  maxHeight: '80vh',
+  overflowY: 'auto'
+};
+
+const btnStyle = (bg: string, color: string): React.CSSProperties => ({
+  padding: '12px',
+  border: 'none',
+  borderRadius: '6px',
+  fontWeight: 'bold',
+  cursor: 'pointer',
+  backgroundColor: bg,
+  color: color,
+  fontSize: '1rem'
+});
