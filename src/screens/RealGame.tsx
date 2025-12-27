@@ -49,30 +49,76 @@ export const RealGame = () => {
     container.addChild(g);
 
     const textRotation = isRest ? -Math.PI / 2 : 0;
+    // 過去ソースの座標方向フラグ
+    const yDir = isOpp ? -1 : 1;
 
     if (!isBack) {
+      // 1. パワー (枠外・上部)
       if (card.power !== undefined) {
-        const pTxt = new PIXI.Text(card.power, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold' });
-        pTxt.anchor.set(0.5);
-        pTxt.y = -ch / 2 + 10;
+        const pTxt = new PIXI.Text(`POWER ${card.power}`, { 
+          fontSize: 11, fill: 0xFF0000, fontWeight: 'bold', align: 'center'
+        });
+        pTxt.anchor.set(0.5); 
+        if (isRest) {
+          pTxt.x = (-ch / 2 - 10) * yDir; pTxt.y = 0;
+        } else {
+          pTxt.x = 0; pTxt.y = (-ch / 2 - 10) * yDir;
+        }
         pTxt.rotation = textRotation;
         container.addChild(pTxt);
       }
 
-      const nameStyle = new PIXI.TextStyle({ fontSize: 9, fontWeight: 'bold', fill: 0x333333 });
-      const displayName = truncateText(card.name || "", nameStyle, isWide ? cw * 2.0 : cw * 1.5);
+      // 2. 名前 (枠外・下部)
+      const isResource = card.name === 'DON!!' || card.name === 'Trash' || card.name === 'Deck';
+      const nameStyle = new PIXI.TextStyle({ 
+        fontSize: isResource ? 11 : 9, 
+        fontWeight: 'bold', 
+        fill: isResource ? 0x000000 : 0x333333,
+        align: 'center'
+      });
+      const maxNW = isWide ? cw * 2.2 : cw * 1.8;
+      const displayName = truncateText(card.name || "", nameStyle, maxNW);
       const nTxt = new PIXI.Text(displayName, nameStyle);
-      nTxt.anchor.set(0.5);
+      
+      nTxt.anchor.set(0.5, isResource ? 0.5 : 0);
+      if (isRest) {
+        nTxt.x = (isResource ? 0 : ch / 2 + 2) * yDir; nTxt.y = 0;
+      } else {
+        nTxt.x = 0; nTxt.y = (isResource ? 0 : ch / 2 + 2) * yDir;
+      }
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
 
-      if (card.cost !== undefined) {
-        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw / 2 + 10, -ch / 2 + 10, 7).endFill();
-        const cTxt = new PIXI.Text(card.cost, { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
+      // 3. カウンター (左端・回転表示)
+      if (card.counter !== undefined && card.counter > 0) {
+        const cTxt = new PIXI.Text(`+${card.counter}`, {
+          fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold'
+        });
         cTxt.anchor.set(0.5);
-        cTxt.position.set(-cw / 2 + 10, -ch / 2 + 10);
-        cTxt.rotation = textRotation;
-        container.addChild(cBg, cTxt);
+        cTxt.x = -cw / 2 + 8;
+        cTxt.y = 0;
+        cTxt.rotation = -Math.PI / 2;
+        container.addChild(cTxt);
+      }
+
+      // 4. コスト (左上・円背景)
+      if (card.cost !== undefined) {
+        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(0, 0, 7).endFill();
+        cBg.x = -cw / 2 + 10;
+        cBg.y = -ch / 2 + 10;
+        const cTxt = new PIXI.Text(card.cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
+        cTxt.anchor.set(0.5);
+        cBg.addChild(cTxt);
+        container.addChild(cBg);
+      }
+      
+      // 5. 属性 (右上)
+      if (card.attribute && card.power !== undefined) {
+        const aTxt = new PIXI.Text(card.attribute, { fontSize: 7, fill: 0x666666 });
+        aTxt.anchor.set(1, 0);
+        aTxt.x = cw / 2 - 4;
+        aTxt.y = -ch / 2 + 4;
+        container.addChild(aTxt);
       }
     } else {
       const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
@@ -81,13 +127,21 @@ export const RealGame = () => {
       container.addChild(backTxt);
     }
 
-    if (badgeCount !== undefined) {
-      const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(cw / 2 - 9, ch / 2 - 9, 9).endFill();
-      const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF });
+    // 枚数バッジ
+    if (badgeCount !== undefined && (badgeCount > 0 || isResource)) {
+      const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(0, 0, 9).endFill();
+      const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
       bT.anchor.set(0.5);
-      bT.position.set(cw / 2 - 9, ch / 2 - 9);
-      bT.rotation = textRotation;
-      container.addChild(bG, bT);
+      
+      // レスト状態に合わせてバッジ位置を調整
+      if (isRest) {
+        bG.x = (cw / 2 - 9) * yDir; bG.y = (ch / 2 - 9) * yDir;
+      } else {
+        bG.x = cw / 2 - 9; bG.y = ch / 2 - 9;
+      }
+      
+      bG.addChild(bT);
+      container.addChild(bG);
     }
 
     container.eventMode = 'static';
@@ -97,27 +151,20 @@ export const RealGame = () => {
     });
 
     return container;
-  }, []);
+  }, [truncateText]);
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-    
-    // 【修正箇所】高精細ディスプレイ(Retina等)対応の設定を追加
     const app = new PIXI.Application({ 
-      background: 0xFFFFFF, 
-      resizeTo: window, 
-      antialias: true,
-      resolution: window.devicePixelRatio || 1, // 過去ソースの解像度設定を復元
-      autoDensity: true,                         // 描画サイズを物理ピクセルに最適化
+      background: 0xFFFFFF, resizeTo: window, antialias: true,
+      resolution: window.devicePixelRatio || 1, autoDensity: true
     });
-
     appRef.current = app;
     pixiContainerRef.current.appendChild(app.view as any);
 
     app.ticker.add(() => {
       app.stage.removeChildren();
       if (!gameState) return;
-
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
