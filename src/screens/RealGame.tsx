@@ -1,5 +1,3 @@
-// src/screens/RealGame.tsx
-
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as PIXI from 'pixi.js';
 
@@ -11,7 +9,7 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger'; // インポートを保持
+import { logger } from '../utils/logger';
 
 // 短縮参照
 const S = LAYOUT_PARAMS.CARD_STYLE;
@@ -46,11 +44,13 @@ export const RealGame = () => {
 
     const bg = new PIXI.Graphics();
     bg.lineStyle(S.BORDER_WIDTH, COLORS.CARD_BORDER);
+    // 修正: card.is_rest を参照
     bg.beginFill(card.is_rest === true ? COLORS.RESTED : COLORS.CARD_BG);
     bg.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, S.CORNER_RADIUS);
     bg.endFill();
     container.addChild(bg);
 
+    // 修正: card.is_face_up を参照
     if (card.is_face_up) {
       if (card.power !== undefined) {
         const pTxt = new PIXI.Text(card.power.toString(), {
@@ -138,12 +138,7 @@ export const RealGame = () => {
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
-    // ログ: PIXIアプリ初期化開始
-    logger.log({
-      level: 'info',
-      action: 'ui.pixi_setup',
-      msg: 'Initializing PIXI Application'
-    });
+    logger.log({ level: 'info', action: 'ui.pixi_setup', msg: 'Initializing PIXI Application' });
 
     const app = new PIXI.Application({
       background: COLORS.BOARD_BG,
@@ -156,22 +151,16 @@ export const RealGame = () => {
     const mainContainer = new PIXI.Container();
     app.stage.addChild(mainContainer);
 
-    // ループ回数カウント用
     let frameCount = 0;
 
     app.ticker.add(() => {
       frameCount++;
-
-      // ログ: 100フレームに1回、ループが動いていることを通知
       if (frameCount % 100 === 0) {
         logger.log({
           level: 'debug',
           action: 'ui.ticker_alive',
           msg: `Render loop is running. Frame: ${frameCount}`,
-          payload: { 
-            has_state: !!gameState,
-            p1_ready: !!gameState?.players?.p1 
-          }
+          payload: { has_state: !!gameState, p1_ready: !!gameState?.players?.p1 }
         });
       }
 
@@ -187,9 +176,9 @@ export const RealGame = () => {
 
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
-
       const p1 = gameState.players.p1;
       
+      // 各ゾーンを p1.zones 経由で描画
       p1.zones?.life?.forEach((card: any, i: number) => {
         const x = coords.getLifeX(W) + (i * S.OFFSET.ATTACHED_DON);
         mainContainer.addChild(renderCard(card, x, coords.getY(1, H, coords.V_GAP), coords.CW, coords.CH, false, 'life'));
@@ -208,6 +197,7 @@ export const RealGame = () => {
         mainContainer.addChild(renderCard(card, coords.getHandX(i, W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'hand'));
       });
 
+      // 枚数参照先を電文に合わせて修正
       mainContainer.addChild(renderCard({ is_face_up: false }, coords.getDeckX(W), coords.getY(2, H, coords.V_GAP), coords.CW, coords.CH, false, 'deck', p1.don_deck_count));
       
       const trashArr = p1.zones?.trash || [];
@@ -219,7 +209,8 @@ export const RealGame = () => {
       logger.log({ level: 'info', action: 'ui.pixi_destroy', msg: 'Destroying PIXI Application' });
       app.destroy(true, true);
     };
-  }, [gameState, renderCard]);
+    // 依存配列から renderCard を外して無限初期化を防止
+  }, [gameState]);
 
   return (
     <div ref={pixiContainerRef} className="game-screen">

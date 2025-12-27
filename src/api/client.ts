@@ -3,7 +3,7 @@ import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger'; 
-import { sessionManager } from '../utils/session'; // ★追加
+import { sessionManager } from '../utils/session';
 
 const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
 
@@ -36,7 +36,6 @@ export const apiClient = {
       }),
     });
 
-    // ★レスポンスヘッダーから Session ID を取得して同期
     const sid = res.headers.get('X-Session-ID');
     if (sid) {
       sessionManager.setSessionId(sid);
@@ -44,18 +43,16 @@ export const apiClient = {
 
     const data = await res.json();
 
-// ここに詳細ログを追加
-logger.log({
-  level: 'info',
-  action: 'api.receive_create_detail',
-  msg: 'Full payload check',
-  payload: {
-    has_game_state: !!data.game_state,
-    p1_zones: data.game_state?.players?.p1?.zones, // ここに zones があるか確認
-    p1_hand: data.game_state?.players?.p1?.hand,   // または直下にあるか確認
-  }
-});
-
+    // 詳細ログの追加
+    logger.log({
+      level: 'info',
+      action: 'api.receive_create_detail',
+      msg: 'Full payload check',
+      payload: {
+        has_game_state: !!data.game_state,
+        p1_zones: data.game_state?.players?.p1?.zones,
+      }
+    });
 
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey] || data.state;
@@ -69,7 +66,9 @@ logger.log({
       throw new Error("Invalid Response Schema");
     }
 
-    return { game_id: data.game_id, state: newState };
+    // game_idの取得を柔軟化
+    const finalGameId = data.game_id || (newState as any).game_id;
+    return { game_id: finalGameId, state: newState };
   },
 
   /** プレイヤーのアクションを送信 */
