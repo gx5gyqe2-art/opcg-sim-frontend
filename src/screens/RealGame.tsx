@@ -101,7 +101,16 @@ export const RealGame = () => {
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-    const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true });
+    
+    // 【修正箇所】高精細ディスプレイ(Retina等)対応の設定を追加
+    const app = new PIXI.Application({ 
+      background: 0xFFFFFF, 
+      resizeTo: window, 
+      antialias: true,
+      resolution: window.devicePixelRatio || 1, // 過去ソースの解像度設定を復元
+      autoDensity: true,                         // 描画サイズを物理ピクセルに最適化
+    });
+
     appRef.current = app;
     pixiContainerRef.current.appendChild(app.view as any);
 
