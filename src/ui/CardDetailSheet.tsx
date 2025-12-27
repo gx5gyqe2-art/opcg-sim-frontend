@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react'; // 【修正】useEffectをインポート
 import CONST from '../../shared_constants.json';
 
 interface CardDetailSheetProps {
@@ -9,6 +9,21 @@ interface CardDetailSheetProps {
 }
 
 export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, onAction, onClose }) => {
+  // 【修正】マウント時ロガーの追加
+  useEffect(() => {
+    fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: "FE_SHEET",
+        action: "debug.sheet_mount",
+        msg: `Detail sheet mounted for: ${card.name}`,
+        payload: { uuid: card.uuid, location },
+        timestamp: new Date().toISOString()
+      })
+    }).catch(() => {});
+  }, []);
+
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   const handleExecute = async (type: string, extra: any = {}) => {
@@ -78,14 +93,13 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   );
 };
 
-// スタイル定義の修正
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   top: 0, left: 0, right: 0, bottom: 0,
   backgroundColor: 'rgba(0,0,0,0.7)',
   display: 'flex', 
   justifyContent: 'center', 
-  alignItems: 'center', // 修正: align から alignItems へ
+  alignItems: 'center',
   zIndex: 1000
 };
 

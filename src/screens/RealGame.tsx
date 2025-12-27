@@ -15,7 +15,6 @@ export const RealGame = () => {
 
   const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
 
-  // 【追加】原因特定用デバッグロガー
   const sendDebugLog = async (action: string, msg: string, payload: any = {}) => {
     try {
       await fetch('/api/log', {
@@ -49,7 +48,7 @@ export const RealGame = () => {
   };
 
   const handleAction = async (type: string, payload: any = {}) => {
-    // 【修正1】関数の開始直後にデバッグログを追加
+    // 【修正3】handleActionの冒頭にログを追加
     await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
 
     if (!gameState?.id) return;
@@ -62,7 +61,6 @@ export const RealGame = () => {
       ...payload
     };
 
-    // 1. 送信開始をサーバーログに記録（既存ロガー）
     await fetch('/api/log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -87,8 +85,6 @@ export const RealGame = () => {
 
       if (res.ok) {
         const data = await res.json();
-        
-        // 2. 成功をサーバーログに記録（既存ロガー）
         await fetch('/api/log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -110,7 +106,6 @@ export const RealGame = () => {
         throw new Error(`Server returned status: ${res.status}`);
       }
     } catch (err: any) {
-      // 3. 失敗をサーバーログに記録（既存ロガー）
       await fetch('/api/log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,13 +221,10 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
 
-    // 【修正2】pointerdown イベントを強化（伝播停止と詳細ログ）
+    // 【修正2】stopPropagationの追加とデバッグログ
     container.on('pointerdown', (e) => {
-      e.stopPropagation(); // 必須：重なりによる検知ミスを防止
-      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { 
-        uuid: card.uuid, 
-        location: card.location || 'not_set' 
-      });
+      e.stopPropagation();
+      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { uuid: card.uuid, location: card.location || 'not_set' });
       setSelectedCard({ card, location: card.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
@@ -245,7 +237,7 @@ export const RealGame = () => {
     const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     appRef.current = app;
 
-    // 【修正3】PIXI初期化直後にヒットエリアを設定
+    // 【修正1】PIXIのヒットエリア設定を追加
     app.stage.eventMode = 'static';
     app.stage.hitArea = app.screen;
 
@@ -264,7 +256,6 @@ export const RealGame = () => {
       bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
       app.stage.addChild(bg);
 
-      // ターン終了ボタン
       const turnEndBtn = new PIXI.Graphics().beginFill(0x333333).drawRoundedRect(W - 110, midY - 20, 100, 40, 8).endFill();
       turnEndBtn.eventMode = 'static';
       turnEndBtn.cursor = 'pointer';

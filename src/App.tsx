@@ -1,10 +1,7 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-// 修正後
 import { RealGame } from './screens/RealGame';
 
-
-// --- Error Boundary (クラッシュ捕捉用コンポーネント) ---
 interface Props {
   children: ReactNode;
 }
@@ -56,19 +53,33 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// --- Main App Component ---
 export default function App() {
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      backgroundColor: '#1a1a1a',
-      overflow: 'hidden',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      touchAction: 'none'
-    }}>
+    <div 
+      // 【修正】FE_GLOBALロガーの追加
+      onClick={() => {
+        fetch('/api/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: "FE_GLOBAL",
+            action: "debug.dom_click",
+            msg: "Global DOM click detected",
+            timestamp: new Date().toISOString()
+          })
+        }).catch(() => {});
+      }}
+      style={{
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#1a1a1a',
+        overflow: 'hidden',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        touchAction: 'none'
+      }}
+    >
       <ErrorBoundary>
         <RealGame />
       </ErrorBoundary>
