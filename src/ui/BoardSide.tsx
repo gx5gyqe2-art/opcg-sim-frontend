@@ -4,7 +4,7 @@ import { createCardContainer } from './CardRenderer';
 
 export const createBoardSide = (
   p: any, 
-  isOpp: boolean, 
+  _isOpp: boolean, // 未使用変数エラー回避のためアンダースコアを付与
   W: number, 
   coords: LayoutCoords, 
   onCardClick: (card: any) => void
@@ -13,7 +13,6 @@ export const createBoardSide = (
   const z = p?.zones || {};
 
   (z.field || []).forEach((c: any, i: number) => {
-    // 修正: 第4引数の isOpp を削除しました
     const card = createCardContainer(c, coords.CW, coords.CH, { 
       onClick: () => onCardClick(c) 
     });
