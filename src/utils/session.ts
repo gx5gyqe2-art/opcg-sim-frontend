@@ -1,18 +1,16 @@
-/**
- * バックエンドと同期するセッションID（トレースID）を管理
- */
-let currentSessionId: string = 'unknown';
+let currentSessionId: string = sessionStorage.getItem('opcg_session_id') || 'unknown';
 
 export const sessionManager = {
-  /**
-   * HTTPヘッダー（X-Session-ID）から取得した値をセット
-   */
   setSessionId: (id: string) => {
     currentSessionId = id;
+    sessionStorage.setItem('opcg_session_id', id);
   },
 
-  /**
-   * ロガーやAPIクライアントで使用する現在のIDを取得
-   */
-  getSessionId: () => currentSessionId
+  getSessionId: () => {
+    if (currentSessionId === 'unknown') {
+      const newId = crypto.randomUUID();
+      sessionManager.setSessionId(newId);
+    }
+    return currentSessionId;
+  }
 };

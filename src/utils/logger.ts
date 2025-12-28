@@ -6,7 +6,7 @@ const K = CONST.LOG_CONFIG.KEYS;
 const baseUrl = API_CONFIG.BASE_URL.replace(/\/$/, "");
 const LOG_URL = `${baseUrl}/api/log`;
 
-type LogLevel = 'debug' | 'info' | 'error';
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type PlayerType = 'p1' | 'p2' | 'system' | 'unknown' | string;
 
 interface LogOptions {
@@ -19,7 +19,33 @@ interface LogOptions {
 }
 
 export const logger = {
-  log: ({ level, action, msg, sessionId, player = "unknown", payload }: LogOptions) => {
+  sendRemoteLog: (options: LogOptions) => {
+    const sid = options.sessionId || sessionManager.getSessionId();
+    const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+    const source = "FE";
+
+    const logObject = {
+      [K.TIME]: now,
+      [K.SOURCE]: source,
+      [K.LEVEL]: options.level,
+      [K.SESSION]: sid,
+      [K.PLAYER]: options.player || "unknown",
+      [K.ACTION]: options.action,
+      [K.MESSAGE]: options.msg,
+      [K.PAYLOAD]: options.payload,
+      sessionId: sid
+    };
+
+    fetch(LOG_URL, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logObject)
+    }).catch(() => {});
+  },
+
+  log: (options: LogOptions) => {
+    const { level, action, msg, sessionId, player = "unknown", payload } = options;
     const sid = sessionId || sessionManager.getSessionId();
     const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const source = "FE";
@@ -30,34 +56,42 @@ export const logger = {
     const styles = {
       debug: 'color: #7f8c8d; font-family: monospace;',
       info:  'color: #2ecc71; font-weight: bold; font-family: monospace;',
+      warn:  'color: #f1c40f; font-weight: bold; font-family: monospace;',
       error: 'color: #e74c3c; font-weight: bold; font-family: monospace;',
       summary: 'color: #ffffff; font-weight: bold;'
     };
 
     console.groupCollapsed(`%c${header} %c${summary}`, styles[level], styles.summary);
-    
-    const logObject = {
-      [K.TIME]: now,
-      [K.SOURCE]: source,
-      [K.LEVEL]: level,
-      [K.SESSION]: sid,
-      [K.PLAYER]: player,
-      [K.ACTION]: action,
-      [K.MESSAGE]: msg,
-      [K.PAYLOAD]: payload,
-      sessionId: sid
-    };
-
-    console.log("Details:", logObject);
+    console.log("Details:", { ...options, sessionId: sid, time: now, source });
     console.groupEnd();
 
-    fetch(LOG_URL, {
-      method: 'POST',
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(logObject)
-    }).catch(() => {});
+    if (level === 'error' || level === 'warn') {
+      logger.sendRemoteLog(options);
+    } else {
+      fetch(LOG_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [K.TIME]: now,
+          [K.SOURCE]: source,
+          [K.LEVEL]: level,
+          [K.SESSION]: sid,
+          [K.PLAYER]: player,
+          [K.ACTION]: action,
+          [K.MESSAGE]: msg,
+          [K.PAYLOAD]: payload,
+          sessionId: sid
+        })
+      }).catch(() => {});
+    }
+  },
+
+  warn: (action: string, msg: string, payload?: any) => {
+    logger.log({ level: 'warn', action, msg, payload });
+  },
+
+  error: (action: string, msg: string, payload?: any) => {
+    logger.log({ level: 'error', action, msg, payload });
   }
 };

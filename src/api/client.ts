@@ -7,9 +7,42 @@ import { sessionManager } from '../utils/session';
 
 const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
 
+const fetchWithLog = async (url: string, options: RequestInit = {}) => {
+  const sid = sessionManager.getSessionId();
+  const headers = {
+    ...options.headers,
+    'X-Session-ID': sid,
+    'Content-Type': 'application/json',
+  };
+
+  if (import.meta.env.DEV) {
+    console.group(`%cAPI Request: ${url}`, 'color: #3498db; font-weight: bold;');
+    console.log('Method:', options.method || 'GET');
+    console.log('Headers:', headers);
+    console.log('Body:', options.body ? JSON.parse(options.body as string) : null);
+    console.groupEnd();
+  }
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (import.meta.env.DEV) {
+    const logRes = res.clone();
+    console.group(`%cAPI Response: ${url}`, `color: ${res.ok ? '#2ecc71' : '#e74c3c'}; font-weight: bold;`);
+    console.log('Status:', res.status);
+    try {
+      console.log('Data:', await logRes.json());
+    } catch {
+      console.log('Data: (not json)');
+    }
+    console.groupEnd();
+  }
+
+  return res;
+};
+
 export const apiClient = {
   async checkHealth(): Promise<void> {
-    const res = await fetch(`${BASE_URL}${ENDPOINTS.HEALTH}`);
+    const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.HEALTH}`);
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
     
     logger.log({
@@ -23,9 +56,8 @@ export const apiClient = {
     p1Deck = DEFAULT_GAME_SETTINGS.P1_DECK, 
     p2Deck = DEFAULT_GAME_SETTINGS.P2_DECK
   ): Promise<{ game_id: string; state: GameState }> {
-    const res = await fetch(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
+    const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         p1_deck: p1Deck,
         p2_deck: p2Deck,
@@ -40,7 +72,6 @@ export const apiClient = {
     }
 
     const data = await res.json();
-
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey] || data.game_state;
     
@@ -64,9 +95,8 @@ export const apiClient = {
       }
     };
 
-    const response = await fetch(`${BASE_URL}/api/game/action`, {
+    const response = await fetchWithLog(`${BASE_URL}/api/game/action`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(actionBody),
     });
 
