@@ -16,7 +16,7 @@ export const RealGame = () => {
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
 
-  const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
+  const { startGame } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
 
   const handleAction = async (type: string, payload: any = {}) => {
     if (!gameState?.game_id) return;
