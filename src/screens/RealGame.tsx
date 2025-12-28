@@ -37,9 +37,9 @@ export const RealGame = () => {
   };
 
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
-    const metrics = PIXI.TextMetrics.measureText(text, style);
-    if (metrics.width <= maxWidth) return text;
-    let truncated = text;
+    const metrics = PIXI.TextMetrics.measureText(text || "", style);
+    if (metrics.width <= maxWidth) return text || "";
+    let truncated = text || "";
     while (truncated.length > 0) {
       truncated = truncated.slice(0, -1);
       if (PIXI.TextMetrics.measureText(truncated + '...', style).width <= maxWidth) return truncated + '...';
@@ -48,7 +48,6 @@ export const RealGame = () => {
   };
 
   const handleAction = async (type: string, payload: any = {}) => {
-    // 【修正3】handleActionの冒頭にログを追加
     await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
 
     if (!gameState?.id) return;
@@ -131,14 +130,14 @@ export const RealGame = () => {
     isWide = false
   ) => {
     const container = new PIXI.Container();
-    const isRest = card.is_rest === true;
+    const isRest = card?.is_rest === true;
     if (isRest) container.rotation = Math.PI / 2;
 
-    const isBack = card.is_face_up === false && 
-                   card.location !== 'leader' && 
-                   !(!isOpp && card.location === 'hand');
+    const isBack = card?.is_face_up === false && 
+                   card?.location !== 'leader' && 
+                   !(!isOpp && card?.location === 'hand');
     
-    const attachedDon = card.attached_don || 0;
+    const attachedDon = card?.attached_don || 0;
     if (attachedDon > 0 && !isBack) {
       for (let i = 0; i < Math.min(attachedDon, 3); i++) {
         const donG = new PIXI.Graphics();
@@ -160,11 +159,11 @@ export const RealGame = () => {
 
     const textRotation = isRest ? -Math.PI / 2 : 0;
     const yDir = isOpp ? -1 : 1;
-    const cardName = card.name || "";
+    const cardName = card?.name || "";
     const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck' || cardName === 'Don!!';
 
     if (!isBack) {
-      if (card.power !== undefined) {
+      if (card?.power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${card.power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold' });
         pTxt.anchor.set(0.5); 
         pTxt.x = 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
@@ -182,20 +181,20 @@ export const RealGame = () => {
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
 
-      if (card.counter !== undefined && card.counter > 0) {
+      if (card?.counter !== undefined && card.counter > 0) {
         const cTxt = new PIXI.Text(`+${card.counter}`, { fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold' });
         cTxt.anchor.set(0.5); cTxt.x = -cw / 2 + 8; cTxt.y = 0; cTxt.rotation = -Math.PI / 2;
         container.addChild(cTxt);
       }
 
-      if (card.cost !== undefined) {
+      if (card?.cost !== undefined) {
         const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw / 2 + 10, -ch / 2 + 10, 7).endFill();
         const cTxt = new PIXI.Text(card.cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
         cTxt.anchor.set(0.5); cTxt.position.set(-cw / 2 + 10, -ch / 2 + 10);
         container.addChild(cBg, cTxt);
       }
       
-      if (card.attribute && card.power !== undefined) {
+      if (card?.attribute && card?.power !== undefined) {
         let attrColor = 0x666666;
         if (card.attribute === '斬') attrColor = 0xc0392b;
         if (card.attribute === '打') attrColor = 0x2980b9;
@@ -221,11 +220,10 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
 
-    // 【修正2】stopPropagationの追加とデバッグログ
     container.on('pointerdown', (e) => {
       e.stopPropagation();
-      sendDebugLog("debug.pixi_click", `Clicked: ${card.name}`, { uuid: card.uuid, location: card.location || 'not_set' });
-      setSelectedCard({ card, location: card.location || (isOpp ? 'opponent' : 'player') });
+      sendDebugLog("debug.pixi_click", `Clicked: ${card?.name}`, { uuid: card?.uuid, location: card?.location || 'not_set' });
+      setSelectedCard({ card, location: card?.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
 
@@ -237,13 +235,14 @@ export const RealGame = () => {
     const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     appRef.current = app;
 
-    // 【修正1】PIXIのヒットエリア設定を追加
     app.stage.eventMode = 'static';
     app.stage.hitArea = app.screen;
 
     pixiContainerRef.current.appendChild(app.view as any);
 
-    app.ticker.add(() => {
+    // 【修正】描画処理を関数に切り出し
+    const renderScene = () => {
+      if (!app.stage) return;
       app.stage.removeChildren();
       if (!gameState) return;
       const { width: W, height: H } = app.screen;
@@ -271,7 +270,7 @@ export const RealGame = () => {
         else { side.y = midY + 40; }
         app.stage.addChild(side);
 
-        (p.zones?.field || []).forEach((c: any, i: number) => {
+        (p?.zones?.field || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'field' }, coords.CW, coords.CH, isOpp);
           card.x = coords.getFieldX(i, W, coords.CW, p.zones.field.length);
           card.y = coords.getY(1, coords.CH, coords.V_GAP);
@@ -279,13 +278,13 @@ export const RealGame = () => {
         });
 
         const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
-        if (p.leader) {
+        if (p?.leader) {
           const ldr = renderCard({ ...p.leader, location: 'leader' }, coords.CW, coords.CH, isOpp, undefined, true);
           ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
           side.addChild(ldr);
         }
 
-        const life = renderCard({ name: 'Life', is_face_up: false, location: 'life' }, coords.CW, coords.CH, isOpp, p.zones?.life?.length);
+        const life = renderCard({ name: 'Life', is_face_up: false, location: 'life' }, coords.CW, coords.CH, isOpp, p?.zones?.life?.length);
         life.x = coords.getLifeX(W); life.y = r2Y;
         side.addChild(life);
 
@@ -298,19 +297,19 @@ export const RealGame = () => {
         donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
         side.addChild(donDk);
 
-        const donAct = renderCard({ name: 'DON!!', location: 'don_active' }, coords.CW, coords.CH, isOpp, p.don_active?.length);
+        const donAct = renderCard({ name: 'DON!!', location: 'don_active' }, coords.CW, coords.CH, isOpp, p?.don_active?.length);
         donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
         side.addChild(donAct);
 
-        const donRst = renderCard({ name: 'DON!!', is_rest: true, location: 'don_rest' }, coords.CW, coords.CH, isOpp, p.don_rested?.length);
+        const donRst = renderCard({ name: 'DON!!', is_rest: true, location: 'don_rest' }, coords.CW, coords.CH, isOpp, p?.don_rested?.length);
         donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
         side.addChild(donRst);
 
-        const trash = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, (p.zones?.trash || []).length);
+        const trash = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, (p?.zones?.trash || []).length);
         trash.x = coords.getTrashX(W); trash.y = r3Y;
         side.addChild(trash);
 
-        (p.zones?.hand || []).forEach((c: any, i: number) => {
+        (p?.zones?.hand || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'hand' }, coords.CW, coords.CH, isOpp);
           card.x = coords.getHandX(i, W);
           card.y = coords.getY(4, coords.CH, coords.V_GAP);
@@ -318,11 +317,13 @@ export const RealGame = () => {
         });
       };
 
-      if (gameState.players) {
+      if (gameState?.players) {
         renderSide(gameState.players.p2, true);
         renderSide(gameState.players.p1, false);
       }
-    });
+    };
+
+    renderScene();
 
     return () => app.destroy(true, true);
   }, [gameState, renderCard, handleAction]);
