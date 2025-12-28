@@ -105,7 +105,7 @@ export const RealGame = () => {
     const textRotation = isRest ? -Math.PI / 2 : 0;
     const yDir = isOpp ? -1 : 1;
     const cardName = card?.name || "";
-    const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck' || cardName === 'Don!!';
+    const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck' || cardName === 'Don!!' || cardName === 'Life' || cardName === 'Stage';
 
     if (!isBack) {
       if (card?.power !== undefined) {
@@ -198,6 +198,35 @@ export const RealGame = () => {
           ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
           side.addChild(ldr);
         }
+
+        const lifeCard = renderCard({ name: 'Life', location: 'life', is_face_up: false }, coords.CW, coords.CH, isOpp);
+        lifeCard.x = coords.getLifeX(W); lifeCard.y = r2Y;
+        side.addChild(lifeCard);
+
+        const stageCard = renderCard({ name: 'Stage', location: 'stage' }, coords.CW, coords.CH, isOpp);
+        stageCard.x = coords.getStageX(W); stageCard.y = r2Y;
+        side.addChild(stageCard);
+
+        const deckCard = renderCard({ name: 'Deck', location: 'deck', is_face_up: false }, coords.CW, coords.CH, isOpp);
+        deckCard.x = coords.getDeckX(W); deckCard.y = r2Y;
+        side.addChild(deckCard);
+
+        const trashCard = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp);
+        trashCard.x = coords.getTrashX(W); trashCard.y = r2Y;
+        side.addChild(trashCard);
+
+        const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
+        const donDeck = renderCard({ name: 'Don!!', location: 'don_deck', is_face_up: false }, coords.CW, coords.CH, isOpp);
+        donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
+        side.addChild(donDeck);
+
+        const donActive = renderCard({ name: 'Don!!', location: 'don_active' }, coords.CW, coords.CH, isOpp);
+        donActive.x = coords.getDonActiveX(W); donActive.y = r3Y;
+        side.addChild(donActive);
+
+        const donRest = renderCard({ name: 'Don!!', location: 'don_rest' }, coords.CW, coords.CH, isOpp);
+        donRest.x = coords.getDonRestX(W); donRest.y = r3Y;
+        side.addChild(donRest);
 
         (p?.zones?.hand || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'hand' }, coords.CW, coords.CH, isOpp);
