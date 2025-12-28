@@ -22,19 +22,12 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   const handleExecute = async (type: string, extra: any = {}) => {
-    logger.log({
-      level: 'info',
-      action: "trace.handleExecute_called",
-      msg: `Execute clicked: ${type}`,
-      payload: { type, uuid: card.uuid }
-    });
     await onAction(type, { ...card, extra });
   };
 
   const renderButtons = () => {
     const btns = [];
     
-    // 1. 手札にある場合
     if (location === 'hand') {
       btns.push(
         <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
@@ -43,54 +36,35 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       );
     }
 
-    // 2. 盤面（フィールド）またはリーダーの場合
-    if (location === 'field' || location === 'leader') {
-      // 共通のアクション：ドン!!付与
+    if (location === 'field') {
       btns.push(
-        <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle("#f1c40f", "black")}>
-          ドン!!を付与
+        <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
+          攻撃する
         </button>
       );
-
-      // 未レスト（アクティブ）ならアタック可能
-      if (!card.is_rest) {
-        btns.push(
-          <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
-            アタック
-          </button>
-        );
-      }
-
-      // 効果（起動メイン等）を持っている場合のボタン（簡易判定）
-      if (card.text && (card.text.includes('起動メイン') || card.text.includes('ターン1回'))) {
-        btns.push(
-          <button key="effect" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
-            効果を発動
-          </button>
-        );
-      }
+      btns.push(
+        <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle("#f1c40f", "#333")}>
+          ドン!!付与 (+1)
+        </button>
+      );
+      btns.push(
+        <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE)} style={btnStyle("#3498db", "white")}>
+          起動メイン
+        </button>
+      );
     }
-
+    
     return btns;
   };
 
-  const btnStyle = (bg: string, color: string): React.CSSProperties => ({
-    backgroundColor: bg,
-    color: color,
-    border: 'none',
-    padding: '12px',
-    borderRadius: '8px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    fontSize: '1rem',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-  });
-
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={contentStyle} onClick={(e) => e.stopPropagation()}>
+      <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
         <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ margin: '0 0 10px 0', fontSize: '1.2rem' }}>{card.name}</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{card.name}</h2>
+            <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999' }}>×</button>
+          </div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <span style={badgeStyle('#333')}>{location.toUpperCase()}</span>
             {card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
@@ -123,18 +97,30 @@ const badgeStyle = (bg: string): React.CSSProperties => ({
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   top: 0, left: 0, right: 0, bottom: 0,
-  backgroundColor: 'rgba(0,0,0,0.75)',
-  display: 'flex', 
-  justifyContent: 'center', 
-  alignItems: 'center',
-  zIndex: 1000
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'flex-end',
+  zIndex: 2000
 };
 
-const contentStyle: React.CSSProperties = {
+const sheetStyle: React.CSSProperties = {
   backgroundColor: 'white',
-  padding: '25px',
-  borderRadius: '16px',
-  width: '85%',
-  maxWidth: '400px',
-  boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+  width: '100%',
+  maxWidth: '500px',
+  padding: '24px',
+  borderRadius: '20px 20px 0 0',
+  boxShadow: '0 -4px 16px rgba(0,0,0,0.2)',
+  boxSizing: 'border-box'
 };
+
+const btnStyle = (bg: string, color: string): React.CSSProperties => ({
+  padding: '14px',
+  borderRadius: '12px',
+  border: 'none',
+  backgroundColor: bg,
+  color: color,
+  fontWeight: 'bold',
+  fontSize: '1rem',
+  cursor: 'pointer'
+});

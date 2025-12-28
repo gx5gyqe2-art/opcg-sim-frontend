@@ -40,11 +40,17 @@ export const RealGame = () => {
   };
 
   useEffect(() => {
+    if (!gameState && !isPending) {
+      startGame();
+    }
+  }, []);
+
+  useEffect(() => {
     if (!pixiContainerRef.current) return;
     
     if (!appRef.current) {
       const app = new PIXI.Application({ 
-        background: 0xFFFFFF, 
+        background: 0x1a1a1a, 
         resizeTo: window, 
         antialias: true, 
         resolution: window.devicePixelRatio || 1, 
@@ -63,7 +69,6 @@ export const RealGame = () => {
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
 
-      // 背景の描画
       const bg = new PIXI.Graphics();
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.CONTROL_BG).drawRect(0, midY - 40, W, 80).endFill();
@@ -75,13 +80,13 @@ export const RealGame = () => {
         setIsDetailMode(true); 
       };
 
-      // 相手側ボードの描画
+      // 【修正】相手側ボードの描画ロジックを自分側と同様に修正
       const p2Side = createBoardSide(gameState.players.p2, true, W, coords, onCardClick);
-      p2Side.x = W; 
-      p2Side.y = midY - 40; 
-      p2Side.rotation = Math.PI;
+      // 回転（rotation）を削除し、x座標のオフセットを 0 に戻します
+      p2Side.x = 0; 
+      // 相手側エリア（画面上半分）に収まるよう y 座標を調整
+      p2Side.y = 40; 
       
-      // 自分側ボードの描画
       const p1Side = createBoardSide(gameState.players.p1, false, W, coords, onCardClick);
       p1Side.y = midY + 40;
 
@@ -92,10 +97,7 @@ export const RealGame = () => {
   }, [gameState]);
 
   return (
-    <div ref={pixiContainerRef} className="game-screen">
-      {!gameState && !isPending && (
-        <button onClick={startGame} className="start-btn">Game Start</button>
-      )}
+    <div ref={pixiContainerRef} className="game-screen hand-scroll-area">
       {isDetailMode && selectedCard && (
         <CardDetailSheet 
           card={selectedCard.card} 
