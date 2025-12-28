@@ -23,7 +23,7 @@ export const createCardContainer = (
       power: card?.power,
       cost: card?.cost,
       is_face_up: card?.is_face_up,
-      raw: card // 全プロパティを確認するために生データを渡す
+      raw: card 
     }
   });
 
@@ -33,10 +33,8 @@ export const createCardContainer = (
   
   if (isRest) container.rotation = Math.PI / 2;
 
-  // 裏面判定のロジック
-  const isBack = card?.is_face_up === false && 
-                 card?.location !== 'leader' && 
-                 !(!isOpp && card?.location === 'hand');
+  // 修正：特定の場所や所有者による裏面判定を削除し、純粋にカードのステータスのみを参照
+  const isBack = card?.is_face_up === false;
 
   const g = new PIXI.Graphics();
   g.lineStyle(2, COLORS.ZONE_BORDER);
@@ -50,7 +48,7 @@ export const createCardContainer = (
     const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
                        card?.location?.includes('don');
 
-    // パワー表示ロジックの改善
+    // パワー表示
     if (card?.power !== undefined && !isResource) {
       const pTxt = new PIXI.Text(`POWER ${card.power}`, new PIXI.TextStyle({ 
         fontSize: 11, 
@@ -69,7 +67,7 @@ export const createCardContainer = (
       container.addChild(pTxt);
     }
 
-    // 名前表示ロジック
+    // 名前表示
     const nTxt = new PIXI.Text(cardName, new PIXI.TextStyle({ 
       fontSize: isResource ? 11 : 9, 
       fontWeight: 'bold', 
@@ -91,7 +89,7 @@ export const createCardContainer = (
     }
     container.addChild(nTxt);
   } else {
-    // 裏面時のテキスト描画
+    // 裏面時のテキスト
     const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ 
       fontSize: 8, 
       fontWeight: 'bold', 
