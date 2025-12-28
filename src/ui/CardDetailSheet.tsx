@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'; // 【修正】useEffectをインポート
+import React, { useEffect } from 'react';
 import CONST from '../../shared_constants.json';
 
 interface CardDetailSheetProps {
@@ -9,7 +9,6 @@ interface CardDetailSheetProps {
 }
 
 export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, onAction, onClose }) => {
-  // 【修正】マウント時ロガーの追加
   useEffect(() => {
     fetch('/api/log', {
       method: 'POST',
@@ -28,7 +27,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
   const handleExecute = async (type: string, extra: any = {}) => {
     await onAction(type, {
-      card_id: card.uuid,
+      uuid: card.uuid,
       ...extra
     });
     onClose();

@@ -25,7 +25,7 @@ export const RealGame = () => {
           player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
           action: action,
           level: "debug",
-          sessionId: gameState?.id || "no_session",
+          sessionId: gameState?.game_id || "no_session",
           msg: msg,
           payload: payload,
           timestamp: new Date().toISOString()
@@ -50,7 +50,7 @@ export const RealGame = () => {
   const handleAction = async (type: string, payload: any = {}) => {
     await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
 
-    if (!gameState?.id) return;
+    if (!gameState?.game_id) return;
 
     const requestId = crypto.randomUUID();
     const actionBody = {
@@ -68,7 +68,7 @@ export const RealGame = () => {
         player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
         action: "api.send_action",
         level: "info",
-        sessionId: gameState.id,
+        sessionId: gameState.game_id,
         msg: `Sending action trigger: ${type}`,
         payload: actionBody,
         timestamp: new Date().toISOString()
@@ -76,7 +76,7 @@ export const RealGame = () => {
     });
 
     try {
-      const res = await fetch(`/api/game/${gameState.id}/action`, {
+      const res = await fetch(`/api/game/${gameState.game_id}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(actionBody),
@@ -92,7 +92,7 @@ export const RealGame = () => {
             player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
             action: "api.receive_update_success",
             level: "info",
-            sessionId: gameState.id,
+            sessionId: gameState.game_id,
             msg: `Action ${type} processed successfully`,
             timestamp: new Date().toISOString()
           })
@@ -113,7 +113,7 @@ export const RealGame = () => {
           player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
           action: "api.action_error",
           level: "error",
-          sessionId: gameState.id,
+          sessionId: gameState.game_id,
           msg: err.message || "Unknown error during action",
           timestamp: new Date().toISOString()
         })
@@ -232,15 +232,17 @@ export const RealGame = () => {
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-    const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
-    appRef.current = app;
+    
+    if (!appRef.current) {
+      const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
+      appRef.current = app;
+      pixiContainerRef.current.appendChild(app.view as any);
+    }
 
+    const app = appRef.current;
     app.stage.eventMode = 'static';
     app.stage.hitArea = app.screen;
 
-    pixiContainerRef.current.appendChild(app.view as any);
-
-    // 【修正】描画処理を関数に切り出し
     const renderScene = () => {
       if (!app.stage) return;
       app.stage.removeChildren();
@@ -325,7 +327,6 @@ export const RealGame = () => {
 
     renderScene();
 
-    return () => app.destroy(true, true);
   }, [gameState, renderCard, handleAction]);
 
   return (
