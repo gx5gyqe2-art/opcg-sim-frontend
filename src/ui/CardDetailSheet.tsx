@@ -26,6 +26,19 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   const handleExecute = async (type: string, extra: any = {}) => {
+    console.log("!!! SHEET_EXECUTE_START !!!", type);
+    
+    await fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: "FE_SHEET_TRACE",
+        action: "trace.handleExecute_called",
+        msg: `Execute clicked: ${type}`,
+        payload: { type, uuid: card.uuid }
+      })
+    }).catch(() => {});
+
     await onAction(type, {
       uuid: card.uuid,
       ...extra

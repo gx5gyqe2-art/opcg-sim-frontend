@@ -48,6 +48,7 @@ export const RealGame = () => {
   };
 
   const handleAction = async (type: string, payload: any = {}) => {
+    console.log("!!! REALGAME_HANDLE_ACTION_IN !!!", type, payload);
     await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
 
     if (!gameState?.game_id) return;
