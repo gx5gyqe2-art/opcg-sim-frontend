@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -85,7 +86,16 @@ export const createCardContainer = (
 
   container.eventMode = 'static';
   container.cursor = 'pointer';
-  container.on('pointerdown', (e) => { e.stopPropagation(); options.onClick(); });
+
+  container.on('pointertap', (e) => {
+    e.stopPropagation();
+    logger.info(`[CardRenderer] pointertap fired. card: ${card?.name}, uuid: ${card?.uuid}`);
+    if (options.onClick) {
+      options.onClick();
+    } else {
+      logger.warn(`[CardRenderer] options.onClick is missing for card: ${card?.name}`);
+    }
+  });
 
   return container;
 };
