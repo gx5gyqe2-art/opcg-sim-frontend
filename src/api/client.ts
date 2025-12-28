@@ -54,10 +54,19 @@ export const apiClient = {
     });
 
     const data = await res.json();
+    const oldSid = sessionManager.getSessionId();
     const gameId = data.game_id || (data[CONST.API_ROOT_KEYS.GAME_STATE] as any)?.game_id;
     
     if (gameId) {
       sessionManager.setSessionId(gameId);
+      if (oldSid !== gameId) {
+        logger.log({
+          level: 'info',
+          action: 'session.updated',
+          msg: `Session ID updated from ${oldSid} to ${gameId}`,
+          payload: { old: oldSid, new: gameId }
+        });
+      }
     }
 
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
@@ -89,10 +98,19 @@ export const apiClient = {
     });
 
     const result = await response.json();
-    
+    const oldSid = sessionManager.getSessionId();
     const newGameId = result.game_id || result[CONST.API_ROOT_KEYS.GAME_STATE]?.game_id;
+
     if (newGameId) {
       sessionManager.setSessionId(newGameId);
+      if (oldSid !== newGameId) {
+        logger.log({
+          level: 'info',
+          action: 'session.updated',
+          msg: `Session ID updated from ${oldSid} to ${newGameId}`,
+          payload: { old: oldSid, new: newGameId }
+        });
+      }
     }
 
     if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
