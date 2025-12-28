@@ -34,34 +34,47 @@ export const RealGame = () => {
         setIsDetailMode(false);
         setSelectedCard(null);
       }
-    } catch (err: any) {
-      logger.error("api.action_error", err.message || "Unknown error");
+    } catch (err) {
+      logger.log({
+        level: 'error',
+        action: 'game.action_error',
+        msg: 'Failed to execute action',
+        payload: { err, type, payload }
+      });
     }
   };
 
   useEffect(() => {
-    if (!gameState && !isPending) {
-      startGame();
-    }
+    if (!pixiContainerRef.current) return;
+
+    const app = new PIXI.Application({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: 0x1a1a1a,
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+    });
+
+    pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
+    appRef.current = app;
+
+    startGame();
+
+    const handleResize = () => {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      app.destroy(true, { children: true });
+    };
   }, []);
 
   useEffect(() => {
-    if (!pixiContainerRef.current) return;
-    
-    if (!appRef.current) {
-      const app = new PIXI.Application({ 
-        background: 0x1a1a1a, 
-        resizeTo: window, 
-        antialias: true, 
-        resolution: window.devicePixelRatio || 1, 
-        autoDensity: true 
-      });
-      appRef.current = app;
-      pixiContainerRef.current.appendChild(app.view as any);
-    }
-
     const app = appRef.current;
-    if (!gameState) return;
+    if (!app || !gameState) return;
 
     const renderScene = () => {
       app.stage.removeChildren();
@@ -76,17 +89,30 @@ export const RealGame = () => {
       app.stage.addChild(bg);
 
       const onCardClick = (card: any) => { 
-        setSelectedCard({ card, location: card.location || 'field' }); 
+        let currentLoc = 'field';
+        
+        if (card.owner_id === 'p1') {
+          const p1 = gameState.players.p1;
+          if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) {
+            currentLoc = 'hand';
+          } else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) {
+            currentLoc = 'field';
+          } else if (p1.zones.trash.some((c: any) => c.uuid === card.uuid)) {
+            currentLoc = 'trash';
+          } else if (p1.zones.life.some((c: any) => c.uuid === card.uuid)) {
+            currentLoc = 'life';
+          }
+        } else {
+          currentLoc = 'opp_field';
+        }
+
+        setSelectedCard({ card, location: currentLoc }); 
         setIsDetailMode(true); 
       };
 
-      // 相手側のボード生成
       const p2Side = createBoardSide(gameState.players.p2, true, W, coords, onCardClick);
-      
-      // 【重要】コンテナ全体を180度反転させるための座標計算
-      // 180度回転させると、元々右にあったものが左に、下にあったものが上に来ます。
-      p2Side.x = W;      // 回転軸が左上のため、右端に配置してから回すと画面内に収まる
-      p2Side.y = midY - 40; // 相手エリアの底辺（中央のコントロールバーの上）を基準にする
+      p2Side.x = W;      
+      p2Side.y = midY - 40; 
       p2Side.rotation = Math.PI; 
       
       const p1Side = createBoardSide(gameState.players.p1, false, W, coords, onCardClick);
@@ -99,13 +125,16 @@ export const RealGame = () => {
   }, [gameState]);
 
   return (
-    <div ref={pixiContainerRef} className="game-screen hand-scroll-area">
+    <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
       {isDetailMode && selectedCard && (
-        <CardDetailSheet 
-          card={selectedCard.card} 
+        <CardDetailSheet
+          card={selectedCard.card}
           location={selectedCard.location}
           onAction={handleAction}
-          onClose={() => setIsDetailMode(false)}
+          onClose={() => {
+            setIsDetailMode(false);
+            setSelectedCard(null);
+          }}
         />
       )}
     </div>
