@@ -40,12 +40,12 @@ export const logger = {
       [K.TIME]: now,
       [K.SOURCE]: source,
       [K.LEVEL]: level,
-      [K.SESSION]: sid, // セッションIDをJSONボディに含める
+      [K.SESSION]: sid,
       [K.PLAYER]: player,
       [K.ACTION]: action,
       [K.MESSAGE]: msg,
       [K.PAYLOAD]: payload,
-      sessionId: sid // 明示的なsessionIdフィールドとしても追加（紐付け維持のため）
+      sessionId: sid
     };
 
     console.log("Details:", logObject);
@@ -53,7 +53,10 @@ export const logger = {
 
     fetch(LOG_URL, {
       method: 'POST',
-      mode: 'no-cors', // OPTIONSリクエストを完全に回避したい場合
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify(logObject)
     }).catch(() => {});
   }
