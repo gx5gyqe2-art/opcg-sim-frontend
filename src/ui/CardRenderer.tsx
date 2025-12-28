@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -14,7 +15,18 @@ export const createCardContainer = (
   const isOpponent = card?.owner === 'p2' || card?.location?.includes('opp');
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
 
-  // 文字自体の向きを補正（相手側なら180度回転して相殺）
+  logger.log({
+    level: 'debug',
+    action: 'ui.card_render_check',
+    msg: `Rendering card: ${card?.name || 'unknown'}`,
+    payload: { 
+      uuid: card?.uuid,
+      isOpponent, // これが相手のカードで true になっているか確認が必要
+      owner: card?.owner,
+      location: card?.location
+    }
+  });
+
   const textRotation = isOpponent ? Math.PI : 0;
   
   if (isRest) container.rotation = Math.PI / 2;
@@ -33,14 +45,12 @@ export const createCardContainer = (
     const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
                        card?.location?.includes('don');
 
-    // --- POWER表示の補正 ---
     if (card?.power !== undefined && !isResource) {
       const pTxt = new PIXI.Text(`POWER ${card.power}`, new PIXI.TextStyle({ 
         fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' 
       }));
       pTxt.anchor.set(0.5);
       
-      // 相手側なら、カードのローカル座標で「下(プラス)」に置くことで、全体の回転後に「上」に見えるようにする
       const posY = isOpponent ? (ch / 2 + 10) : (-ch / 2 - 10);
 
       if (isRest) {
@@ -55,7 +65,6 @@ export const createCardContainer = (
       container.addChild(pTxt);
     }
 
-    // --- カード名表示の補正 ---
     const nTxt = new PIXI.Text(cardName, new PIXI.TextStyle({ 
       fontSize: isResource ? 11 : 9, fontWeight: 'bold', fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
     }));
@@ -66,7 +75,6 @@ export const createCardContainer = (
       nTxt.x = 0; 
       nTxt.y = 0; 
     } else {
-      // 相手側なら、カードのローカル座標で「上(マイナス)」に置くことで、全体の回転後に「下」に見えるようにする
       const posY = isOpponent ? (-ch / 2 - 2) : (ch / 2 + 2);
       
       if (isRest) {
@@ -81,7 +89,6 @@ export const createCardContainer = (
     }
     container.addChild(nTxt);
 
-    // --- ドン!!バッジと枚数バッジの補正 ---
     if (card?.attached_don && card.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
@@ -101,7 +108,6 @@ export const createCardContainer = (
   }
 
   if (options.count && options.count > 0) {
-    // 枚数バッジも相手側なら対角に移動
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
     
