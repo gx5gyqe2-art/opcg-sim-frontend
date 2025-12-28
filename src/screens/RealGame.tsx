@@ -6,7 +6,7 @@ import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 import { apiClient } from '../api/client';
-import { logger } from '../utils/logger'; // 共通ロガーをインポート
+import { logger } from '../utils/logger';
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -44,22 +44,12 @@ export const RealGame = () => {
         setGameState(newState);
         setIsDetailMode(false);
         setSelectedCard(null);
-        
-        logger.log({
-          level: 'info',
-          action: "api.receive_update_success",
-          msg: `Action ${type} processed`,
-          player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-          payload: { type }
-        });
       }
     } catch (err: any) {
       console.error("Action failed:", err);
-      logger.log({
-        level: 'error',
-        action: "api.action_error",
-        msg: err.message || "Unknown error",
-        player: CONST.c_to_s_interface.PLAYER_KEYS.P1
+      logger.error("api.action_error", err.message || "Unknown error", { 
+        player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+        action_type: type 
       });
     }
   };
@@ -165,13 +155,6 @@ export const RealGame = () => {
 
     container.on('pointerdown', (e) => {
       e.stopPropagation();
-      logger.log({
-        level: 'debug',
-        action: "debug.pixi_click",
-        msg: `Clicked: ${card?.name}`,
-        player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-        payload: { uuid: card?.uuid, location: card?.location || 'not_set' }
-      });
       setSelectedCard({ card, location: card?.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });

@@ -20,7 +20,7 @@ interface LogOptions {
 
 export const logger = {
   sendRemoteLog: (options: LogOptions) => {
-    const sid = options.sessionId || sessionManager.getSessionId();
+    const sid = sessionManager.getSessionId();
     const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const source = "FE";
 
@@ -67,23 +67,6 @@ export const logger = {
 
     if (level === 'error' || level === 'warn') {
       logger.sendRemoteLog(options);
-    } else {
-      fetch(LOG_URL, {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          [K.TIME]: now,
-          [K.SOURCE]: source,
-          [K.LEVEL]: level,
-          [K.SESSION]: sid,
-          [K.PLAYER]: player,
-          [K.ACTION]: action,
-          [K.MESSAGE]: msg,
-          [K.PAYLOAD]: payload,
-          sessionId: sid
-        })
-      }).catch(() => {});
     }
   },
 

@@ -30,7 +30,8 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
     console.group(`%cAPI Response: ${url}`, `color: ${res.ok ? '#2ecc71' : '#e74c3c'}; font-weight: bold;`);
     console.log('Status:', res.status);
     try {
-      console.log('Data:', await logRes.json());
+      const data = await logRes.json();
+      console.log('Data:', data);
     } catch {
       console.log('Data: (not json)');
     }
@@ -44,12 +45,6 @@ export const apiClient = {
   async checkHealth(): Promise<void> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.HEALTH}`);
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
-    
-    logger.log({
-      level: 'debug',
-      action: 'api.health_check',
-      msg: 'Server is alive'
-    });
   },
 
   async createGame(
@@ -76,6 +71,7 @@ export const apiClient = {
     const newState = data[stateKey] || data.game_state;
     
     if (!newState) {
+      logger.error('api.create_game', 'Invalid Response Schema', data);
       throw new Error("Invalid Response Schema");
     }
 
@@ -102,14 +98,8 @@ export const apiClient = {
 
     const result = await response.json();
 
-    logger.log({
-      level: 'info',
-      action: 'api.receive_action',
-      msg: `Action processed`, 
-      payload: result
-    });
-
     if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
+      logger.error('api.send_action', 'Action failed', { request: actionBody, response: result });
       throw new Error("Action failed");
     }
 
