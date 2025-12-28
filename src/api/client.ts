@@ -2,7 +2,7 @@ import type { GameActionRequest } from './types';
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger'; 
+import { logger } from '../utils/logger';
 import { sessionManager } from '../utils/session';
 
 const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
@@ -15,14 +15,6 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
     'Content-Type': 'application/json',
   };
 
-  if (import.meta.env.DEV) {
-    console.group(`%cAPI Request: ${url}`, 'color: #3498db; font-weight: bold;');
-    console.log('Method:', options.method || 'GET');
-    console.log('Headers:', headers);
-    console.log('Body:', options.body ? JSON.parse(options.body as string) : null);
-    console.groupEnd();
-  }
-
   const res = await fetch(url, { ...options, headers });
 
   if (import.meta.env.DEV) {
@@ -31,7 +23,7 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
     console.log('Status:', res.status);
     try {
       const data = await logRes.json();
-      console.log('Data:', data);
+      console.table(data);
     } catch {
       console.log('Data: (not json)');
     }
@@ -48,7 +40,7 @@ export const apiClient = {
   },
 
   async createGame(
-    p1Deck = DEFAULT_GAME_SETTINGS.P1_DECK, 
+    p1Deck = DEFAULT_GAME_SETTINGS.P1_DECK,
     p2Deck = DEFAULT_GAME_SETTINGS.P2_DECK
   ): Promise<{ game_id: string; state: GameState }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
@@ -61,22 +53,22 @@ export const apiClient = {
       }),
     });
 
-    const sid = res.headers.get('X-Session-ID');
-    if (sid) {
-      sessionManager.setSessionId(sid);
+    const data = await res.json();
+    const gameId = data.game_id || (data[CONST.API_ROOT_KEYS.GAME_STATE] as any)?.game_id;
+    
+    if (gameId) {
+      sessionManager.setSessionId(gameId);
     }
 
-    const data = await res.json();
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey] || data.game_state;
-    
+
     if (!newState) {
       logger.error('api.create_game', 'Invalid Response Schema', data);
       throw new Error("Invalid Response Schema");
     }
 
-    const finalGameId = data.game_id || (newState as any).game_id;
-    return { game_id: finalGameId, state: newState };
+    return { game_id: gameId, state: newState };
   },
 
   async sendAction(gameId: string, request: GameActionRequest): Promise<GameState> {
@@ -97,6 +89,11 @@ export const apiClient = {
     });
 
     const result = await response.json();
+    
+    const newGameId = result.game_id || result[CONST.API_ROOT_KEYS.GAME_STATE]?.game_id;
+    if (newGameId) {
+      sessionManager.setSessionId(newGameId);
+    }
 
     if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
       logger.error('api.send_action', 'Action failed', { request: actionBody, response: result });
