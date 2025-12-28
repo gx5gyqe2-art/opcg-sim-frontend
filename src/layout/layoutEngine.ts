@@ -1,9 +1,32 @@
 import { logger } from '../utils/logger';
+import { LAYOUT } from './layout.constants';
+import { LAYOUT_PARAMS } from './layout.config';
 
-export const calculateCoordinates = (W: number, H: number) => {
-  const CW = W * 0.18;
-  const CH = CW * 1.4;
-  const V_GAP = H * 0.02;
+export interface LayoutCoords {
+  CH: number;
+  CW: number;
+  V_GAP: number;
+  Y_CTRL_START: number;
+  getLifeX: (width: number) => number;
+  getLeaderX: (width: number) => number;
+  getStageX: (width: number) => number;
+  getDeckX: (width: number) => number;
+  getDonDeckX: (width: number) => number;
+  getDonActiveX: (width: number) => number;
+  getDonRestX: (width: number) => number;
+  getTrashX: (width: number) => number;
+  getFieldX: (i: number, width: number, cardWidth: number, totalCards: number) => number;
+  getHandX: (i: number, width: number) => number;
+  getY: (row: number, h: number, g: number) => number;
+}
+
+export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
+  const AVAIL_H_HALF = (H - LAYOUT.H_CTRL - LAYOUT.MARGIN_TOP - LAYOUT.MARGIN_BOTTOM) / 2;
+  const CH = Math.min(AVAIL_H_HALF / 5.2, (W / 8.5) * 1.4); 
+  const CW = CH / 1.4;
+  const V_GAP = CH * 0.30;
+  const Y_CTRL_START = LAYOUT.MARGIN_TOP + AVAIL_H_HALF;
+  const P = LAYOUT_PARAMS;
 
   const validateCoordinate = (val: number, label: string) => {
     if (isNaN(val) || val < -W || val > W * 2 || val < -H || val > H * 2) {
@@ -13,29 +36,33 @@ export const calculateCoordinates = (W: number, H: number) => {
   };
 
   return {
-    CW,
     CH,
+    CW,
     V_GAP,
-    getFieldX: (idx: number, width: number, cardW: number, count: number) => {
-      const gap = 10;
-      const totalW = count * cardW + (count - 1) * gap;
-      const startX = (width - totalW) / 2 + cardW / 2;
-      return validateCoordinate(startX + idx * (cardW + gap), `fieldX_${idx}`);
+    Y_CTRL_START,
+    getLifeX: (width) => validateCoordinate(width * P.X_RATIOS.LIFE, 'lifeX'),
+    getLeaderX: (width) => validateCoordinate(width * P.X_RATIOS.LEADER, 'leaderX'),
+    getStageX: (width) => validateCoordinate(width * P.X_RATIOS.STAGE, 'stageX'),
+    getDeckX: (width) => validateCoordinate(width * P.X_RATIOS.DECK, 'deckX'),
+    getDonDeckX: (width) => validateCoordinate(width * P.X_RATIOS.DON_DECK, 'donDeckX'),
+    getDonActiveX: (width) => validateCoordinate(width * P.X_RATIOS.DON_ACTIVE, 'donActiveX'),
+    getDonRestX: (width) => validateCoordinate(width * P.X_RATIOS.DON_REST, 'donRestX'),
+    getTrashX: (width) => validateCoordinate(width * P.X_RATIOS.TRASH, 'trashX'),
+    
+    getFieldX: (i, width, cardWidth, totalCards) => {
+      const totalW = totalCards * cardWidth + (totalCards - 1) * P.FIELD.GAP;
+      const startX = (width - totalW) / 2 + P.FIELD.X_OFFSET; 
+      return validateCoordinate(startX + i * (cardWidth + P.FIELD.GAP), `fieldX_${i}`);
     },
-    getY: (row: number, cardH: number, gap: number) => {
-      return validateCoordinate((row - 1) * (cardH + gap) + cardH / 2, `y_row_${row}`);
+
+    getHandX: (i, width) => {
+      const x = width * P.HAND.X_START_RATIO + (i * CW * P.HAND.OVERLAP_RATIO);
+      return validateCoordinate(x, `handX_${i}`);
     },
-    getLeaderX: (width: number) => validateCoordinate(width * 0.25, 'leaderX'),
-    getLifeX: (width: number) => validateCoordinate(width * 0.5, 'lifeX'),
-    getDeckX: (width: number) => validateCoordinate(width * 0.75, 'deckX'),
-    getDonDeckX: (width: number) => validateCoordinate(width * 0.2, 'donDeckX'),
-    getDonActiveX: (width: number) => validateCoordinate(width * 0.4, 'donActiveX'),
-    getDonRestX: (width: number) => validateCoordinate(width * 0.6, 'donRestX'),
-    getTrashX: (width: number) => validateCoordinate(width * 0.8, 'trashX'),
-    getHandX: (idx: number, width: number) => {
-      const startX = width * 0.1;
-      const step = width * 0.15;
-      return validateCoordinate(startX + idx * step, `handX_${idx}`);
-    }
+
+    getY: (row, h, g) => {
+      const offset = row === 1 ? P.ROWS.ROW1_Y_OFFSET : (row - P.ROWS.DEFAULT_MULTIPLIER); 
+      return validateCoordinate(offset * (h + g), `y_row_${row}`);
+    },
   };
 };
