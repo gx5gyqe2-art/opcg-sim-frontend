@@ -12,20 +12,10 @@ export const createCardContainer = (
 ) => {
   const container = new PIXI.Container();
   
-  // 相手側のカード（P2）かどうかを判定
-  // RealGame.tsx から渡されるプレイヤー情報や location 文字列から判断
   const isOpponent = card?.owner === 'p2' || card?.location?.includes('opp');
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
 
-  // テキストの回転補正角を計算
-  // 相手側（PI）かつレスト状態（-PI/2）などを考慮し、常にプレイヤーから見て正位置にする
-  const getCorrectionAngle = () => {
-    let angle = 0;
-    if (isOpponent) angle += Math.PI; // 相手側なら180度回転して相殺
-    return angle;
-  };
-
-  const textRotation = getCorrectionAngle();
+  const textRotation = isOpponent ? Math.PI : 0;
   
   if (isRest) container.rotation = Math.PI / 2;
 
@@ -40,35 +30,57 @@ export const createCardContainer = (
 
   if (!isBack) {
     const cardName = card?.name || "";
-    
-    // POWER表示
-    if (card?.power !== undefined) {
+    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
+                       card?.location?.includes('don');
+
+    if (card?.power !== undefined && !isResource) {
       const pTxt = new PIXI.Text(`POWER ${card.power}`, new PIXI.TextStyle({ 
         fontSize: 11, 
         fill: COLORS.TEXT_POWER, 
         fontWeight: 'bold' 
       }));
       pTxt.anchor.set(0.5);
-      pTxt.rotation = textRotation; // 文字だけ回転を打ち消す
-      pTxt.y = -ch / 2 - 10;
+      pTxt.rotation = textRotation; 
+      
+      if (isRest) {
+        const angle = -Math.PI / 2 + textRotation;
+        pTxt.rotation = angle;
+        pTxt.x = -ch / 2 - 10; 
+        pTxt.y = 0;
+      } else {
+        pTxt.x = 0; 
+        pTxt.y = -ch / 2 - 10;
+      }
       container.addChild(pTxt);
     }
 
-    // カード名表示
     const nTxt = new PIXI.Text(cardName, new PIXI.TextStyle({ 
-      fontSize: 10, 
+      fontSize: isResource ? 11 : 9, 
       fontWeight: 'bold', 
-      fill: COLORS.TEXT_DEFAULT 
+      fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
     }));
     nTxt.anchor.set(0.5);
-    nTxt.rotation = textRotation; // 文字だけ回転を打ち消す
-    nTxt.y = ch / 2 + 2;
+    nTxt.rotation = textRotation;
+
+    if (isResource) {
+      nTxt.x = 0; 
+      nTxt.y = 0; 
+    } else {
+      if (isRest) {
+        const angle = -Math.PI / 2 + textRotation;
+        nTxt.rotation = angle;
+        nTxt.x = ch / 2 + 2; 
+        nTxt.y = 0;
+      } else {
+        nTxt.x = 0; 
+        nTxt.y = ch / 2 + 2;
+      }
+    }
     container.addChild(nTxt);
 
-    // ドン!!付与表示
     if (card?.attached_don && card.attached_don > 0) {
       const donBadge = new PIXI.Graphics()
-        .beginFill(0x9370DB, 0.9) 
+        .beginFill(0x9370DB, 0.9)
         .drawCircle(cw / 2 - 8, -ch / 2 + 8, 10)
         .endFill();
       const dTxt = new PIXI.Text(`+${card.attached_don}`, new PIXI.TextStyle({ 
@@ -78,11 +90,10 @@ export const createCardContainer = (
       }));
       dTxt.anchor.set(0.5);
       dTxt.position.set(cw / 2 - 8, -ch / 2 + 8);
-      dTxt.rotation = textRotation; // 数字だけ回転を打ち消す
+      dTxt.rotation = textRotation;
       container.addChild(donBadge, dTxt);
     }
   } else {
-    // カード裏面
     const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ 
       fontSize: 8, 
       fontWeight: 'bold', 
@@ -90,11 +101,10 @@ export const createCardContainer = (
       align: 'center' 
     }));
     backTxt.anchor.set(0.5);
-    backTxt.rotation = textRotation; // 裏面の文字も正位置にする
+    backTxt.rotation = textRotation;
     container.addChild(backTxt);
   }
 
-  // 枚数バッジ (デッキやライフなど)
   if (options.count && options.count > 0) {
     const badge = new PIXI.Graphics()
       .beginFill(COLORS.BADGE_BG, 0.8)
@@ -107,7 +117,7 @@ export const createCardContainer = (
     }));
     cTxt.anchor.set(0.5); 
     cTxt.position.set(cw / 2 - 10, ch / 2 - 10);
-    cTxt.rotation = textRotation; // 枚数表示も正位置にする
+    cTxt.rotation = textRotation;
     container.addChild(badge, cTxt);
   }
 
@@ -117,16 +127,6 @@ export const createCardContainer = (
     e.stopPropagation(); 
     options.onClick(); 
   });
-
-  // ロギング（デバッグ用）
-  if (isOpponent) {
-    logger.log({
-      level: 'debug',
-      action: 'ui.card_render_opponent',
-      msg: `Rendering opponent card with rotation correction: ${card?.name}`,
-      payload: { textRotation }
-    });
-  }
 
   return container;
 };
