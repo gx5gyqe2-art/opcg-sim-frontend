@@ -1,7 +1,6 @@
 import * as PIXI from 'pixi.js';
 import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
-import { logger } from '../utils/logger';
 
 export const createBoardSide = (
   p: any, 
