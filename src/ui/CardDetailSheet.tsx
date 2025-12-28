@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import CONST from '../../shared_constants.json';
+import { logger } from '../utils/logger'; // 共通ロガーをインポート
 
 interface CardDetailSheetProps {
   card: any;
@@ -10,79 +11,77 @@ interface CardDetailSheetProps {
 
 export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, onAction, onClose }) => {
   useEffect(() => {
-    fetch('/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: "FE_SHEET",
-        action: "debug.sheet_mount",
-        msg: `Detail sheet mounted for: ${card.name}`,
-        payload: { uuid: card.uuid, location },
-        timestamp: new Date().toISOString()
-      })
-    }).catch(() => {});
-  }, []);
+    // 古い fetch を廃止し、共通ロガーを使用
+    logger.log({
+      level: 'debug',
+      action: "debug.sheet_mount",
+      msg: `Detail sheet mounted for: ${card.name}`,
+      payload: { uuid: card.uuid, location }
+    });
+  }, [card.name, card.uuid, location]);
 
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   const handleExecute = async (type: string, extra: any = {}) => {
     console.log("!!! SHEET_EXECUTE_START !!!", type);
     
-    await fetch('/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: "FE_SHEET_TRACE",
-        action: "trace.handleExecute_called",
-        msg: `Execute clicked: ${type}`,
-        payload: { type, uuid: card.uuid }
-      })
-    }).catch(() => {});
-
-    await onAction(type, {
-      uuid: card.uuid,
-      ...extra
+    // アクション実行時も共通ロガーを使用
+    logger.log({
+      level: 'info',
+      action: "trace.handleExecute_called",
+      msg: `Execute clicked: ${type}`,
+      payload: { type, uuid: card.uuid }
     });
-    onClose();
+
+    // 親コンポーネント（RealGame.tsx）の handleAction を呼び出す
+    await onAction(type, { ...card, extra });
   };
 
   const renderButtons = () => {
-    const buttons = [];
-
+    const btns = [];
     if (location === 'hand') {
-      buttons.push(
-        <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
+      btns.push(
+        <button 
+          key="play" 
+          onClick={() => handleExecute(ACTIONS.PLAY)} 
+          style={btnStyle("#2ecc71", "white")}
+        >
           登場させる
         </button>
       );
     }
-
-    if (location === 'field' || location === 'leader') {
-      if (!card.is_rest) {
-        buttons.push(
-          <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
-            アタック
-          </button>
-        );
-      }
-      
-      buttons.push(
-        <button key="attach" onClick={() => handleExecute(ACTIONS.ATTACH_DON, { extra: { count: 1 } })} style={btnStyle("#f1c40f", "black")}>
-          ドン!!を1枚付与
+    if (location === 'field' && !card.is_rest) {
+      btns.push(
+        <button 
+          key="attack" 
+          onClick={() => handleExecute(ACTIONS.ATTACK)} 
+          style={btnStyle("#e74c3c", "white")}
+        >
+          アタック
         </button>
       );
-
-      if (card.text && card.text.includes('起動メイン')) {
-        buttons.push(
-          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
-            効果発動
-          </button>
-        );
-      }
+      btns.push(
+        <button 
+          key="don" 
+          onClick={() => handleExecute(ACTIONS.ATTACH_DON)} 
+          style={btnStyle("#f1c40f", "black")}
+        >
+          ドン!!を付与
+        </button>
+      );
     }
-
-    return buttons;
+    return btns;
   };
+
+  const btnStyle = (bg: string, color: string): React.CSSProperties => ({
+    backgroundColor: bg,
+    color: color,
+    border: 'none',
+    padding: '12px',
+    borderRadius: '8px',
+    fontWeight: 'bold',
+    cursor: 'pointer'
+  });
 
   return (
     <div style={overlayStyle} onClick={onClose}>
@@ -120,18 +119,5 @@ const contentStyle: React.CSSProperties = {
   padding: '20px',
   borderRadius: '12px',
   width: '85%',
-  maxWidth: '350px',
-  maxHeight: '80vh',
-  overflowY: 'auto'
+  maxWidth: '400px'
 };
-
-const btnStyle = (bg: string, color: string): React.CSSProperties => ({
-  padding: '12px',
-  border: 'none',
-  borderRadius: '6px',
-  fontWeight: 'bold',
-  cursor: 'pointer',
-  backgroundColor: bg,
-  color: color,
-  fontSize: '1rem'
-});
