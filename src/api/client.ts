@@ -41,16 +41,6 @@ export const apiClient = {
 
     const data = await res.json();
 
-    logger.log({
-      level: 'info',
-      action: 'api.receive_create_detail',
-      msg: 'Full payload check',
-      payload: {
-        has_game_state: !!data.game_state,
-        p1_zones: data.game_state?.players?.p1?.zones,
-      }
-    });
-
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey] || data.game_state;
     
