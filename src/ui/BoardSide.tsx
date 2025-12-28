@@ -13,20 +13,6 @@ export const createBoardSide = (
   const side = new PIXI.Container();
   const z = p?.zones || {};
 
-  // デバッグロガー：バックエンドから届いた枚数関連のプロパティをチェック
-  logger.log({
-    level: 'debug',
-    action: 'debug.board_side_data',
-    msg: `Mapping zones for ${p?.name || 'unknown player'}`,
-    payload: {
-      deck_len: z.deck?.length,
-      trash_len: z.trash?.length,
-      don_active_len: z.don_active?.length,
-      don_rested_len: z.don_rested?.length,
-      don_deck_count: p?.don_deck_count
-    }
-  });
-
   // 1. フィールド（キャラクター）
   (z.field || []).forEach((c: any, i: number) => {
     const card = createCardContainer(c, coords.CW, coords.CH, { 
@@ -71,7 +57,7 @@ export const createBoardSide = (
     side.addChild(stageCard);
   }
 
-  // 5. 山札（zones.deck のリスト長）
+  // 5. 山札 (BE側の ZoneSchema 修正後に反映される)
   const deck = createCardContainer(
     { name: 'Deck', location: 'deck', is_face_up: false }, 
     coords.CW, coords.CH, 
@@ -81,7 +67,7 @@ export const createBoardSide = (
   deck.y = r2Y;
   side.addChild(deck);
 
-  // 6. トラッシュ（zones.trash のリスト長）
+  // 6. トラッシュ
   const trash = createCardContainer(
     { name: 'Trash', location: 'trash' }, 
     coords.CW, coords.CH, 
@@ -91,31 +77,34 @@ export const createBoardSide = (
   trash.y = r3Y;
   side.addChild(trash);
 
-  // 7. ドン!!デッキ（プレイヤー直下の don_deck_count 数値）
+  // 7. ドン!!デッキ (Player直下の count プロパティ。エイリアスの可能性を考慮)
+  const donDeckCount = p.don_deck_count ?? p.donDeckCount ?? 0;
   const donDeck = createCardContainer(
     { name: 'Don!!', location: 'don_deck', is_face_up: false }, 
     coords.CW, coords.CH, 
-    { count: typeof p.don_deck_count === 'number' ? p.don_deck_count : 0, onClick: () => {} }
+    { count: donDeckCount, onClick: () => {} }
   );
   donDeck.x = coords.getDonDeckX(W); 
   donDeck.y = r3Y;
   side.addChild(donDeck);
 
-  // 8. ドン!!アクティブ（don_active のリスト長）
+  // 8. ドン!!アクティブ (Player直下の don_active 配列)
+  const donActiveCount = Array.isArray(p.don_active) ? p.don_active.length : 0;
   const donActive = createCardContainer(
     { name: 'Don!!', location: 'don_active' }, 
     coords.CW, coords.CH, 
-    { count: Array.isArray(z.don_active) ? z.don_active.length : 0, onClick: () => {} }
+    { count: donActiveCount, onClick: () => {} }
   );
   donActive.x = coords.getDonActiveX(W); 
   donActive.y = r3Y;
   side.addChild(donActive);
 
-  // 9. ドン!!レスト（バックエンド名 don_rested のリスト長）
+  // 9. ドン!!レスト (Player直下の don_rested 配列)
+  const donRestCount = Array.isArray(p.don_rested) ? p.don_rested.length : 0;
   const donRest = createCardContainer(
     { name: 'Don!!', location: 'don_rest' }, 
     coords.CW, coords.CH, 
-    { count: Array.isArray(z.don_rested) ? z.don_rested.length : 0, onClick: () => {} }
+    { count: donRestCount, onClick: () => {} }
   );
   donRest.x = coords.getDonRestX(W); 
   donRest.y = r3Y;
