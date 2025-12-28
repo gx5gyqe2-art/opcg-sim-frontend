@@ -8,7 +8,7 @@ export const createCardContainer = (
   card: any,
   cw: number,
   ch: number,
-  isOpp: boolean,
+  // isOpp を削除（未使用変数のビルドエラー解消）
   options: { count?: number; onClick: () => void }
 ) => {
   // 既存のロガーを使用して描画対象の全データを記録
@@ -33,7 +33,8 @@ export const createCardContainer = (
   
   if (isRest) container.rotation = Math.PI / 2;
 
-  // 修正：特定の場所や所有者による裏面判定を削除し、純粋にカードのステータスのみを参照
+  // 修正：特定の場所や所有者による裏面判定を削除
+  // 純粋にカードのステータス（is_face_up）のみを参照します
   const isBack = card?.is_face_up === false;
 
   const g = new PIXI.Graphics();
