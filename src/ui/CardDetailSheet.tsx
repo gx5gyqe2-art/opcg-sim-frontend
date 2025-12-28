@@ -22,6 +22,12 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   const handleExecute = async (type: string, extra: any = {}) => {
+    logger.log({
+      level: 'info',
+      action: "trace.handleExecute_called",
+      msg: `Execute clicked: ${type}`,
+      payload: { type, uuid: card.uuid }
+    });
     await onAction(type, { ...card, extra });
   };
 
@@ -47,8 +53,9 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
           ドン!!付与 (+1)
         </button>
       );
+      // ACTIONS.ACTIVATE を ACTIONS.ACTIVATE_MAIN に修正
       btns.push(
-        <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE)} style={btnStyle("#3498db", "white")}>
+        <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
           起動メイン
         </button>
       );
