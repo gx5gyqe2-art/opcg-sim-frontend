@@ -4,7 +4,6 @@ import { API_CONFIG } from '../api/api.config';
 
 const K = CONST.LOG_CONFIG.KEYS;
 const baseUrl = API_CONFIG.BASE_URL.replace(/\/$/, "");
-const LOG_URL = `${baseUrl}/api/log`;
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type PlayerType = 'p1' | 'p2' | 'system' | 'unknown' | string;
@@ -20,6 +19,7 @@ interface LogOptions {
 
 export const logger = {
   sendRemoteLog: (options: LogOptions) => {
+    const LOG_URL = `${baseUrl}/api/log`;
     const sid = sessionManager.getSessionId();
     const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const source = "FE";
@@ -45,7 +45,7 @@ export const logger = {
   },
 
   log: (options: LogOptions) => {
-    const { level, action, msg, sessionId, player = "unknown", payload } = options;
+    const { level, action, msg, sessionId, player = "unknown" } = options;
     const sid = sessionId || sessionManager.getSessionId();
     const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const source = "FE";

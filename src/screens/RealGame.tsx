@@ -46,7 +46,6 @@ export const RealGame = () => {
         setSelectedCard(null);
       }
     } catch (err: any) {
-      console.error("Action failed:", err);
       logger.error("api.action_error", err.message || "Unknown error", { 
         player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
         action_type: type 
