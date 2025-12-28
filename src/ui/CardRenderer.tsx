@@ -44,7 +44,7 @@ export const createCardContainer = (
 
   if (!isBack) {
     if (card?.type === 'LEADER') {
-      addText(card.name, { fontSize: 12, fontWeight: 'bold', fill: 0xFFFFFF }, 0, 0);
+      addText(card.name, { fontSize: 12, fontWeight: 'bold', fill: (COLORS as any).TEXT_MAIN }, 0, 0);
     } else {
       if (card?.cost !== undefined) {
         addText(card.cost, { fontSize: 14, fontWeight: 'bold', fill: 0xFFD700 }, -cw / 2 + 12, -ch / 2 + 12);
@@ -52,13 +52,7 @@ export const createCardContainer = (
       if (card?.power !== undefined) {
         addText(card.power, { fontSize: 12, fontWeight: 'bold', fill: 0xFFFFFF }, cw / 2 - 15, ch / 2 - 12);
       }
-      const nameStyle = { 
-        fontSize: 10, 
-        fill: 0xFFFFFF, 
-        wordWrap: true, 
-        wordWrapWidth: cw - 10, 
-        align: 'center' 
-      };
+      const nameStyle = { fontSize: 10, fill: 0xFFFFFF, wordWrap: true, wordWrapWidth: cw - 10, align: 'center' };
       const cardName = card.name || "CARD";
       const posY = isOpponent ? (ch / 2 - 18) : (-ch / 2 + 18);
       addText(cardName, nameStyle, 0, posY);
@@ -69,6 +63,7 @@ export const createCardContainer = (
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
       const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
       container.addChild(donBadge);
+      
       addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by);
     }
   } else {
