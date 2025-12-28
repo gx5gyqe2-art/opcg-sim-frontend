@@ -18,11 +18,14 @@ export const RealGame = () => {
 
   const sendDebugLog = async (action: string, msg: string, payload: any = {}) => {
     try {
-      await fetch('/api/log', {
+      // BASE_URL を追加して絶対パスにする
+      await fetch(`${apiClient.BASE_URL}/api/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source: "FE_DEBUG",
+          // ... (中身は変更なし)
+
           player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
           action: action,
           level: "debug",
