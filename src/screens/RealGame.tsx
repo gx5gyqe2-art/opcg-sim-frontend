@@ -6,6 +6,7 @@ import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 import { apiClient } from '../api/client';
+import { logger } from '../utils/logger'; // 共通ロガーをインポート
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -15,30 +16,6 @@ export const RealGame = () => {
   const [isDetailMode, setIsDetailMode] = useState(false);
 
   const { startGame, isPending } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
-
-  const sendDebugLog = async (action: string, msg: string, payload: any = {}) => {
-    try {
-      // BASE_URL を追加して絶対パスにする
-      await fetch(`${apiClient.BASE_URL}/api/log`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: "FE_DEBUG",
-          // ... (中身は変更なし)
-
-          player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-          action: action,
-          level: "debug",
-          sessionId: gameState?.game_id || "no_session",
-          msg: msg,
-          payload: payload,
-          timestamp: new Date().toISOString()
-        })
-      });
-    } catch (e) {
-      console.warn("Debug logger failed", e);
-    }
-  };
 
   const truncateText = (text: string, style: PIXI.TextStyle, maxWidth: number): string => {
     const metrics = PIXI.TextMetrics.measureText(text || "", style);
@@ -67,14 +44,25 @@ export const RealGame = () => {
         setGameState(newState);
         setIsDetailMode(false);
         setSelectedCard(null);
-        await sendDebugLog("api.receive_update_success", `Action ${type} processed`);
+        
+        logger.log({
+          level: 'info',
+          action: "api.receive_update_success",
+          msg: `Action ${type} processed`,
+          player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+          payload: { type }
+        });
       }
     } catch (err: any) {
       console.error("Action failed:", err);
-      await sendDebugLog("api.action_error", err.message || "Unknown error");
+      logger.log({
+        level: 'error',
+        action: "api.action_error",
+        msg: err.message || "Unknown error",
+        player: CONST.c_to_s_interface.PLAYER_KEYS.P1
+      });
     }
   };
-
 
   const renderCard = useCallback((
     card: any, 
@@ -177,13 +165,19 @@ export const RealGame = () => {
 
     container.on('pointerdown', (e) => {
       e.stopPropagation();
-      sendDebugLog("debug.pixi_click", `Clicked: ${card?.name}`, { uuid: card?.uuid, location: card?.location || 'not_set' });
+      logger.log({
+        level: 'debug',
+        action: "debug.pixi_click",
+        msg: `Clicked: ${card?.name}`,
+        player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+        payload: { uuid: card?.uuid, location: card?.location || 'not_set' }
+      });
       setSelectedCard({ card, location: card?.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
     });
 
     return container;
-  }, [truncateText, sendDebugLog]);
+  }, [truncateText]);
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
@@ -298,4 +292,3 @@ export const RealGame = () => {
     </div>
   );
 };
-
