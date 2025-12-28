@@ -8,10 +8,9 @@ export const createCardContainer = (
   card: any,
   cw: number,
   ch: number,
-  // isOpp を削除（未使用変数のビルドエラー解消）
+  // 削除: isOpp はもう必要ないので消去しました
   options: { count?: number; onClick: () => void }
 ) => {
-  // 既存のロガーを使用して描画対象の全データを記録
   logger.log({
     level: 'debug',
     action: 'debug.card_render_process',
@@ -33,8 +32,7 @@ export const createCardContainer = (
   
   if (isRest) container.rotation = Math.PI / 2;
 
-  // 修正：特定の場所や所有者による裏面判定を削除
-  // 純粋にカードのステータス（is_face_up）のみを参照します
+  // 修正: 場所や陣営のロジックをすべて消去し、カードのステータスのみに従います
   const isBack = card?.is_face_up === false;
 
   const g = new PIXI.Graphics();
@@ -49,7 +47,6 @@ export const createCardContainer = (
     const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
                        card?.location?.includes('don');
 
-    // パワー表示
     if (card?.power !== undefined && !isResource) {
       const pTxt = new PIXI.Text(`POWER ${card.power}`, new PIXI.TextStyle({ 
         fontSize: 11, 
@@ -68,7 +65,6 @@ export const createCardContainer = (
       container.addChild(pTxt);
     }
 
-    // 名前表示
     const nTxt = new PIXI.Text(cardName, new PIXI.TextStyle({ 
       fontSize: isResource ? 11 : 9, 
       fontWeight: 'bold', 
@@ -90,7 +86,6 @@ export const createCardContainer = (
     }
     container.addChild(nTxt);
   } else {
-    // 裏面時のテキスト
     const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ 
       fontSize: 8, 
       fontWeight: 'bold', 
