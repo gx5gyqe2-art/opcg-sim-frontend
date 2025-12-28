@@ -80,10 +80,14 @@ export const RealGame = () => {
         setIsDetailMode(true); 
       };
 
+      // 相手側のボード生成
       const p2Side = createBoardSide(gameState.players.p2, true, W, coords, onCardClick);
-      p2Side.x = W; 
-      p2Side.y = midY - 40; 
-      p2Side.rotation = Math.PI;
+      
+      // 【重要】コンテナ全体を180度反転させるための座標計算
+      // 180度回転させると、元々右にあったものが左に、下にあったものが上に来ます。
+      p2Side.x = W;      // 回転軸が左上のため、右端に配置してから回すと画面内に収まる
+      p2Side.y = midY - 40; // 相手エリアの底辺（中央のコントロールバーの上）を基準にする
+      p2Side.rotation = Math.PI; 
       
       const p1Side = createBoardSide(gameState.players.p1, false, W, coords, onCardClick);
       p1Side.y = midY + 40;
