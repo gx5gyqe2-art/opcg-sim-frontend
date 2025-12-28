@@ -1,6 +1,5 @@
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
-import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -40,14 +39,13 @@ export const createCardContainer = (
         fontWeight: 'bold' 
       }));
       pTxt.anchor.set(0.5);
-      pTxt.rotation = textRotation; 
       
       if (isRest) {
-        const angle = -Math.PI / 2 + textRotation;
-        pTxt.rotation = angle;
+        pTxt.rotation = -Math.PI / 2 + textRotation;
         pTxt.x = -ch / 2 - 10; 
         pTxt.y = 0;
       } else {
+        pTxt.rotation = textRotation;
         pTxt.x = 0; 
         pTxt.y = -ch / 2 - 10;
       }
@@ -60,18 +58,18 @@ export const createCardContainer = (
       fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
     }));
     nTxt.anchor.set(0.5);
-    nTxt.rotation = textRotation;
 
     if (isResource) {
+      nTxt.rotation = textRotation;
       nTxt.x = 0; 
       nTxt.y = 0; 
     } else {
       if (isRest) {
-        const angle = -Math.PI / 2 + textRotation;
-        nTxt.rotation = angle;
+        nTxt.rotation = -Math.PI / 2 + textRotation;
         nTxt.x = ch / 2 + 2; 
         nTxt.y = 0;
       } else {
+        nTxt.rotation = textRotation;
         nTxt.x = 0; 
         nTxt.y = ch / 2 + 2;
       }
