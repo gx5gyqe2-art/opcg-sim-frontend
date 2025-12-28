@@ -7,20 +7,20 @@ export const createCardContainer = (
   card: any,
   cw: number,
   ch: number,
-  options: { count?: number; onClick: () => void }
+  options: { count?: number; onClick: () => void; isOpponent?: boolean }
 ) => {
   const container = new PIXI.Container();
   
   const loc = (card?.location || "").toLowerCase();
-  const isOpponent = 
+  const isOpponent = options.isOpponent ?? (
     card?.isOpponentFlag === true || 
     card?.owner_id === 'p2' || 
-    card?.owner === 'p2' || 
     loc.includes('opp') || 
-    loc.includes('p2');
+    loc.includes('p2')
+  );
 
   const textRotation = isOpponent ? Math.PI : 0;
-  const isRest = card?.is_rest === true || card?.location === 'don_rest';
+  const isRest = card?.is_rest === true || loc.includes('rest');
   
   if (isRest) container.rotation = Math.PI / 2;
 
@@ -37,7 +37,6 @@ export const createCardContainer = (
     const txt = new PIXI.Text(content, style);
     txt.anchor.set(0.5);
     txt.position.set(x, y);
-    // すべてのテキストに対して、レスト状態と陣地による回転補正を適用
     txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
     container.addChild(txt);
   };
@@ -68,25 +67,19 @@ export const createCardContainer = (
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
-      // ドン!!バッジの色は既存のロジックを維持しつつ、数値の向きを補正
       const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
       container.addChild(donBadge);
-      
-      // 文字色は白(0xFFFFFF)を維持し、addTextで回転補正
       addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by);
     }
   } else {
-    // 裏面ロゴの向きを補正し、文字色は白(0xFFFFFF)を使用
     addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0);
   }
 
   if (options.count && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
-    // layout.configのCOLORSを使用するように修正
     const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 12).endFill();
     container.addChild(badge);
-    
     addText(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by);
   }
 

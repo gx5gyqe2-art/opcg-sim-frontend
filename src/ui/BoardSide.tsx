@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 
 export const createBoardSide = (
   p: any, 
-  _isOpp: boolean, 
+  isOpponent: boolean, 
   W: number, 
   coords: LayoutCoords, 
   onCardClick: (card: any) => void
@@ -13,10 +13,13 @@ export const createBoardSide = (
   const side = new PIXI.Container();
   const z = p?.zones || {};
 
+  const getCardOpts = (c: any) => ({ 
+    onClick: () => onCardClick(c),
+    isOpponent: isOpponent 
+  });
+
   (z.field || []).forEach((c: any, i: number) => {
-    const card = createCardContainer(c, coords.CW, coords.CH, { 
-      onClick: () => onCardClick(c) 
-    });
+    const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
     card.x = coords.getFieldX(i, W, coords.CW, z.field.length);
     card.y = coords.getY(1, coords.CH, coords.V_GAP);
     side.addChild(card);
@@ -26,9 +29,7 @@ export const createBoardSide = (
   const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
 
   if (p.leader) {
-    const ldr = createCardContainer(p.leader, coords.CW, coords.CH, { 
-      onClick: () => onCardClick(p.leader) 
-    });
+    const ldr = createCardContainer(p.leader, coords.CW, coords.CH, getCardOpts(p.leader));
     ldr.x = coords.getLeaderX(W); 
     ldr.y = r2Y;
     side.addChild(ldr);
@@ -36,49 +37,39 @@ export const createBoardSide = (
 
   const lifeCount = Array.isArray(z.life) ? z.life.length : 0;
   const life = createCardContainer(
-    { name: 'Life', location: 'life', is_face_up: false }, 
+    { name: 'Life', location: isOpponent ? 'opp_life' : 'life', is_face_up: false }, 
     coords.CW, coords.CH, 
-    { count: lifeCount, onClick: () => {} }
+    { ...getCardOpts({}), count: lifeCount }
   );
   life.x = coords.getLifeX(W); 
   life.y = r2Y;
   side.addChild(life);
 
-  if (z.stage && z.stage.length > 0) {
-    const s = z.stage[0];
-    const stageCard = createCardContainer(s, coords.CW, coords.CH, { 
-      onClick: () => onCardClick(s) 
-    });
-    stageCard.x = coords.getStageX(W); 
-    stageCard.y = r2Y;
-    side.addChild(stageCard);
-  }
-
-  const deckCount = Array.isArray(z.deck) ? z.deck.length : 0;
-  const deck = createCardContainer(
-    { name: 'Deck', location: 'deck', is_face_up: false }, 
+  const trashCount = Array.isArray(z.trash) ? z.trash.length : 0;
+  const trash = createCardContainer(
+    { name: 'Trash', location: isOpponent ? 'opp_trash' : 'trash' }, 
     coords.CW, coords.CH, 
-    { count: deckCount, onClick: () => {} }
+    { ...getCardOpts({}), count: trashCount }
+  );
+  trash.x = coords.getTrashX(W); 
+  trash.y = r2Y;
+  side.addChild(trash);
+
+  const deckCount = p.deck_count || 0;
+  const deck = createCardContainer(
+    { name: 'Deck', location: isOpponent ? 'opp_deck' : 'deck', is_face_up: false }, 
+    coords.CW, coords.CH, 
+    { ...getCardOpts({}), count: deckCount }
   );
   deck.x = coords.getDeckX(W); 
   deck.y = r2Y;
   side.addChild(deck);
 
-  const trashCount = Array.isArray(z.trash) ? z.trash.length : 0;
-  const trash = createCardContainer(
-    { name: 'Trash', location: 'trash' }, 
-    coords.CW, coords.CH, 
-    { count: trashCount, onClick: () => {} }
-  );
-  trash.x = coords.getTrashX(W); 
-  trash.y = r3Y;
-  side.addChild(trash);
-
-  const donDeckCount = p.don_deck_count ?? p.donDeckCount ?? 0;
+  const donDeckCount = p.don_deck_count || 0;
   const donDeck = createCardContainer(
-    { name: 'Don!!', location: 'don_deck', is_face_up: false }, 
+    { name: 'Don!!', location: isOpponent ? 'opp_don_deck' : 'don_deck', is_face_up: false }, 
     coords.CW, coords.CH, 
-    { count: donDeckCount, onClick: () => {} }
+    { ...getCardOpts({}), count: donDeckCount }
   );
   donDeck.x = coords.getDonDeckX(W); 
   donDeck.y = r3Y;
@@ -86,9 +77,9 @@ export const createBoardSide = (
 
   const donActiveCount = Array.isArray(p.don_active) ? p.don_active.length : 0;
   const donActive = createCardContainer(
-    { name: 'Don!!', location: 'don_active' }, 
+    { name: 'Don!!', location: isOpponent ? 'opp_don_active' : 'don_active' }, 
     coords.CW, coords.CH, 
-    { count: donActiveCount, onClick: () => {} }
+    { ...getCardOpts({}), count: donActiveCount }
   );
   donActive.x = coords.getDonActiveX(W); 
   donActive.y = r3Y;
@@ -96,40 +87,19 @@ export const createBoardSide = (
 
   const donRestCount = Array.isArray(p.don_rested) ? p.don_rested.length : 0;
   const donRest = createCardContainer(
-    { name: 'Don!!', location: 'don_rest' }, 
+    { name: 'Don!!', location: isOpponent ? 'opp_don_rest' : 'don_rest' }, 
     coords.CW, coords.CH, 
-    { count: donRestCount, onClick: () => {} }
+    { ...getCardOpts({}), count: donRestCount }
   );
   donRest.x = coords.getDonRestX(W); 
   donRest.y = r3Y;
   side.addChild(donRest);
 
-  const handCards = z.hand || [];
-  const cardWidth = coords.CW;
-  const HAND_GAP = 30;
-
-  handCards.forEach((c: any, i: number) => {
-    const card = createCardContainer(c, coords.CW, coords.CH, { 
-      onClick: () => onCardClick(c) 
-    });
-    card.x = i * (cardWidth + HAND_GAP) + cardWidth / 2 + 20;
-    card.y = coords.getY(4, coords.CH, coords.V_GAP);
+  (z.hand || []).forEach((c: any, i: number) => {
+    const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
+    card.x = coords.getHandX(i, W);
+    card.y = r3Y;
     side.addChild(card);
-  });
-
-  logger.log({
-    level: 'info',
-    action: 'ui.render_board_side',
-    msg: `Rendered BoardSide for ${p?.name || 'unknown'}`,
-    payload: { 
-      lifeCount, 
-      deckCount, 
-      trashCount, 
-      donDeckCount, 
-      donActiveCount, 
-      donRestCount, 
-      handCount: handCards.length 
-    }
   });
 
   return side;
