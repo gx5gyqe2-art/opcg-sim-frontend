@@ -1,5 +1,3 @@
-// src/ui/CardRenderer.tsx
-
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 
@@ -21,7 +19,6 @@ export const createCardContainer = (
     loc.includes('opp') || 
     loc.includes('p2');
 
-  // 相手のカードなら180度回転させて文字を自分に向ける
   const textRotation = isOpponent ? Math.PI : 0;
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
   
@@ -40,31 +37,27 @@ export const createCardContainer = (
     const t = new PIXI.Text(String(val), style);
     t.anchor.set(0.5);
     t.position.set(x, y);
-    if (applyRotation) t.rotation = textRotation; // 全てのテキストに回転を適用
+    if (applyRotation) t.rotation = textRotation;
     container.addChild(t);
     return t;
   };
 
   if (!isBack) {
     if (card?.type === 'LEADER') {
-      addText(card.name, { fontSize: 12, fontWeight: 'bold', fill: COLORS.TEXT_MAIN }, 0, 0);
+      addText(card.name, { fontSize: 12, fontWeight: 'bold', fill: 0xFFFFFF }, 0, 0);
     } else {
-      // コスト表示
       if (card?.cost !== undefined) {
         addText(card.cost, { fontSize: 14, fontWeight: 'bold', fill: 0xFFD700 }, -cw / 2 + 12, -ch / 2 + 12);
       }
-      // パワー表示
       if (card?.power !== undefined) {
         addText(card.power, { fontSize: 12, fontWeight: 'bold', fill: 0xFFFFFF }, cw / 2 - 15, ch / 2 - 12);
       }
-      // カード名
       const nameStyle = { fontSize: 10, fill: 0xFFFFFF, wordWrap: true, wordWrapWidth: cw - 10, align: 'center' };
       const cardName = card.name || "CARD";
       const posY = isOpponent ? (ch / 2 - 18) : (-ch / 2 + 18);
       addText(cardName, nameStyle, 0, posY);
     }
 
-    // ドン!!付与
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
@@ -77,7 +70,6 @@ export const createCardContainer = (
     addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0);
   }
 
-  // 枚数バッジ
   if (options.count && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
