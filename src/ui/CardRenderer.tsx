@@ -1,6 +1,5 @@
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
-import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -12,20 +11,8 @@ export const createCardContainer = (
 ) => {
   const container = new PIXI.Container();
   
-  const isOpponent = card?.owner === 'p2' || card?.location?.includes('opp');
+  const isOpponent = card?.owner_id === 'p2' || card?.owner === 'p2' || card?.location?.includes('opp');
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
-
-  logger.log({
-    level: 'debug',
-    action: 'ui.card_render_check',
-    msg: `Rendering card: ${card?.name || 'unknown'}`,
-    payload: { 
-      uuid: card?.uuid,
-      isOpponent, // これが相手のカードで true になっているか確認が必要
-      owner: card?.owner,
-      location: card?.location
-    }
-  });
 
   const textRotation = isOpponent ? Math.PI : 0;
   
