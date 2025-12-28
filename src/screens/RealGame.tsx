@@ -53,31 +53,15 @@ export const RealGame = () => {
 
     if (!gameState?.game_id) return;
 
-    const requestId = crypto.randomUUID();
     const actionBody = {
-      request_id: requestId,
-      action_type: type,
+      game_id: gameState.game_id,
       player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-      ...payload
+      action: type,
+      payload: payload
     };
 
-    await fetch('/api/log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source: "FE",
-        player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-        action: "api.send_action",
-        level: "info",
-        sessionId: gameState.game_id,
-        msg: `Sending action trigger: ${type}`,
-        payload: actionBody,
-        timestamp: new Date().toISOString()
-      })
-    });
-
     try {
-      const res = await fetch(`/api/game/${gameState.game_id}/action`, {
+      const res = await fetch('/api/game/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(actionBody),
@@ -85,40 +69,21 @@ export const RealGame = () => {
 
       if (res.ok) {
         const data = await res.json();
-        await fetch('/api/log', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: "FE",
-            player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-            action: "api.receive_update_success",
-            level: "info",
-            sessionId: gameState.game_id,
-            msg: `Action ${type} processed successfully`,
-            timestamp: new Date().toISOString()
-          })
-        });
+        
+        await sendDebugLog("api.receive_update_success", `Action ${type} processed successfully`);
 
-        if (data[CONST.API_ROOT_KEYS.GAME_STATE]) {
-          setGameState(data[CONST.API_ROOT_KEYS.GAME_STATE]);
+        const stateKey = CONST.API_ROOT_KEYS.GAME_STATE;
+        if (data[stateKey]) {
+          setGameState(data[stateKey]);
         }
       } else {
-        throw new Error(`Server returned status: ${res.status}`);
+        const errorMsg = `Server returned status: ${res.status}`;
+        console.error("Action failed:", res.status);
+        await sendDebugLog("api.action_error", errorMsg);
       }
     } catch (err: any) {
-      await fetch('/api/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: "FE",
-          player: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-          action: "api.action_error",
-          level: "error",
-          sessionId: gameState.game_id,
-          msg: err.message || "Unknown error during action",
-          timestamp: new Date().toISOString()
-        })
-      });
+      console.error("Network error during action:", err);
+      await sendDebugLog("api.action_error", err.message || "Unknown error");
     }
   };
 
