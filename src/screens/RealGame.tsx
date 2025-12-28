@@ -72,7 +72,6 @@ export const RealGame = () => {
     cw: number, 
     ch: number, 
     isOpp: boolean, 
-    badgeCount?: number,
     isWide = false
   ) => {
     const container = new PIXI.Container();
@@ -135,7 +134,7 @@ export const RealGame = () => {
     container.eventMode = 'static';
     container.cursor = 'pointer';
 
-    container.on('pointerdown', (e) => {
+    container.on('pointerdown', (e: PIXI.FederatedPointerEvent) => {
       e.stopPropagation();
       setSelectedCard({ card, location: card?.location || (isOpp ? 'opponent' : 'player') });
       setIsDetailMode(true);
@@ -195,7 +194,7 @@ export const RealGame = () => {
 
         const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
         if (p?.leader) {
-          const ldr = renderCard({ ...p.leader, location: 'leader' }, coords.CW, coords.CH, isOpp, undefined, true);
+          const ldr = renderCard({ ...p.leader, location: 'leader' }, coords.CW, coords.CH, isOpp, true);
           ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
           side.addChild(ldr);
         }
@@ -227,7 +226,6 @@ export const RealGame = () => {
           location={selectedCard.location}
           onAction={handleAction}
           onClose={() => setIsDetailMode(false)}
-          onImageError={(cardId) => logger.warn('ui.image_load_failed', `Failed to load image for card: ${cardId}`, { cardId })}
         />
       )}
     </div>
