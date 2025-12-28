@@ -33,57 +33,66 @@ export const createCardContainer = (
   g.endFill();
   container.addChild(g);
 
-  const addText = (val: string | number, style: any, x: number, y: number) => {
-    const t = new PIXI.Text(String(val), style);
-    t.anchor.set(0.5);
-    t.position.set(x, y);
-    t.rotation = textRotation;
-    container.addChild(t);
-    return t;
+  const addText = (content: string, style: any, x: number, y: number) => {
+    const txt = new PIXI.Text(content, style);
+    txt.anchor.set(0.5);
+    txt.position.set(x, y);
+    // すべてのテキストに対して、レスト状態と陣地による回転補正を適用
+    txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
+    container.addChild(txt);
   };
 
   if (!isBack) {
-    if (card?.type === 'LEADER') {
-      addText(card.name, { fontSize: 12, fontWeight: 'bold', fill: (COLORS as any).TEXT_MAIN }, 0, 0);
+    const cardName = card?.name || "";
+    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
+                       loc.includes('don');
+
+    if (card?.power !== undefined && !isResource) {
+      const posY = isOpponent ? (ch / 2 + 10) : (-ch / 2 - 10);
+      addText(`POWER ${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY);
+    }
+
+    const nameStyle = { 
+      fontSize: isResource ? 11 : 9, 
+      fontWeight: 'bold', 
+      fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
+    };
+
+    if (isResource) {
+      addText(cardName, nameStyle, 0, 0);
     } else {
-      if (card?.cost !== undefined) {
-        addText(card.cost, { fontSize: 14, fontWeight: 'bold', fill: 0xFFD700 }, -cw / 2 + 12, -ch / 2 + 12);
-      }
-      if (card?.power !== undefined) {
-        addText(card.power, { fontSize: 12, fontWeight: 'bold', fill: 0xFFFFFF }, cw / 2 - 15, ch / 2 - 12);
-      }
-      const nameStyle = { fontSize: 10, fill: 0xFFFFFF, wordWrap: true, wordWrapWidth: cw - 10, align: 'center' };
-      const cardName = card.name || "CARD";
-      const posY = isOpponent ? (ch / 2 - 18) : (-ch / 2 + 18);
+      const posY = isOpponent ? (-ch / 2 - 2) : (ch / 2 + 2);
       addText(cardName, nameStyle, 0, posY);
     }
 
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
+      // ドン!!バッジの色は既存のロジックを維持しつつ、数値の向きを補正
       const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
       container.addChild(donBadge);
       
+      // 文字色は白(0xFFFFFF)を維持し、addTextで回転補正
       addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by);
     }
   } else {
+    // 裏面ロゴの向きを補正し、文字色は白(0xFFFFFF)を使用
     addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0);
   }
 
   if (options.count && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
-    const badge = new PIXI.Graphics().beginFill(0x000000, 0.8).drawCircle(bx, by, 9).endFill();
+    // layout.configのCOLORSを使用するように修正
+    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 12).endFill();
     container.addChild(badge);
-    addText(options.count, { fontSize: 10, fill: 0xFFFFFF }, bx, by);
+    
+    addText(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by);
   }
 
-  container.interactive = true;
+  container.eventMode = 'static';
   container.cursor = 'pointer';
-  container.on('pointertap', (e) => {
-    e.stopPropagation();
-    options.onClick();
-  });
+  container.on('pointerdown', (e) => { e.stopPropagation(); options.onClick(); });
 
   return container;
 };
