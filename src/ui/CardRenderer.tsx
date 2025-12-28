@@ -1,5 +1,7 @@
+// src/ui/CardRenderer.tsx
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -10,6 +12,21 @@ export const createCardContainer = (
   isOpp: boolean,
   options: { count?: number; onClick: () => void }
 ) => {
+  // 既存のロガーを使用して、描画されるカードの情報をトレース
+  logger.log({
+    level: 'debug',
+    action: 'debug.card_render_data',
+    msg: `Rendering card: ${card?.name || 'Unknown'}`,
+    payload: { 
+      uuid: card?.uuid,
+      location: card?.location,
+      power: card?.power,
+      cost: card?.cost,
+      is_face_up: card?.is_face_up,
+      raw_data: card // カードオブジェクトの全プロパティを確認
+    }
+  });
+
   const container = new PIXI.Container();
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
   const textRotation = isRest ? -Math.PI / 2 : 0;
@@ -29,11 +46,9 @@ export const createCardContainer = (
 
   if (!isBack) {
     const cardName = card?.name || "";
-    // リソースカード判定
-    const isResource = ['Don!!', 'DON!!', 'Trash', 'Deck', 'Life', 'Stage'].includes(cardName) || 
+    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
                        card?.location?.includes('don');
 
-    // パワー表示 (パワーが存在し、かつリソースカードでない場合)
     if (card?.power !== undefined && !isResource) {
       const pTxt = new PIXI.Text(`POWER ${card.power}`, new PIXI.TextStyle({ 
         fontSize: 11, 
@@ -42,17 +57,11 @@ export const createCardContainer = (
       }));
       pTxt.anchor.set(0.5);
       pTxt.rotation = textRotation;
-      if (isRest) { 
-        pTxt.x = -ch / 2 - 10; 
-        pTxt.y = 0; 
-      } else { 
-        pTxt.x = 0; 
-        pTxt.y = -ch / 2 - 10; 
-      }
+      if (isRest) { pTxt.x = -ch / 2 - 10; pTxt.y = 0; }
+      else { pTxt.x = 0; pTxt.y = -ch / 2 - 10; }
       container.addChild(pTxt);
     }
 
-    // 名前表示
     const nTxt = new PIXI.Text(cardName, new PIXI.TextStyle({ 
       fontSize: isResource ? 11 : 9, 
       fontWeight: 'bold', 
@@ -60,47 +69,33 @@ export const createCardContainer = (
     }));
     nTxt.anchor.set(0.5);
     nTxt.rotation = textRotation;
-
-    if (isResource) {
-      // ドン!!などは中央に配置
-      nTxt.x = 0; 
-      nTxt.y = 0; 
-    } else {
-      // キャラクターなどは下部に配置
-      if (isRest) { 
-        nTxt.x = ch / 2 + 2; 
-        nTxt.y = 0; 
-      } else { 
-        nTxt.x = 0; 
-        nTxt.y = ch / 2 + 2; 
-      }
-    }
+    if (isResource) { nTxt.x = 0; nTxt.y = 0; }
+    else if (isRest) { nTxt.x = ch / 2 + 2; nTxt.y = 0; }
+    else { nTxt.x = 0; nTxt.y = ch / 2 + 2; }
     container.addChild(nTxt);
+  } else {
+    const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ 
+      fontSize: 8, 
+      fontWeight: 'bold', 
+      fill: 0xFFFFFF, 
+      align: 'center' 
+    }));
+    backTxt.anchor.set(0.5);
+    backTxt.rotation = textRotation;
+    container.addChild(backTxt);
   }
 
-  // 枚数バッジ
   if (options.count && options.count > 0) {
-    const badge = new PIXI.Graphics()
-      .beginFill(COLORS.BADGE_BG, 0.8)
-      .drawCircle(cw / 2 - 10, ch / 2 - 10, 12)
-      .endFill();
-    const cTxt = new PIXI.Text(options.count.toString(), new PIXI.TextStyle({ 
-      fontSize: 12, 
-      fill: COLORS.BADGE_TEXT, 
-      fontWeight: 'bold' 
-    }));
-    cTxt.anchor.set(0.5); 
-    cTxt.position.set(cw / 2 - 10, ch / 2 - 10);
+    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(cw / 2 - 10, ch / 2 - 10, 12).endFill();
+    const cTxt = new PIXI.Text(options.count.toString(), new PIXI.TextStyle({ fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }));
+    cTxt.anchor.set(0.5); cTxt.position.set(cw / 2 - 10, ch / 2 - 10);
     cTxt.rotation = textRotation;
     container.addChild(badge, cTxt);
   }
 
   container.eventMode = 'static';
   container.cursor = 'pointer';
-  container.on('pointerdown', (e) => { 
-    e.stopPropagation(); 
-    options.onClick(); 
-  });
+  container.on('pointerdown', (e) => { e.stopPropagation(); options.onClick(); });
 
   return container;
 };
