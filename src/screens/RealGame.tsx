@@ -52,12 +52,14 @@ export const RealGame = () => {
     if (!gameState?.game_id) return;
 
     try {
-      const newState = await apiClient.sendAction(gameState.game_id, {
-        action_type: type as any,
-        player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-        card_id: payload.uuid,
-        extra: payload.extra
-      });
+  const newState = await apiClient.sendAction(gameState.game_id, {
++   request_id: Math.random().toString(36).substring(2, 15),
+    action_type: type as any,
+    player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+    card_id: payload.uuid,
+    extra: payload.extra
+  });
+
 
       if (newState) {
         setGameState(newState);
