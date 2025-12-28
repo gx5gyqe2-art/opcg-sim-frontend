@@ -1,3 +1,5 @@
+// src/ui/CardRenderer.tsx
+
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 
@@ -11,8 +13,6 @@ export const createCardContainer = (
 ) => {
   const container = new PIXI.Container();
   
-  // ログ分析に基づき、判定条件を location 優先に修正
-  // 相手のドン、トラッシュ、デッキ、ライフは location 名に必ず 'opp' か 'p2' が含まれる仕様を利用
   const loc = (card?.location || "").toLowerCase();
   const isOpponent = 
     card?.isOpponentFlag === true || 
@@ -21,6 +21,7 @@ export const createCardContainer = (
     loc.includes('opp') || 
     loc.includes('p2');
 
+  // 相手のカードなら180度回転させて文字を自分に向ける
   const textRotation = isOpponent ? Math.PI : 0;
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
   
@@ -35,41 +36,32 @@ export const createCardContainer = (
   g.endFill();
   container.addChild(g);
 
-  // テキスト描画共通関数（回転を確実に適用するため）
-  const addText = (content: string, style: any, x: number, y: number, isLabel: boolean = false) => {
-    const txt = new PIXI.Text(content, style);
-    txt.anchor.set(0.5);
-    
-    if (isLabel && !isBack) {
-      // パワーや名前の配置位置補正
-      txt.position.set(x, y);
-      txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
-    } else {
-      // ドン!!、トラッシュ、裏面ロゴなど中央要素の回転
-      txt.position.set(0, 0);
-      txt.rotation = textRotation;
-    }
-    container.addChild(txt);
+  const addText = (val: string | number, style: any, x: number, y: number, applyRotation = true) => {
+    const t = new PIXI.Text(String(val), style);
+    t.anchor.set(0.5);
+    t.position.set(x, y);
+    if (applyRotation) t.rotation = textRotation; // 全てのテキストに回転を適用
+    container.addChild(t);
+    return t;
   };
 
   if (!isBack) {
-    const cardName = card?.name || "";
-    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
-                       loc.includes('don');
-
-    // POWER
-    if (card?.power !== undefined && !isResource) {
-      const posY = isOpponent ? (ch / 2 + 10) : (-ch / 2 - 10);
-      addText(`POWER ${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY, true);
-    }
-
-    // NAME / RESOURCE (ドン!! や トラッシュ はここ)
-    const nameStyle = { fontSize: isResource ? 11 : 9, fontWeight: 'bold', fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT };
-    if (isResource) {
-      addText(cardName, nameStyle, 0, 0, false);
+    if (card?.type === 'LEADER') {
+      addText(card.name, { fontSize: 12, fontWeight: 'bold', fill: COLORS.TEXT_MAIN }, 0, 0);
     } else {
-      const posY = isOpponent ? (-ch / 2 - 2) : (ch / 2 + 2);
-      addText(cardName, nameStyle, 0, posY, true);
+      // コスト表示
+      if (card?.cost !== undefined) {
+        addText(card.cost, { fontSize: 14, fontWeight: 'bold', fill: 0xFFD700 }, -cw / 2 + 12, -ch / 2 + 12);
+      }
+      // パワー表示
+      if (card?.power !== undefined) {
+        addText(card.power, { fontSize: 12, fontWeight: 'bold', fill: 0xFFFFFF }, cw / 2 - 15, ch / 2 - 12);
+      }
+      // カード名
+      const nameStyle = { fontSize: 10, fill: 0xFFFFFF, wordWrap: true, wordWrapWidth: cw - 10, align: 'center' };
+      const cardName = card.name || "CARD";
+      const posY = isOpponent ? (ch / 2 - 18) : (-ch / 2 + 18);
+      addText(cardName, nameStyle, 0, posY);
     }
 
     // ドン!!付与
@@ -79,34 +71,27 @@ export const createCardContainer = (
       const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
       container.addChild(donBadge);
       
-      const dTxt = new PIXI.Text(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' });
-      dTxt.anchor.set(0.5);
-      dTxt.position.set(bx, by);
-      dTxt.rotation = textRotation;
-      container.addChild(dTxt);
+      addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by);
     }
   } else {
-    // 裏面ロゴ
-    addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0, false);
+    addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0);
   }
 
   // 枚数バッジ
   if (options.count && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
-    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 12).endFill();
+    const badge = new PIXI.Graphics().beginFill(0x000000, 0.8).drawCircle(bx, by, 9).endFill();
     container.addChild(badge);
-    
-    const cTxt = new PIXI.Text(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' });
-    cTxt.anchor.set(0.5);
-    cTxt.position.set(bx, by);
-    cTxt.rotation = textRotation;
-    container.addChild(cTxt);
+    addText(options.count, { fontSize: 10, fill: 0xFFFFFF }, bx, by);
   }
 
-  container.eventMode = 'static';
+  container.interactive = true;
   container.cursor = 'pointer';
-  container.on('pointerdown', (e) => { e.stopPropagation(); options.onClick(); });
+  container.on('pointertap', (e) => {
+    e.stopPropagation();
+    options.onClick();
+  });
 
   return container;
 };

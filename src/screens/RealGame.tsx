@@ -89,20 +89,19 @@ export const RealGame = () => {
       app.stage.addChild(bg);
 
       const onCardClick = (card: any) => { 
-        let currentLoc = 'field';
-        
-        if (card.owner_id === 'p1') {
-          const p1 = gameState.players.p1;
-          if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) {
-            currentLoc = 'hand';
-          } else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) {
-            currentLoc = 'field';
-          } else if (p1.zones.trash.some((c: any) => c.uuid === card.uuid)) {
-            currentLoc = 'trash';
-          } else if (p1.zones.life.some((c: any) => c.uuid === card.uuid)) {
-            currentLoc = 'life';
-          }
-        } else {
+        let currentLoc = 'unknown';
+        const p1 = gameState.players.p1;
+        const p2 = gameState.players.p2;
+
+        if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) {
+          currentLoc = 'hand';
+        } else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) {
+          currentLoc = 'field';
+        } else if (p1.zones.trash.some((c: any) => c.uuid === card.uuid)) {
+          currentLoc = 'trash';
+        } else if (p1.zones.life.some((c: any) => c.uuid === card.uuid)) {
+          currentLoc = 'life';
+        } else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) {
           currentLoc = 'opp_field';
         }
 
