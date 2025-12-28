@@ -56,9 +56,9 @@ export const createCardContainer = (
       fontSize: isResource ? 11 : 9, fontWeight: 'bold', fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
     }));
     nTxt.anchor.set(0.5);
+    nTxt.rotation = textRotation; // ドン!!などのリソース文字も回転
 
     if (isResource) {
-      nTxt.rotation = textRotation;
       nTxt.x = 0; 
       nTxt.y = 0; 
     } else {
@@ -69,7 +69,6 @@ export const createCardContainer = (
         nTxt.x = posY; 
         nTxt.y = 0;
       } else {
-        nTxt.rotation = textRotation;
         nTxt.x = 0; 
         nTxt.y = posY;
       }
@@ -84,13 +83,13 @@ export const createCardContainer = (
       const dTxt = new PIXI.Text(`+${card.attached_don}`, new PIXI.TextStyle({ fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }));
       dTxt.anchor.set(0.5);
       dTxt.position.set(bx, by);
-      dTxt.rotation = textRotation;
+      dTxt.rotation = textRotation; // 付与ドンの数値も回転
       container.addChild(donBadge, dTxt);
     }
   } else {
     const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }));
     backTxt.anchor.set(0.5);
-    backTxt.rotation = textRotation;
+    backTxt.rotation = textRotation; // 裏面のロゴも回転
     container.addChild(backTxt);
   }
 
@@ -102,7 +101,7 @@ export const createCardContainer = (
     const cTxt = new PIXI.Text(options.count.toString(), new PIXI.TextStyle({ fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }));
     cTxt.anchor.set(0.5); 
     cTxt.position.set(bx, by);
-    cTxt.rotation = textRotation;
+    cTxt.rotation = textRotation; // 枚数バッジの数値も回転
     container.addChild(badge, cTxt);
   }
 
