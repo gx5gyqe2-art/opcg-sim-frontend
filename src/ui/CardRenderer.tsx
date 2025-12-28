@@ -8,7 +8,6 @@ export const createCardContainer = (
   card: any,
   cw: number,
   ch: number,
-  // 削除: isOpp はもう必要ないので消去しました
   options: { count?: number; onClick: () => void }
 ) => {
   logger.log({
@@ -18,10 +17,7 @@ export const createCardContainer = (
     payload: { 
       uuid: card?.uuid,
       location: card?.location,
-      type: card?.type,
-      power: card?.power,
-      cost: card?.cost,
-      is_face_up: card?.is_face_up,
+      attached_don: card?.attached_don,
       raw: card 
     }
   });
@@ -32,7 +28,6 @@ export const createCardContainer = (
   
   if (isRest) container.rotation = Math.PI / 2;
 
-  // 修正: 場所や陣営のロジックをすべて消去し、カードのステータスのみに従います
   const isBack = card?.is_face_up === false;
 
   const g = new PIXI.Graphics();
@@ -55,13 +50,8 @@ export const createCardContainer = (
       }));
       pTxt.anchor.set(0.5);
       pTxt.rotation = textRotation;
-      if (isRest) { 
-        pTxt.x = -ch / 2 - 10; 
-        pTxt.y = 0; 
-      } else { 
-        pTxt.x = 0; 
-        pTxt.y = -ch / 2 - 10; 
-      }
+      if (isRest) { pTxt.x = -ch / 2 - 10; pTxt.y = 0; }
+      else { pTxt.x = 0; pTxt.y = -ch / 2 - 10; }
       container.addChild(pTxt);
     }
 
@@ -76,15 +66,27 @@ export const createCardContainer = (
       nTxt.x = 0; 
       nTxt.y = 0; 
     } else {
-      if (isRest) { 
-        nTxt.x = ch / 2 + 2; 
-        nTxt.y = 0; 
-      } else { 
-        nTxt.x = 0; 
-        nTxt.y = ch / 2 + 2; 
-      }
+      if (isRest) { nTxt.x = ch / 2 + 2; nTxt.y = 0; }
+      else { nTxt.x = 0; nTxt.y = ch / 2 + 2; }
     }
     container.addChild(nTxt);
+
+    // 付与ドンバッジ (Attached Don) を右上に表示
+    if (card?.attached_don && card.attached_don > 0) {
+      const donBadge = new PIXI.Graphics()
+        .beginFill(0x9370DB, 0.9) // ドン!!をイメージした紫系
+        .drawCircle(cw / 2 - 8, -ch / 2 + 8, 10)
+        .endFill();
+      const dTxt = new PIXI.Text(`+${card.attached_don}`, new PIXI.TextStyle({ 
+        fontSize: 10, 
+        fill: 0xFFFFFF, 
+        fontWeight: 'bold' 
+      }));
+      dTxt.anchor.set(0.5);
+      dTxt.position.set(cw / 2 - 8, -ch / 2 + 8);
+      dTxt.rotation = textRotation;
+      container.addChild(donBadge, dTxt);
+    }
   } else {
     const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ 
       fontSize: 8, 
@@ -97,6 +99,7 @@ export const createCardContainer = (
     container.addChild(backTxt);
   }
 
+  // 枚数バッジ (枚数) を右下に表示
   if (options.count && options.count > 0) {
     const badge = new PIXI.Graphics()
       .beginFill(COLORS.BADGE_BG, 0.8)

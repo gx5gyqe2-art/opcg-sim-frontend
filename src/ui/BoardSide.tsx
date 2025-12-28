@@ -13,19 +13,21 @@ export const createBoardSide = (
   const side = new PIXI.Container();
   const z = p?.zones || {};
 
-  // ログ：バックエンドから届いた生の枚数関連データを追跡
+  // デバッグロガー：バックエンドから届いた枚数関連のプロパティをチェック
   logger.log({
     level: 'debug',
-    action: 'debug.zone_data_map',
-    msg: `Mapping zone data for ${p?.name}`,
+    action: 'debug.board_side_data',
+    msg: `Mapping zones for ${p?.name || 'unknown player'}`,
     payload: {
-      don_deck_count: p?.don_deck_count,
+      deck_len: z.deck?.length,
+      trash_len: z.trash?.length,
       don_active_len: z.don_active?.length,
       don_rested_len: z.don_rested?.length,
-      deck_len: z.deck?.length
+      don_deck_count: p?.don_deck_count
     }
   });
 
+  // 1. フィールド（キャラクター）
   (z.field || []).forEach((c: any, i: number) => {
     const card = createCardContainer(c, coords.CW, coords.CH, { 
       onClick: () => onCardClick(c) 
@@ -38,6 +40,7 @@ export const createBoardSide = (
   const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
   const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
 
+  // 2. リーダー
   if (p.leader) {
     const ldr = createCardContainer(p.leader, coords.CW, coords.CH, { 
       onClick: () => onCardClick(p.leader) 
@@ -47,6 +50,7 @@ export const createBoardSide = (
     side.addChild(ldr);
   }
 
+  // 3. ライフ
   const life = createCardContainer(
     { name: 'Life', location: 'life', is_face_up: false }, 
     coords.CW, coords.CH, 
@@ -56,6 +60,7 @@ export const createBoardSide = (
   life.y = r2Y;
   side.addChild(life);
 
+  // 4. ステージ
   if (z.stage && z.stage.length > 0) {
     const s = z.stage[0];
     const stageCard = createCardContainer(s, coords.CW, coords.CH, { 
@@ -66,7 +71,7 @@ export const createBoardSide = (
     side.addChild(stageCard);
   }
 
-  // デッキ：zones.deck の要素数を使用
+  // 5. 山札（zones.deck のリスト長）
   const deck = createCardContainer(
     { name: 'Deck', location: 'deck', is_face_up: false }, 
     coords.CW, coords.CH, 
@@ -76,7 +81,7 @@ export const createBoardSide = (
   deck.y = r2Y;
   side.addChild(deck);
 
-  // トラッシュ：zones.trash の要素数を使用
+  // 6. トラッシュ（zones.trash のリスト長）
   const trash = createCardContainer(
     { name: 'Trash', location: 'trash' }, 
     coords.CW, coords.CH, 
@@ -86,7 +91,7 @@ export const createBoardSide = (
   trash.y = r3Y;
   side.addChild(trash);
 
-  // ドン!!デッキ：don_deck_count プロパティを直接使用
+  // 7. ドン!!デッキ（プレイヤー直下の don_deck_count 数値）
   const donDeck = createCardContainer(
     { name: 'Don!!', location: 'don_deck', is_face_up: false }, 
     coords.CW, coords.CH, 
@@ -96,7 +101,7 @@ export const createBoardSide = (
   donDeck.y = r3Y;
   side.addChild(donDeck);
 
-  // ドン!!アクティブ：don_active の要素数を使用
+  // 8. ドン!!アクティブ（don_active のリスト長）
   const donActive = createCardContainer(
     { name: 'Don!!', location: 'don_active' }, 
     coords.CW, coords.CH, 
@@ -106,7 +111,7 @@ export const createBoardSide = (
   donActive.y = r3Y;
   side.addChild(donActive);
 
-  // ドン!!レスト：バックエンドの名称 don_rested に合わせて要素数を使用
+  // 9. ドン!!レスト（バックエンド名 don_rested のリスト長）
   const donRest = createCardContainer(
     { name: 'Don!!', location: 'don_rest' }, 
     coords.CW, coords.CH, 
@@ -116,6 +121,7 @@ export const createBoardSide = (
   donRest.y = r3Y;
   side.addChild(donRest);
 
+  // 10. 手札
   (z.hand || []).forEach((c: any, i: number) => {
     const card = createCardContainer(c, coords.CW, coords.CH, { 
       onClick: () => onCardClick(c) 
