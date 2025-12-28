@@ -10,7 +10,7 @@ export const API_CONFIG = {
   ENDPOINTS: {
     HEALTH: '/health',
     CREATE_GAME: '/api/game/create',
-    ACTION: (gameId: string) => `/api/game/${gameId}/action`
+    ACTION: '/api/game/action'
   },
 
   // デフォルト設定

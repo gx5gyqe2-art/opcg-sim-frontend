@@ -8,7 +8,6 @@ import { sessionManager } from '../utils/session';
 const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
 
 export const apiClient = {
-  /** サーバーの生存確認 */
   async checkHealth(): Promise<void> {
     const res = await fetch(`${BASE_URL}${ENDPOINTS.HEALTH}`);
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
@@ -20,7 +19,6 @@ export const apiClient = {
     });
   },
 
-  /** ゲームの新規作成 */
   async createGame(
     p1Deck = DEFAULT_GAME_SETTINGS.P1_DECK, 
     p2Deck = DEFAULT_GAME_SETTINGS.P2_DECK
@@ -43,7 +41,6 @@ export const apiClient = {
 
     const data = await res.json();
 
-    // 詳細ログの追加
     logger.log({
       level: 'info',
       action: 'api.receive_create_detail',
@@ -55,28 +52,32 @@ export const apiClient = {
     });
 
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
-    const newState = data[stateKey] || data.state;
+    const newState = data[stateKey] || data.game_state;
     
     if (!newState) {
-      logger.log({
-        level: 'error',
-        action: 'api.schema_error',
-        msg: `Key "${String(stateKey)}" not found in response`
-      });
       throw new Error("Invalid Response Schema");
     }
 
-    // game_idの取得を柔軟化
     const finalGameId = data.game_id || (newState as any).game_id;
     return { game_id: finalGameId, state: newState };
   },
 
-  /** プレイヤーのアクションを送信 */
   async sendAction(gameId: string, request: GameActionRequest): Promise<GameState> {
-    const response = await fetch(`${BASE_URL}${ENDPOINTS.ACTION(gameId)}`, {
+    const actionBody = {
+      game_id: gameId,
+      player_id: request.player_id,
+      action: request.action_type,
+      payload: {
+        uuid: request.card_id,
+        target_uuid: request.target_ids?.[0],
+        ...request.extra
+      }
+    };
+
+    const response = await fetch(`${BASE_URL}/api/game/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(actionBody),
     });
 
     const result = await response.json();
@@ -88,10 +89,10 @@ export const apiClient = {
       payload: result
     });
 
-    const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof result;
-    const nextState = result[stateKey] || result.state;
+    if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
+      throw new Error("Action failed");
+    }
 
-    if (!response.ok || !nextState) throw new Error("Action failed");
-    return nextState;
+    return result[CONST.API_ROOT_KEYS.GAME_STATE];
   }
 };

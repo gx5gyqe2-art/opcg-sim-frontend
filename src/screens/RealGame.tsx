@@ -5,6 +5,7 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
+import { apiClient } from '../api/client';
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -48,41 +49,24 @@ export const RealGame = () => {
   };
 
   const handleAction = async (type: string, payload: any = {}) => {
-    console.log("!!! REALGAME_HANDLE_ACTION_IN !!!", type, payload);
-    await sendDebugLog("debug.handleAction_call", `Triggered: ${type}`, { payload });
-
     if (!gameState?.game_id) return;
 
-    const actionBody = {
-      game_id: gameState.game_id,
-      player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
-      action: type,
-      payload: payload
-    };
-
     try {
-      const res = await fetch('/api/game/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(actionBody),
+      const newState = await apiClient.sendAction(gameState.game_id, {
+        action_type: type as any,
+        player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+        card_id: payload.uuid,
+        extra: payload.extra
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        
-        await sendDebugLog("api.receive_update_success", `Action ${type} processed successfully`);
-
-        const stateKey = CONST.API_ROOT_KEYS.GAME_STATE;
-        if (data[stateKey]) {
-          setGameState(data[stateKey]);
-        }
-      } else {
-        const errorMsg = `Server returned status: ${res.status}`;
-        console.error("Action failed:", res.status);
-        await sendDebugLog("api.action_error", errorMsg);
+      if (newState) {
+        setGameState(newState);
+        setIsDetailMode(false);
+        setSelectedCard(null);
+        await sendDebugLog("api.receive_update_success", `Action ${type} processed`);
       }
     } catch (err: any) {
-      console.error("Network error during action:", err);
+      console.error("Action failed:", err);
       await sendDebugLog("api.action_error", err.message || "Unknown error");
     }
   };
@@ -309,3 +293,4 @@ export const RealGame = () => {
     </div>
   );
 };
+
