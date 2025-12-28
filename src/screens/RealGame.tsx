@@ -28,7 +28,20 @@ export const RealGame = () => {
     return '...';
   };
 
+  const validateGameState = (state: any) => {
+    if (!state?.players?.p1?.zones || !state?.players?.p2?.zones) {
+      logger.warn('game.state_validation', 'Unexpected GameState structure: zones are missing', { state });
+    }
+  };
+
   const handleAction = async (type: string, payload: any = {}) => {
+    logger.log({
+      level: 'info',
+      action: 'game.handle_action',
+      msg: `Attempting action: ${type} on card: ${payload.uuid || 'none'}`,
+      payload: { type, cardId: payload.uuid, extra: payload.extra }
+    });
+
     if (!gameState?.game_id) return;
 
     try {
@@ -41,6 +54,7 @@ export const RealGame = () => {
       });
 
       if (newState) {
+        validateGameState(newState);
         setGameState(newState);
         setIsDetailMode(false);
         setSelectedCard(null);
@@ -112,41 +126,10 @@ export const RealGame = () => {
       if (isRest) nTxt.x = (isResource ? 0 : ch / 2 + 2) * yDir;
       nTxt.rotation = textRotation;
       container.addChild(nTxt);
-
-      if (card?.counter !== undefined && card.counter > 0) {
-        const cTxt = new PIXI.Text(`+${card.counter}`, { fontSize: 8, fill: 0x000000, stroke: 0xFFFFFF, strokeThickness: 2, fontWeight: 'bold' });
-        cTxt.anchor.set(0.5); cTxt.x = -cw / 2 + 8; cTxt.y = 0; cTxt.rotation = -Math.PI / 2;
-        container.addChild(cTxt);
-      }
-
-      if (card?.cost !== undefined) {
-        const cBg = new PIXI.Graphics().beginFill(0x333333).drawCircle(-cw / 2 + 10, -ch / 2 + 10, 7).endFill();
-        const cTxt = new PIXI.Text(card.cost.toString(), { fontSize: 8, fill: 0xFFFFFF, fontWeight: 'bold' });
-        cTxt.anchor.set(0.5); cTxt.position.set(-cw / 2 + 10, -ch / 2 + 10);
-        container.addChild(cBg, cTxt);
-      }
-      
-      if (card?.attribute && card?.power !== undefined) {
-        let attrColor = 0x666666;
-        if (card.attribute === '斬') attrColor = 0xc0392b;
-        if (card.attribute === '打') attrColor = 0x2980b9;
-        const aTxt = new PIXI.Text(card.attribute, { fontSize: 7, fill: attrColor, fontWeight: 'bold' });
-        aTxt.anchor.set(1, 0); aTxt.x = cw / 2 - 4; aTxt.y = -ch / 2 + 4;
-        container.addChild(aTxt);
-      }
     } else {
       const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
       backTxt.anchor.set(0.5); backTxt.rotation = textRotation;
       container.addChild(backTxt);
-    }
-
-    if (badgeCount !== undefined && (badgeCount > 0 || isResource)) {
-      const bG = new PIXI.Graphics().beginFill(0xFF0000).drawCircle(0, 0, 9).endFill();
-      const bT = new PIXI.Text(badgeCount.toString(), { fontSize: 9, fill: 0xFFFFFF, fontWeight: 'bold' });
-      bT.anchor.set(0.5);
-      if (isRest) { bG.x = (cw / 2 - 9) * yDir; bG.y = (ch / 2 - 9) * yDir; } 
-      else { bG.x = cw / 2 - 9; bG.y = ch / 2 - 9; }
-      bG.addChild(bT); container.addChild(bG);
     }
 
     container.eventMode = 'static';
@@ -217,31 +200,6 @@ export const RealGame = () => {
           side.addChild(ldr);
         }
 
-        const life = renderCard({ name: 'Life', is_face_up: false, location: 'life' }, coords.CW, coords.CH, isOpp, p?.zones?.life?.length);
-        life.x = coords.getLifeX(W); life.y = r2Y;
-        side.addChild(life);
-
-        const deck = renderCard({ name: 'Deck', is_face_up: false, location: 'deck' }, coords.CW, coords.CH, isOpp, 40);
-        deck.x = coords.getDeckX(W); deck.y = r2Y;
-        side.addChild(deck);
-
-        const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
-        const donDk = renderCard({ name: 'Don!!', is_face_up: false, location: 'don_deck' }, coords.CW, coords.CH, isOpp, 10);
-        donDk.x = coords.getDonDeckX(W); donDk.y = r3Y;
-        side.addChild(donDk);
-
-        const donAct = renderCard({ name: 'DON!!', location: 'don_active' }, coords.CW, coords.CH, isOpp, p?.don_active?.length);
-        donAct.x = coords.getDonActiveX(W); donAct.y = r3Y;
-        side.addChild(donAct);
-
-        const donRst = renderCard({ name: 'DON!!', is_rest: true, location: 'don_rest' }, coords.CW, coords.CH, isOpp, p?.don_rested?.length);
-        donRst.x = coords.getDonRestX(W); donRst.y = r3Y;
-        side.addChild(donRst);
-
-        const trash = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, (p?.zones?.trash || []).length);
-        trash.x = coords.getTrashX(W); trash.y = r3Y;
-        side.addChild(trash);
-
         (p?.zones?.hand || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'hand' }, coords.CW, coords.CH, isOpp);
           card.x = coords.getHandX(i, W);
@@ -268,7 +226,8 @@ export const RealGame = () => {
           card={selectedCard.card} 
           location={selectedCard.location}
           onAction={handleAction}
-          onClose={() => setIsDetailMode(false)} 
+          onClose={() => setIsDetailMode(false)}
+          onImageError={(cardId) => logger.warn('ui.image_load_failed', `Failed to load image for card: ${cardId}`, { cardId })}
         />
       )}
     </div>
