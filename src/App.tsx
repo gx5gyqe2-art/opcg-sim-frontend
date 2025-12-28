@@ -1,6 +1,7 @@
-import { Component } from 'react';
+import { Component, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { RealGame } from './screens/RealGame';
+import GameStart from './ui/GameStart';
 
 interface Props {
   children: ReactNode;
@@ -54,21 +55,10 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default function App() {
+  const [isStarted, setIsStarted] = useState(false);
+
   return (
     <div 
-      // 【修正】FE_GLOBALロガーの追加
-      onClick={() => {
-        fetch('/api/log', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source: "FE_GLOBAL",
-            action: "debug.dom_click",
-            msg: "Global DOM click detected",
-            timestamp: new Date().toISOString()
-          })
-        }).catch(() => {});
-      }}
       style={{
         width: '100vw',
         height: '100vh',
@@ -81,7 +71,17 @@ export default function App() {
       }}
     >
       <ErrorBoundary>
-        <RealGame />
+        {!isStarted ? (
+          <GameStart 
+            p1Name="p1" 
+            p1Deck="imu.json" 
+            p2Name="p2" 
+            p2Deck="nami.json" 
+            onStart={() => setIsStarted(true)} 
+          />
+        ) : (
+          <RealGame />
+        )}
       </ErrorBoundary>
     </div>
   );
