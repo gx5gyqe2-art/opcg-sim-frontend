@@ -10,21 +10,22 @@ export const createCardContainer = (
   ch: number,
   options: { count?: number; onClick: () => void }
 ) => {
-  logger.log({
-    level: 'debug',
-    action: 'debug.card_render_process',
-    msg: `Card rendering: ${card?.name || 'Unknown'}`,
-    payload: { 
-      uuid: card?.uuid,
-      location: card?.location,
-      attached_don: card?.attached_don,
-      raw: card 
-    }
-  });
-
   const container = new PIXI.Container();
+  
+  // 相手側のカード（P2）かどうかを判定
+  // RealGame.tsx から渡されるプレイヤー情報や location 文字列から判断
+  const isOpponent = card?.owner === 'p2' || card?.location?.includes('opp');
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
-  const textRotation = isRest ? -Math.PI / 2 : 0;
+
+  // テキストの回転補正角を計算
+  // 相手側（PI）かつレスト状態（-PI/2）などを考慮し、常にプレイヤーから見て正位置にする
+  const getCorrectionAngle = () => {
+    let angle = 0;
+    if (isOpponent) angle += Math.PI; // 相手側なら180度回転して相殺
+    return angle;
+  };
+
+  const textRotation = getCorrectionAngle();
   
   if (isRest) container.rotation = Math.PI / 2;
 
@@ -39,42 +40,35 @@ export const createCardContainer = (
 
   if (!isBack) {
     const cardName = card?.name || "";
-    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
-                       card?.location?.includes('don');
-
-    if (card?.power !== undefined && !isResource) {
+    
+    // POWER表示
+    if (card?.power !== undefined) {
       const pTxt = new PIXI.Text(`POWER ${card.power}`, new PIXI.TextStyle({ 
         fontSize: 11, 
         fill: COLORS.TEXT_POWER, 
         fontWeight: 'bold' 
       }));
       pTxt.anchor.set(0.5);
-      pTxt.rotation = textRotation;
-      if (isRest) { pTxt.x = -ch / 2 - 10; pTxt.y = 0; }
-      else { pTxt.x = 0; pTxt.y = -ch / 2 - 10; }
+      pTxt.rotation = textRotation; // 文字だけ回転を打ち消す
+      pTxt.y = -ch / 2 - 10;
       container.addChild(pTxt);
     }
 
+    // カード名表示
     const nTxt = new PIXI.Text(cardName, new PIXI.TextStyle({ 
-      fontSize: isResource ? 11 : 9, 
+      fontSize: 10, 
       fontWeight: 'bold', 
-      fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
+      fill: COLORS.TEXT_DEFAULT 
     }));
     nTxt.anchor.set(0.5);
-    nTxt.rotation = textRotation;
-    if (isResource) {
-      nTxt.x = 0; 
-      nTxt.y = 0; 
-    } else {
-      if (isRest) { nTxt.x = ch / 2 + 2; nTxt.y = 0; }
-      else { nTxt.x = 0; nTxt.y = ch / 2 + 2; }
-    }
+    nTxt.rotation = textRotation; // 文字だけ回転を打ち消す
+    nTxt.y = ch / 2 + 2;
     container.addChild(nTxt);
 
-    // 付与ドンバッジ (Attached Don) を右上に表示
+    // ドン!!付与表示
     if (card?.attached_don && card.attached_don > 0) {
       const donBadge = new PIXI.Graphics()
-        .beginFill(0x9370DB, 0.9) // ドン!!をイメージした紫系
+        .beginFill(0x9370DB, 0.9) 
         .drawCircle(cw / 2 - 8, -ch / 2 + 8, 10)
         .endFill();
       const dTxt = new PIXI.Text(`+${card.attached_don}`, new PIXI.TextStyle({ 
@@ -84,10 +78,11 @@ export const createCardContainer = (
       }));
       dTxt.anchor.set(0.5);
       dTxt.position.set(cw / 2 - 8, -ch / 2 + 8);
-      dTxt.rotation = textRotation;
+      dTxt.rotation = textRotation; // 数字だけ回転を打ち消す
       container.addChild(donBadge, dTxt);
     }
   } else {
+    // カード裏面
     const backTxt = new PIXI.Text("ONE\nPIECE", new PIXI.TextStyle({ 
       fontSize: 8, 
       fontWeight: 'bold', 
@@ -95,11 +90,11 @@ export const createCardContainer = (
       align: 'center' 
     }));
     backTxt.anchor.set(0.5);
-    backTxt.rotation = textRotation;
+    backTxt.rotation = textRotation; // 裏面の文字も正位置にする
     container.addChild(backTxt);
   }
 
-  // 枚数バッジ (枚数) を右下に表示
+  // 枚数バッジ (デッキやライフなど)
   if (options.count && options.count > 0) {
     const badge = new PIXI.Graphics()
       .beginFill(COLORS.BADGE_BG, 0.8)
@@ -112,7 +107,7 @@ export const createCardContainer = (
     }));
     cTxt.anchor.set(0.5); 
     cTxt.position.set(cw / 2 - 10, ch / 2 - 10);
-    cTxt.rotation = textRotation;
+    cTxt.rotation = textRotation; // 枚数表示も正位置にする
     container.addChild(badge, cTxt);
   }
 
@@ -122,6 +117,16 @@ export const createCardContainer = (
     e.stopPropagation(); 
     options.onClick(); 
   });
+
+  // ロギング（デバッグ用）
+  if (isOpponent) {
+    logger.log({
+      level: 'debug',
+      action: 'ui.card_render_opponent',
+      msg: `Rendering opponent card with rotation correction: ${card?.name}`,
+      payload: { textRotation }
+    });
+  }
 
   return container;
 };

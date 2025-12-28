@@ -80,12 +80,10 @@ export const RealGame = () => {
         setIsDetailMode(true); 
       };
 
-      // 【修正】相手側ボードの描画ロジックを自分側と同様に修正
       const p2Side = createBoardSide(gameState.players.p2, true, W, coords, onCardClick);
-      // 回転（rotation）を削除し、x座標のオフセットを 0 に戻します
-      p2Side.x = 0; 
-      // 相手側エリア（画面上半分）に収まるよう y 座標を調整
-      p2Side.y = 40; 
+      p2Side.x = W; 
+      p2Side.y = midY - 40; 
+      p2Side.rotation = Math.PI;
       
       const p1Side = createBoardSide(gameState.players.p1, false, W, coords, onCardClick);
       p1Side.y = midY + 40;
