@@ -72,7 +72,8 @@ export const RealGame = () => {
     cw: number, 
     ch: number, 
     isOpp: boolean, 
-    isWide = false
+    isWide = false,
+    count = 0
   ) => {
     const container = new PIXI.Container();
     const isRest = card?.is_rest === true;
@@ -105,7 +106,7 @@ export const RealGame = () => {
     const textRotation = isRest ? -Math.PI / 2 : 0;
     const yDir = isOpp ? -1 : 1;
     const cardName = card?.name || "";
-    const isResource = cardName === 'DON!!' || cardName === 'Trash' || cardName === 'Deck' || cardName === 'Don!!' || cardName === 'Life' || cardName === 'Stage';
+    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName);
 
     if (!isBack) {
       if (card?.power !== undefined) {
@@ -131,9 +132,22 @@ export const RealGame = () => {
       container.addChild(backTxt);
     }
 
+    if (count > 0) {
+      const badge = new PIXI.Graphics();
+      badge.beginFill(0x000000, 0.8);
+      badge.drawCircle(cw / 2 - 10, ch / 2 - 10, 12);
+      badge.endFill();
+      container.addChild(badge);
+
+      const countTxt = new PIXI.Text(count.toString(), { fontSize: 12, fill: 0xFFFFFF, fontWeight: 'bold' });
+      countTxt.anchor.set(0.5);
+      countTxt.position.set(cw / 2 - 10, ch / 2 - 10);
+      countTxt.rotation = textRotation;
+      container.addChild(countTxt);
+    }
+
     container.eventMode = 'static';
     container.cursor = 'pointer';
-
     container.on('pointerdown', (e: PIXI.FederatedPointerEvent) => {
       e.stopPropagation();
       setSelectedCard({ card, location: card?.location || (isOpp ? 'opponent' : 'player') });
@@ -145,7 +159,6 @@ export const RealGame = () => {
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-    
     if (!appRef.current) {
       const app = new PIXI.Application({ background: 0xFFFFFF, resizeTo: window, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
       appRef.current = app;
@@ -157,9 +170,8 @@ export const RealGame = () => {
     app.stage.hitArea = app.screen;
 
     const renderScene = () => {
-      if (!app.stage) return;
+      if (!app.stage || !gameState) return;
       app.stage.removeChildren();
-      if (!gameState) return;
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
@@ -170,36 +182,30 @@ export const RealGame = () => {
       bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
       app.stage.addChild(bg);
 
-      const turnEndBtn = new PIXI.Graphics().beginFill(0x333333).drawRoundedRect(W - 110, midY - 20, 100, 40, 8).endFill();
-      turnEndBtn.eventMode = 'static';
-      turnEndBtn.cursor = 'pointer';
-      turnEndBtn.on('pointerdown', () => handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END));
-      const btnTxt = new PIXI.Text("TURN END", { fontSize: 14, fill: 0xFFFFFF, fontWeight: 'bold' });
-      btnTxt.anchor.set(0.5); btnTxt.position.set(W - 60, midY);
-      turnEndBtn.addChild(btnTxt);
-      app.stage.addChild(turnEndBtn);
-
       const renderSide = (p: any, isOpp: boolean) => {
         const side = new PIXI.Container();
         if (isOpp) { side.x = W; side.y = midY - 40; side.rotation = Math.PI; } 
         else { side.y = midY + 40; }
         app.stage.addChild(side);
 
-        (p?.zones?.field || []).forEach((c: any, i: number) => {
+        const z = p?.zones || {};
+
+        (z.field || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'field' }, coords.CW, coords.CH, isOpp);
-          card.x = coords.getFieldX(i, W, coords.CW, p.zones.field.length);
+          card.x = coords.getFieldX(i, W, coords.CW, z.field.length);
           card.y = coords.getY(1, coords.CH, coords.V_GAP);
           side.addChild(card);
         });
 
         const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
-        if (p?.leader) {
+        if (p.leader) {
           const ldr = renderCard({ ...p.leader, location: 'leader' }, coords.CW, coords.CH, isOpp, true);
           ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
           side.addChild(ldr);
         }
 
-        const lifeCard = renderCard({ name: 'Life', location: 'life', is_face_up: false }, coords.CW, coords.CH, isOpp);
+        const lifeCount = (z.life || []).length;
+        const lifeCard = renderCard({ name: 'Life', location: 'life', is_face_up: false }, coords.CW, coords.CH, isOpp, false, lifeCount);
         lifeCard.x = coords.getLifeX(W); lifeCard.y = r2Y;
         side.addChild(lifeCard);
 
@@ -207,28 +213,33 @@ export const RealGame = () => {
         stageCard.x = coords.getStageX(W); stageCard.y = r2Y;
         side.addChild(stageCard);
 
-        const deckCard = renderCard({ name: 'Deck', location: 'deck', is_face_up: false }, coords.CW, coords.CH, isOpp);
+        const deckCount = (z.deck || []).length;
+        const deckCard = renderCard({ name: 'Deck', location: 'deck', is_face_up: false }, coords.CW, coords.CH, isOpp, false, deckCount);
         deckCard.x = coords.getDeckX(W); deckCard.y = r2Y;
         side.addChild(deckCard);
 
-        const trashCard = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp);
+        const trashCount = (z.trash || []).length;
+        const trashCard = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, false, trashCount);
         trashCard.x = coords.getTrashX(W); trashCard.y = r2Y;
         side.addChild(trashCard);
 
         const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
-        const donDeck = renderCard({ name: 'Don!!', location: 'don_deck', is_face_up: false }, coords.CW, coords.CH, isOpp);
+        const donDeckCount = (z.don_deck || []).length;
+        const donDeck = renderCard({ name: 'Don!!', location: 'don_deck', is_face_up: false }, coords.CW, coords.CH, isOpp, false, donDeckCount);
         donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
         side.addChild(donDeck);
 
-        const donActive = renderCard({ name: 'Don!!', location: 'don_active' }, coords.CW, coords.CH, isOpp);
+        const donActiveCount = (z.don_active || []).length;
+        const donActive = renderCard({ name: 'Don!!', location: 'don_active' }, coords.CW, coords.CH, isOpp, false, donActiveCount);
         donActive.x = coords.getDonActiveX(W); donActive.y = r3Y;
         side.addChild(donActive);
 
-        const donRest = renderCard({ name: 'Don!!', location: 'don_rest' }, coords.CW, coords.CH, isOpp);
+        const donRestCount = (z.don_rest || []).length;
+        const donRest = renderCard({ name: 'Don!!', location: 'don_rest' }, coords.CW, coords.CH, isOpp, false, donRestCount);
         donRest.x = coords.getDonRestX(W); donRest.y = r3Y;
         side.addChild(donRest);
 
-        (p?.zones?.hand || []).forEach((c: any, i: number) => {
+        (z.hand || []).forEach((c: any, i: number) => {
           const card = renderCard({ ...c, location: 'hand' }, coords.CW, coords.CH, isOpp);
           card.x = coords.getHandX(i, W);
           card.y = coords.getY(4, coords.CH, coords.V_GAP);
@@ -236,14 +247,13 @@ export const RealGame = () => {
         });
       };
 
-      if (gameState?.players) {
+      if (gameState.players) {
         renderSide(gameState.players.p2, true);
         renderSide(gameState.players.p1, false);
       }
     };
 
     renderScene();
-
   }, [gameState, renderCard, handleAction]);
 
   return (
