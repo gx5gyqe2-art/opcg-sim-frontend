@@ -1,6 +1,5 @@
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
-import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -12,25 +11,12 @@ export const createCardContainer = (
 ) => {
   const container = new PIXI.Container();
   
-  const isOpponent = card?.isOpponentFlag === true || card?.owner_id === 'p2' || card?.owner === 'p2';
+  // ログに基づき owner_id を参照して判定
+  const isOpponent = card?.owner_id === 'p2' || card?.isOpponentFlag === true;
   const isRest = card?.is_rest === true || card?.location === 'don_rest';
+
   const textRotation = isOpponent ? Math.PI : 0;
-
-  logger.log({
-    level: 'debug',
-    action: 'ui.card_render_trace',
-    msg: `Rendering card: ${card?.name || 'unknown'}`,
-    payload: { 
-      uuid: card?.uuid,
-      isOpponent,
-      textRotation,
-      raw_owner_id: card?.owner_id,
-      raw_owner: card?.owner,
-      location: card?.location,
-      has_flag: !!card?.isOpponentFlag
-    }
-  });
-
+  
   if (isRest) container.rotation = Math.PI / 2;
 
   const isBack = card?.is_face_up === false;
@@ -52,9 +38,18 @@ export const createCardContainer = (
         fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' 
       }));
       pTxt.anchor.set(0.5);
+      
       const posY = isOpponent ? (ch / 2 + 10) : (-ch / 2 - 10);
-      pTxt.position.set(0, posY);
-      pTxt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
+
+      if (isRest) {
+        pTxt.rotation = -Math.PI / 2 + textRotation;
+        pTxt.x = posY; 
+        pTxt.y = 0;
+      } else {
+        pTxt.rotation = textRotation;
+        pTxt.x = 0; 
+        pTxt.y = posY;
+      }
       container.addChild(pTxt);
     }
 
@@ -62,20 +57,29 @@ export const createCardContainer = (
       fontSize: isResource ? 11 : 9, fontWeight: 'bold', fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
     }));
     nTxt.anchor.set(0.5);
-    
+    nTxt.rotation = textRotation;
+
     if (isResource) {
-      nTxt.position.set(0, 0);
-      nTxt.rotation = textRotation;
+      nTxt.x = 0; 
+      nTxt.y = 0; 
     } else {
       const posY = isOpponent ? (-ch / 2 - 2) : (ch / 2 + 2);
-      nTxt.position.set(0, posY);
-      nTxt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
+      
+      if (isRest) {
+        nTxt.rotation = -Math.PI / 2 + textRotation;
+        nTxt.x = posY; 
+        nTxt.y = 0;
+      } else {
+        nTxt.x = 0; 
+        nTxt.y = posY;
+      }
     }
     container.addChild(nTxt);
 
     if (card?.attached_don && card.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
+      
       const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
       const dTxt = new PIXI.Text(`+${card.attached_don}`, new PIXI.TextStyle({ fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }));
       dTxt.anchor.set(0.5);
@@ -93,6 +97,7 @@ export const createCardContainer = (
   if (options.count && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
+    
     const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 12).endFill();
     const cTxt = new PIXI.Text(options.count.toString(), new PIXI.TextStyle({ fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }));
     cTxt.anchor.set(0.5); 
