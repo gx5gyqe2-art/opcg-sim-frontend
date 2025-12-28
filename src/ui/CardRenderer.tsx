@@ -89,11 +89,18 @@ export const createCardContainer = (
 
   container.on('pointertap', (e) => {
     e.stopPropagation();
-    logger.info(`[CardRenderer] pointertap fired. card: ${card?.name}, uuid: ${card?.uuid}`);
+    
+    logger.log({
+      level: 'info',
+      action: 'ui.card_tap',
+      msg: `Card tapped: ${card?.name || 'unknown'}`,
+      payload: { uuid: card?.uuid, isOpponent }
+    });
+
     if (options.onClick) {
       options.onClick();
     } else {
-      logger.warn(`[CardRenderer] options.onClick is missing for card: ${card?.name}`);
+      logger.warn('ui.card_tap', `onClick missing for card: ${card?.name}`);
     }
   });
 
