@@ -76,7 +76,8 @@ export const RealGame = () => {
     count = 0
   ) => {
     const container = new PIXI.Container();
-    const isRest = card?.is_rest === true;
+    
+    const isRest = card?.is_rest === true || card?.location === 'don_rest';
     if (isRest) container.rotation = Math.PI / 2;
 
     const isBack = card?.is_face_up === false && 
@@ -112,23 +113,40 @@ export const RealGame = () => {
       if (card?.power !== undefined) {
         const pTxt = new PIXI.Text(`POWER ${card.power}`, { fontSize: 11, fill: 0xFF0000, fontWeight: 'bold' });
         pTxt.anchor.set(0.5); 
-        pTxt.x = 0; pTxt.y = isRest ? 0 : (-ch / 2 - 10) * yDir;
-        if (isRest) pTxt.x = (-ch / 2 - 10) * yDir;
         pTxt.rotation = textRotation;
+        if (isRest) {
+          pTxt.x = (-ch / 2 - 10) * yDir;
+          pTxt.y = 0;
+        } else {
+          pTxt.x = 0;
+          pTxt.y = (-ch / 2 - 10) * yDir;
+        }
         container.addChild(pTxt);
       }
 
       const nameStyle = new PIXI.TextStyle({ fontSize: isResource ? 11 : 9, fontWeight: 'bold', fill: isResource ? 0x000000 : 0x333333 });
       const displayName = truncateText(cardName, nameStyle, isWide ? cw * 2.2 : cw * 1.8);
       const nTxt = new PIXI.Text(displayName, nameStyle);
-      nTxt.anchor.set(0.5, isResource ? 0.5 : 0);
-      nTxt.x = 0; nTxt.y = isRest ? 0 : (ch / 2 + 2) * yDir;
-      if (isRest) nTxt.x = (isResource ? 0 : ch / 2 + 2) * yDir;
+      nTxt.anchor.set(0.5);
       nTxt.rotation = textRotation;
+
+      if (isResource) {
+        nTxt.x = 0;
+        nTxt.y = 0;
+      } else {
+        if (isRest) {
+          nTxt.x = (ch / 2 + 2) * yDir;
+          nTxt.y = 0;
+        } else {
+          nTxt.x = 0;
+          nTxt.y = (ch / 2 + 2) * yDir;
+        }
+      }
       container.addChild(nTxt);
     } else {
       const backTxt = new PIXI.Text("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' });
-      backTxt.anchor.set(0.5); backTxt.rotation = textRotation;
+      backTxt.anchor.set(0.5);
+      backTxt.rotation = textRotation;
       container.addChild(backTxt);
     }
 
@@ -211,9 +229,12 @@ export const RealGame = () => {
         lifeCard.x = coords.getLifeX(W); lifeCard.y = r2Y;
         side.addChild(lifeCard);
 
-        const stageCard = renderCard({ name: 'Stage', location: 'stage' }, coords.CW, coords.CH, isOpp);
-        stageCard.x = coords.getStageX(W); stageCard.y = r2Y;
-        side.addChild(stageCard);
+        if (z.stage && z.stage.length > 0) {
+          const s = z.stage[0];
+          const stageCard = renderCard({ ...s, location: 'stage' }, coords.CW, coords.CH, isOpp);
+          stageCard.x = coords.getStageX(W); stageCard.y = r2Y;
+          side.addChild(stageCard);
+        }
 
         const deckCount = (z.deck || []).length;
         const deckCard = renderCard({ name: 'Deck', location: 'deck', is_face_up: false }, coords.CW, coords.CH, isOpp, false, deckCount);
