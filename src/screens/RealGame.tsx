@@ -198,6 +198,8 @@ export const RealGame = () => {
         });
 
         const r2Y = coords.getY(2, coords.CH, coords.V_GAP);
+        const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
+
         if (p.leader) {
           const ldr = renderCard({ ...p.leader, location: 'leader' }, coords.CW, coords.CH, isOpp, true);
           ldr.x = coords.getLeaderX(W); ldr.y = r2Y;
@@ -220,10 +222,9 @@ export const RealGame = () => {
 
         const trashCount = (z.trash || []).length;
         const trashCard = renderCard({ name: 'Trash', location: 'trash' }, coords.CW, coords.CH, isOpp, false, trashCount);
-        trashCard.x = coords.getTrashX(W); trashCard.y = r2Y;
+        trashCard.x = coords.getTrashX(W); trashCard.y = r3Y;
         side.addChild(trashCard);
 
-        const r3Y = coords.getY(3, coords.CH, coords.V_GAP);
         const donDeckCount = (z.don_deck || []).length;
         const donDeck = renderCard({ name: 'Don!!', location: 'don_deck', is_face_up: false }, coords.CW, coords.CH, isOpp, false, donDeckCount);
         donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
