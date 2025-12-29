@@ -33,7 +33,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   };
 
   const renderButtons = () => {
-    const btns = [];
+    const btns: React.ReactElement[] = [];
 
     if (!isMyTurn) {
       return btns; 
