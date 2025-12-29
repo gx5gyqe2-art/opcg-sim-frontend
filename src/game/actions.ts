@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '../api/client';
 import type { GameActionRequest, ActionType, BattleActionRequest, PendingRequest } from '../api/types';
 import type { GameState } from './types';
+import { logger } from '../utils/logger';
 
 export const useGameAction = (
   playerId: string, 
@@ -35,13 +36,22 @@ export const useGameAction = (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
   ) => {
-    if (!gameId) return;
+    if (!gameId || !pendingRequest?.player_id) return;
     setIsPending(true);
+    
+    const targetPlayerId = pendingRequest.player_id;
+    logger.log({
+      level: 'info',
+      action: 'game.sendAction',
+      msg: 'Sending action to server',
+      payload: { type, targetPlayerId }
+    });
+
     try {
       const result = await apiClient.sendAction(gameId, {
         request_id: uuidv4(),
         action_type: type,
-        player_id: pendingRequest?.player_id || (playerId as any),
+        player_id: targetPlayerId,
         ...payload
       });
       setGameState(result.game_state);
@@ -55,19 +65,28 @@ export const useGameAction = (
     } finally {
       setIsPending(false);
     }
-  }, [gameId, playerId, pendingRequest, setGameState, setPendingRequest]);
+  }, [gameId, pendingRequest, setGameState, setPendingRequest]);
 
   const sendBattleAction = useCallback(async (
     actionType: BattleActionRequest['action_type'],
     cardUuid?: string,
     requestId?: string
   ) => {
-    if (!gameId) return;
+    if (!gameId || !pendingRequest?.player_id) return;
     setIsPending(true);
+
+    const targetPlayerId = pendingRequest.player_id;
+    logger.log({
+      level: 'info',
+      action: 'game.sendBattleAction',
+      msg: 'Sending battle action to server',
+      payload: { actionType, targetPlayerId }
+    });
+
     try {
       const result = await apiClient.sendBattleAction({
         game_id: gameId,
-        player_id: pendingRequest?.player_id || playerId,
+        player_id: targetPlayerId,
         action_type: actionType,
         card_uuid: cardUuid,
         request_id: requestId || uuidv4()
@@ -85,7 +104,7 @@ export const useGameAction = (
     } finally {
       setIsPending(false);
     }
-  }, [gameId, playerId, pendingRequest, setGameState, setPendingRequest]);
+  }, [gameId, pendingRequest, setGameState, setPendingRequest]);
 
   return { sendAction, sendBattleAction, startGame, gameId, isPending, errorToast, setErrorToast };
 };
