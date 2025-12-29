@@ -35,11 +35,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const renderButtons = () => {
     const btns: React.ReactElement[] = [];
 
-    if (!isMyTurn) {
-      return btns; 
-    }
-
-    if (location === 'hand') {
+    // 手札からのプレイ：自分のターン中かつ場所が手札の時のみ
+    if (isMyTurn && location === 'hand') {
       btns.push(
         <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
           登場させる
@@ -47,7 +44,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       );
     }
 
-    if (location === 'field' || location === 'leader') {
+    // 盤面のカードへのアクション：自分のターン中かつ場所が自分のフィールド/リーダーの時のみ
+    if (isMyTurn && (location === 'field' || location === 'leader')) {
       btns.push(
         <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
           攻撃する
@@ -67,6 +65,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
         );
       }
     }
+    // 相手のカード(locationがopp_fieldなど)を触った場合は、
+    // 上記のif文をすべてスルーするため、btnsは空のまま返されます（＝詳細テキストだけ見える）
     
     return btns;
   };
