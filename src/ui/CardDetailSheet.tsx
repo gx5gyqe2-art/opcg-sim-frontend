@@ -34,7 +34,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const renderButtons = () => {
     const btns = [];
     
-    // 電文およびGameStateの構造に基づき、locationを厳密に判定
     if (location === 'hand') {
       btns.push(
         <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
@@ -43,7 +42,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       );
     }
 
-    if (location === 'field') {
+    if (location === 'field' || location === 'leader') {
       btns.push(
         <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
           攻撃する
@@ -54,11 +53,14 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
           ドン!!付与 (+1)
         </button>
       );
-      btns.push(
-        <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
-          起動メイン
-        </button>
-      );
+
+      if (card.text?.includes('起動メイン')) {
+        btns.push(
+          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
+            効果起動
+          </button>
+        );
+      }
     }
     
     return btns;

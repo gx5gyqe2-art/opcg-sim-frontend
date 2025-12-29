@@ -93,7 +93,9 @@ export const RealGame = () => {
         const p1 = gameState.players.p1;
         const p2 = gameState.players.p2;
 
-        if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) {
+        if (p1.leader?.uuid === card.uuid) {
+          currentLoc = 'leader';
+        } else if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) {
           currentLoc = 'hand';
         } else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) {
           currentLoc = 'field';
@@ -104,6 +106,13 @@ export const RealGame = () => {
         } else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) {
           currentLoc = 'opp_field';
         }
+
+        logger.log({
+          level: 'info',
+          action: 'ui.onCardClick',
+          msg: `Card selected in ${currentLoc}`,
+          payload: { uuid: card.uuid, location: currentLoc }
+        });
 
         setSelectedCard({ card, location: currentLoc }); 
         setIsDetailMode(true); 
