@@ -36,6 +36,16 @@ export const createCardContainer = (
 
   const addText = (content: string, style: any, x: number, y: number) => {
     const txt = new PIXI.Text(content, style);
+    const maxWidth = cw * 1.1;
+
+    if (txt.width > maxWidth) {
+      let fullText = content;
+      while (txt.width > maxWidth && fullText.length > 0) {
+        fullText = fullText.slice(0, -1);
+        txt.text = fullText + "...";
+      }
+    }
+
     txt.anchor.set(0.5);
     txt.position.set(x, y);
     txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
