@@ -6,6 +6,7 @@ import type { GameState } from './types';
 import { logger } from '../utils/logger';
 
 export const useGameAction = (
+  playerId: string, 
   setGameState: (state: GameState) => void,
   setPendingRequest: (req: PendingRequest | null) => void,
   pendingRequest: PendingRequest | null
@@ -35,10 +36,11 @@ export const useGameAction = (
     type: ActionType, 
     payload: Omit<GameActionRequest, 'request_id' | 'action_type' | 'player_id'>
   ) => {
-    if (!gameId || !pendingRequest?.player_id) return;
+    if (!gameId) return;
     setIsPending(true);
     
-    const targetPlayerId = pendingRequest.player_id;
+    const targetPlayerId = pendingRequest?.player_id || playerId;
+    
     logger.log({
       level: 'info',
       action: 'game.sendAction',
@@ -64,17 +66,18 @@ export const useGameAction = (
     } finally {
       setIsPending(false);
     }
-  }, [gameId, pendingRequest, setGameState, setPendingRequest]);
+  }, [gameId, pendingRequest, playerId, setGameState, setPendingRequest]);
 
   const sendBattleAction = useCallback(async (
     actionType: BattleActionRequest['action_type'],
     cardUuid?: string,
     requestId?: string
   ) => {
-    if (!gameId || !pendingRequest?.player_id) return;
+    if (!gameId) return;
     setIsPending(true);
 
-    const targetPlayerId = pendingRequest.player_id;
+    const targetPlayerId = pendingRequest?.player_id || playerId;
+
     logger.log({
       level: 'info',
       action: 'game.sendBattleAction',
@@ -103,7 +106,7 @@ export const useGameAction = (
     } finally {
       setIsPending(false);
     }
-  }, [gameId, pendingRequest, setGameState, setPendingRequest]);
+  }, [gameId, pendingRequest, playerId, setGameState, setPendingRequest]);
 
   return { sendAction, sendBattleAction, startGame, gameId, isPending, errorToast, setErrorToast };
 };

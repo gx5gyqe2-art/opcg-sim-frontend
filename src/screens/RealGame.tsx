@@ -20,14 +20,15 @@ export const RealGame = () => {
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
 
-  const { startGame, sendBattleAction, isPending } = useGameAction(
+  const { startGame, sendAction, sendBattleAction, isPending } = useGameAction(
+    CONST.PLAYER_KEYS.P1,
     setGameState,
     setPendingRequest,
     pendingRequest
   );
 
   const handleAction = async (type: string, payload: any = {}) => {
-    if (!gameState?.game_id || isPending || !pendingRequest) return;
+    if (!gameState?.game_id || isPending) return;
 
     if (type === 'ATTACK') {
       setAttackingCardUuid(payload.uuid);
@@ -36,25 +37,29 @@ export const RealGame = () => {
       return;
     }
 
-    const battleTypes: Record<string, 'COUNTER' | 'BLOCK'> = {
-      'COUNTER': 'COUNTER',
-      'BLOCK': 'BLOCK'
-    };
-    if (battleTypes[type]) {
-      await sendBattleAction(battleTypes[type], payload.uuid, pendingRequest.request_id);
-      setIsDetailMode(false);
-      setSelectedCard(null);
-      return;
+    if (pendingRequest) {
+      const battleTypes: Record<string, 'COUNTER' | 'BLOCK'> = {
+        'COUNTER': 'COUNTER',
+        'BLOCK': 'BLOCK'
+      };
+      if (battleTypes[type]) {
+        await sendBattleAction(battleTypes[type], payload.uuid, pendingRequest.request_id);
+        setIsDetailMode(false);
+        setSelectedCard(null);
+        return;
+      }
     }
 
     try {
-      const targetPlayerId = pendingRequest.player_id;
+      const targetPlayerId = pendingRequest?.player_id || CONST.PLAYER_KEYS.P1;
+      
       logger.log({
         level: 'info',
         action: 'game.handleAction',
         msg: 'Executing action',
         payload: { type, targetPlayerId }
       });
+
       const result = await apiClient.sendAction(gameState.game_id, {
         request_id: Math.random().toString(36).substring(2, 15),
         action_type: type as any,
@@ -153,9 +158,9 @@ export const RealGame = () => {
         else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) currentLoc = 'opp_field';
 
         if (isAttackTargeting) {
-          if ((currentLoc === 'opp_leader' || currentLoc === 'opp_field') && pendingRequest) {
+          if (currentLoc === 'opp_leader' || currentLoc === 'opp_field') {
             setIsAttackTargeting(false);
-            const targetPlayerId = pendingRequest.player_id;
+            const targetPlayerId = pendingRequest?.player_id || CONST.PLAYER_KEYS.P1;
             try {
               const result = await apiClient.sendAction(gameState.game_id, {
                 request_id: Math.random().toString(36).substring(2, 15),
