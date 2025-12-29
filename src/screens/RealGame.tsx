@@ -81,6 +81,10 @@ export const RealGame = () => {
     await sendBattleAction('PASS', undefined, pendingRequest.request_id);
   };
 
+  const handleTurnEnd = () => {
+    handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
+  };
+
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -218,6 +222,28 @@ export const RealGame = () => {
             </button>
           )}
         </div>
+      )}
+      {pendingRequest?.action === 'MAIN_ACTION' && (
+        <button 
+          onClick={handleTurnEnd}
+          disabled={isPending}
+          style={{
+            position: 'absolute',
+            right: '20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            padding: '10px 20px',
+            backgroundColor: isPending ? '#95a5a6' : '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: isPending ? 'not-allowed' : 'pointer',
+            zIndex: 100,
+            fontWeight: 'bold'
+          }}
+        >
+          {isPending ? '送信中...' : 'ターン終了'}
+        </button>
       )}
       {isDetailMode && selectedCard && (
         <CardDetailSheet
