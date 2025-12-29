@@ -17,6 +17,8 @@ export const RealGame = () => {
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
+  const [isAttackTargeting, setIsAttackTargeting] = useState(false);
+  const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
 
   const { startGame, sendBattleAction } = useGameAction(
     CONST.PLAYER_KEYS.P1, 
@@ -26,6 +28,13 @@ export const RealGame = () => {
 
   const handleAction = async (type: string, payload: any = {}) => {
     if (!gameState?.game_id) return;
+
+    if (type === 'ATTACK') {
+      setAttackingCardUuid(payload.uuid);
+      setIsAttackTargeting(true);
+      setIsDetailMode(false);
+      return;
+    }
 
     if (pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1) {
       const battleTypes: Record<string, 'COUNTER' | 'BLOCK'> = {
@@ -46,6 +55,7 @@ export const RealGame = () => {
         action_type: type as any,
         player_id: CONST.PLAYER_KEYS.P1,
         card_id: payload.uuid,
+        target_ids: payload.target_ids,
         extra: payload.extra
       });
 
@@ -114,27 +124,44 @@ export const RealGame = () => {
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
       app.stage.addChild(bg);
 
-      const onCardClick = (card: any) => { 
-        if (pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1) {
-          if (!pendingRequest.selectable_uuids.includes(card.uuid)) return;
-        }
-
+      const onCardClick = async (card: any) => { 
         let currentLoc = 'unknown';
         const p1 = gameState.players.p1;
         const p2 = gameState.players.p2;
 
-        if (p1.leader?.uuid === card.uuid) {
-          currentLoc = 'leader';
-        } else if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) {
-          currentLoc = 'hand';
-        } else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) {
-          currentLoc = 'field';
-        } else if (p1.zones.trash.some((c: any) => c.uuid === card.uuid)) {
-          currentLoc = 'trash';
-        } else if (p1.zones.life.some((c: any) => c.uuid === card.uuid)) {
-          currentLoc = 'life';
-        } else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) {
-          currentLoc = 'opp_field';
+        if (p1.leader?.uuid === card.uuid) currentLoc = 'leader';
+        else if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) currentLoc = 'hand';
+        else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) currentLoc = 'field';
+        else if (p1.zones.trash.some((c: any) => c.uuid === card.uuid)) currentLoc = 'trash';
+        else if (p1.zones.life.some((c: any) => c.uuid === card.uuid)) currentLoc = 'life';
+        else if (p2.leader?.uuid === card.uuid) currentLoc = 'opp_leader';
+        else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) currentLoc = 'opp_field';
+
+        if (isAttackTargeting) {
+          if (currentLoc === 'opp_leader' || currentLoc === 'opp_field') {
+            setIsAttackTargeting(false);
+            try {
+              const result = await apiClient.sendAction(gameState.game_id, {
+                request_id: Math.random().toString(36).substring(2, 15),
+                action_type: 'ATTACK' as any,
+                player_id: CONST.PLAYER_KEYS.P1,
+                card_id: attackingCardUuid || undefined,
+                target_ids: [card.uuid]
+              });
+              if (result.game_state) {
+                setGameState(result.game_state);
+                setPendingRequest(result.pending_request || null);
+              }
+            } catch (err) {
+              logger.log({ level: 'error', action: 'game.attack_error', msg: 'Attack failed', payload: { err } });
+            }
+            setAttackingCardUuid(null);
+          }
+          return;
+        }
+
+        if (pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1) {
+          if (!pendingRequest.selectable_uuids.includes(card.uuid)) return;
         }
 
         logger.log({
@@ -160,11 +187,17 @@ export const RealGame = () => {
     };
 
     renderScene();
-  }, [gameState, pendingRequest]);
+  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid]);
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      {pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1 && (
+      {isAttackTargeting && (
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 110, background: 'rgba(231, 76, 60, 0.9)', padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
+          攻撃対象を選択してください
+          <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
+        </div>
+      )}
+      {pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1 && !isAttackTargeting && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
           {pendingRequest.can_skip && (
