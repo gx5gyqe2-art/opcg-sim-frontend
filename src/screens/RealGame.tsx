@@ -20,7 +20,7 @@ export const RealGame = () => {
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
 
-  const { startGame, sendBattleAction } = useGameAction(
+  const { startGame, sendBattleAction, isPending } = useGameAction(
     CONST.PLAYER_KEYS.P1, 
     setGameState,
     setPendingRequest,
@@ -28,7 +28,7 @@ export const RealGame = () => {
   );
 
   const handleAction = async (type: string, payload: any = {}) => {
-    if (!gameState?.game_id) return;
+    if (!gameState?.game_id || isPending) return;
 
     if (type === 'ATTACK') {
       setAttackingCardUuid(payload.uuid);
@@ -77,7 +77,7 @@ export const RealGame = () => {
   };
 
   const handlePass = async () => {
-    if (!pendingRequest || !gameState?.game_id) return;
+    if (!pendingRequest || !gameState?.game_id || isPending) return;
     await sendBattleAction('PASS', undefined, pendingRequest.request_id);
   };
 
@@ -126,6 +126,8 @@ export const RealGame = () => {
       app.stage.addChild(bg);
 
       const onCardClick = async (card: any) => { 
+        if (isPending) return;
+
         let currentLoc = 'unknown';
         const p1 = gameState.players.p1;
         const p2 = gameState.players.p2;
@@ -188,7 +190,7 @@ export const RealGame = () => {
     };
 
     renderScene();
-  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid]);
+  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid, isPending]);
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
@@ -204,9 +206,18 @@ export const RealGame = () => {
           {pendingRequest.can_skip && (
             <button 
               onClick={handlePass}
-              style={{ padding: '8px 24px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+              disabled={isPending}
+              style={{ 
+                padding: '8px 24px', 
+                backgroundColor: isPending ? '#95a5a6' : '#e74c3c', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                cursor: isPending ? 'not-allowed' : 'pointer', 
+                fontWeight: 'bold' 
+              }}
             >
-              パス
+              {isPending ? '送信中...' : 'パス'}
             </button>
           )}
         </div>

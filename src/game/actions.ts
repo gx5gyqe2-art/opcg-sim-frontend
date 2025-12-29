@@ -47,6 +47,10 @@ export const useGameAction = (
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
     } catch (e: any) {
+      if (e.game_state || e.pending_request) {
+        setGameState(e.game_state);
+        setPendingRequest(e.pending_request || null);
+      }
       setErrorToast(`アクション失敗: ${e.message}`);
     } finally {
       setIsPending(false);
@@ -71,6 +75,10 @@ export const useGameAction = (
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
     } catch (e: any) {
+      if (e.game_state || e.pending_request) {
+        setGameState(e.game_state);
+        setPendingRequest(e.pending_request || null);
+      }
       setErrorToast(`バトルアクション失敗: ${e.message}`);
     } finally {
       setIsPending(false);
