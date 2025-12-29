@@ -6,7 +6,6 @@ import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
-import { apiClient } from '../api/client';
 import { logger } from '../utils/logger';
 import type { PendingRequest } from '../api/types';
 
@@ -50,39 +49,13 @@ export const RealGame = () => {
       }
     }
 
-    try {
-      const targetPlayerId = pendingRequest?.player_id || CONST.PLAYER_KEYS.P1;
-      
-      logger.log({
-        level: 'info',
-        action: 'game.handleAction',
-        msg: 'Executing action',
-        payload: { type, targetPlayerId }
-      });
-
-      const result = await apiClient.sendAction(gameState.game_id, {
-        request_id: Math.random().toString(36).substring(2, 15),
-        action_type: type as any,
-        player_id: targetPlayerId,
-        card_id: payload.uuid,
-        target_ids: payload.target_ids,
-        extra: payload.extra
-      });
-
-      if (result.game_state) {
-        setGameState(result.game_state);
-        setPendingRequest(result.pending_request || null);
-        setIsDetailMode(false);
-        setSelectedCard(null);
-      }
-    } catch (err) {
-      logger.log({
-        level: 'error',
-        action: 'game.action_error',
-        msg: 'Failed to execute action',
-        payload: { err, type, payload }
-      });
-    }
+    await sendAction(type as any, {
+      card_id: payload.uuid,
+      target_ids: payload.target_ids,
+      extra: payload.extra
+    });
+    setIsDetailMode(false);
+    setSelectedCard(null);
   };
 
   const handlePass = async () => {
@@ -160,22 +133,10 @@ export const RealGame = () => {
         if (isAttackTargeting) {
           if (currentLoc === 'opp_leader' || currentLoc === 'opp_field') {
             setIsAttackTargeting(false);
-            const targetPlayerId = pendingRequest?.player_id || CONST.PLAYER_KEYS.P1;
-            try {
-              const result = await apiClient.sendAction(gameState.game_id, {
-                request_id: Math.random().toString(36).substring(2, 15),
-                action_type: 'ATTACK' as any,
-                player_id: targetPlayerId,
-                card_id: attackingCardUuid || undefined,
-                target_ids: [card.uuid]
-              });
-              if (result.game_state) {
-                setGameState(result.game_state);
-                setPendingRequest(result.pending_request || null);
-              }
-            } catch (err) {
-              logger.log({ level: 'error', action: 'game.attack_error', msg: 'Attack failed', payload: { err, targetPlayerId } });
-            }
+            await sendAction('ATTACK' as any, {
+              card_id: attackingCardUuid || undefined,
+              target_ids: [card.uuid]
+            });
             setAttackingCardUuid(null);
           }
           return;
@@ -204,7 +165,7 @@ export const RealGame = () => {
     };
 
     renderScene();
-  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid, isPending]);
+  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid, isPending, sendAction]);
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
