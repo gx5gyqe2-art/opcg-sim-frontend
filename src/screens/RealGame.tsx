@@ -121,6 +121,8 @@ export const RealGame = () => {
         let currentLoc = 'unknown';
         const p1 = gameState.players.p1;
         const p2 = gameState.players.p2;
+        const activePlayerId = gameState.turn_info.active_player_id;
+        const isMyTurn = activePlayerId === p1.player_id;
 
         if (p1.leader?.uuid === card.uuid) currentLoc = 'leader';
         else if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) currentLoc = 'hand';
@@ -130,23 +132,28 @@ export const RealGame = () => {
         else if (p2.leader?.uuid === card.uuid) currentLoc = 'opp_leader';
         else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) currentLoc = 'opp_field';
 
+        const isOpponentSide = currentLoc === 'opp_leader' || currentLoc === 'opp_field';
+        const isPlayerSide = currentLoc === 'leader' || currentLoc === 'field';
+
         if (isAttackTargeting) {
-          if (currentLoc === 'opp_leader' || currentLoc === 'opp_field') {
+          const isValidTarget = (isMyTurn && isOpponentSide) || (!isMyTurn && isPlayerSide);
+          
+          if (isValidTarget) {
             setIsAttackTargeting(false);
             await sendAction('ATTACK' as any, {
               card_id: attackingCardUuid || undefined,
               target_ids: [card.uuid]
             });
             setAttackingCardUuid(null);
+            return;
           }
-          return;
         }
 
         logger.log({
           level: 'info',
           action: 'ui.onCardClick',
           msg: `Card selected in ${currentLoc}`,
-          payload: { uuid: card.uuid, location: currentLoc }
+          payload: { uuid: card.uuid, location: currentLoc, isMyTurn }
         });
 
         setSelectedCard({ card, location: currentLoc }); 
