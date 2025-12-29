@@ -156,7 +156,7 @@ export const RealGame = () => {
           payload: { uuid: card.uuid, location: currentLoc, isMyTurn }
         });
 
-        setSelectedCard({ card, location: currentLoc }); 
+        setSelectedCard({ card, location: currentLoc , isMyTurn}); 
         setIsDetailMode(true); 
       };
 
@@ -227,17 +227,18 @@ export const RealGame = () => {
           {isPending ? '送信中...' : 'ターン終了'}
         </button>
       )}
-      {isDetailMode && selectedCard && (
-        <CardDetailSheet
-          card={selectedCard.card}
-          location={selectedCard.location}
-          onAction={handleAction}
-          onClose={() => {
-            setIsDetailMode(false);
-            setSelectedCard(null);
-          }}
-        />
-      )}
+    {isDetailMode && selectedCard && (
+      <CardDetailSheet
+        card={selectedCard.card}
+        location={selectedCard.location}
+        isMyTurn={selectedCard.isMyTurn}
+        onAction={handleAction}
+        onClose={() => {
+          setIsDetailMode(false);
+          setSelectedCard(null);
+        }}
+      />
+    )}
     </div>
   );
 };

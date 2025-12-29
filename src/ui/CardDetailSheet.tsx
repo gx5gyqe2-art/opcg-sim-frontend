@@ -5,11 +5,12 @@ import { logger } from '../utils/logger';
 interface CardDetailSheetProps {
   card: any;
   location: string;
+  isMyTurn: boolean; 
   onAction: (type: string, payload: any) => Promise<void>;
   onClose: () => void;
 }
 
-export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, onAction, onClose }) => {
+export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, onAction, onClose }) => {
   useEffect(() => {
     logger.log({
       level: 'debug',
@@ -33,8 +34,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
   const renderButtons = () => {
     const btns = [];
-    const isOpponent = location === 'opp_field' || location === 'opp_leader';
-    
+
+    if (!isMyTurn) {
+      return btns; 
+    }
+
     if (location === 'hand') {
       btns.push(
         <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
@@ -43,26 +47,24 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       );
     }
 
-    if (location === 'field' || location === 'leader' || isOpponent) {
-      if (!isOpponent) {
-        btns.push(
-          <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
-            攻撃する
-          </button>
-        );
-        btns.push(
-          <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle("#f1c40f", "#333")}>
-            ドン!!付与 (+1)
-          </button>
-        );
+    if (location === 'field' || location === 'leader') {
+      btns.push(
+        <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
+          攻撃する
+        </button>
+      );
+      btns.push(
+        <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle("#f1c40f", "#333")}>
+          ドン!!付与 (+1)
+        </button>
+      );
 
-        if (card.text?.includes('起動メイン')) {
-          btns.push(
-            <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
-              効果起動
-            </button>
-          );
-        }
+      if (card.text?.includes('起動メイン')) {
+        btns.push(
+          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
+            効果起動
+          </button>
+        );
       }
     }
     
