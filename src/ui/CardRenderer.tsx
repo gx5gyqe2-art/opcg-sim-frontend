@@ -74,7 +74,7 @@ export const createCardContainer = (
     if (card?.counter !== undefined && card.counter > 0) {
       const ctx = -cw / 2 + 6;
       const cty = 0;
-      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, Math.PI / 2);
+      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, -Math.PI / 2);
     }
 
     if (card?.power !== undefined && !isResource) {
