@@ -74,14 +74,18 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{card.name}</h2>
             <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999' }}>×</button>
           </div>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
             <span style={badgeStyle('#333')}>{location.toUpperCase()}</span>
             {card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
+            {card.traits && card.traits.map((trait: string, idx: number) => (
+              <span key={idx} style={badgeStyle('#34495e')}>{trait}</span>
+            ))}
           </div>
           <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{card.text}</p>
           <div style={{ marginTop: '15px', fontWeight: 'bold', display: 'flex', gap: '20px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
             {card.power !== undefined && <span>POWER: {card.power}</span>}
             {card.cost !== undefined && <span>COST: {card.cost}</span>}
+            {card.counter !== undefined && card.counter > 0 && <span>COUNTER: +{card.counter}</span>}
           </div>
         </div>
 

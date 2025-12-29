@@ -34,7 +34,7 @@ export const createCardContainer = (
   g.endFill();
   container.addChild(g);
 
-  const addText = (content: string, style: any, x: number, y: number) => {
+  const addText = (content: string, style: any, x: number, y: number, customRotation?: number) => {
     const txt = new PIXI.Text(content, style);
     const maxWidth = cw * 1.1;
 
@@ -48,7 +48,13 @@ export const createCardContainer = (
 
     txt.anchor.set(0.5);
     txt.position.set(x, y);
-    txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
+    
+    if (customRotation !== undefined) {
+      txt.rotation = customRotation;
+    } else {
+      txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
+    }
+    
     container.addChild(txt);
   };
 
@@ -57,9 +63,23 @@ export const createCardContainer = (
     const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
                        loc.includes('don');
 
+    if (card?.cost !== undefined) {
+      const cx = -cw / 2 + 10;
+      const cy = -ch / 2 + 10;
+      const costBadge = new PIXI.Graphics().beginFill(0x2c3e50, 0.9).drawCircle(cx, cy, 9).endFill();
+      container.addChild(costBadge);
+      addText(`${card.cost}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, cx, cy);
+    }
+
+    if (card?.counter !== undefined && card.counter > 0) {
+      const ctx = -cw / 2 + 6;
+      const cty = 0;
+      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, Math.PI / 2);
+    }
+
     if (card?.power !== undefined && !isResource) {
       const posY = isOpponent ? (ch / 2 + 10) : (-ch / 2 - 10);
-      addText(`POWER ${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY);
+      addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY);
     }
 
     const nameStyle = { 
@@ -104,7 +124,7 @@ export const createCardContainer = (
       level: 'info',
       action: 'ui.card_tap',
       msg: `Card tapped: ${card?.name || 'unknown'}`,
-      payload: { uuid: card?.uuid, isOpponent }
+      payload: { uuid: card?.uuid, isOpponent, cost: card?.cost, counter: card?.counter }
     });
 
     if (options.onClick) {
