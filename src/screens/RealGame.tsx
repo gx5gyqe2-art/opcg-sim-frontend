@@ -23,7 +23,8 @@ export const RealGame = () => {
   const { startGame, sendBattleAction } = useGameAction(
     CONST.PLAYER_KEYS.P1, 
     setGameState,
-    setPendingRequest
+    setPendingRequest,
+    pendingRequest
   );
 
   const handleAction = async (type: string, payload: any = {}) => {
@@ -53,7 +54,7 @@ export const RealGame = () => {
       const result = await apiClient.sendAction(gameState.game_id, {
         request_id: Math.random().toString(36).substring(2, 15),
         action_type: type as any,
-        player_id: CONST.PLAYER_KEYS.P1,
+        player_id: pendingRequest?.player_id || CONST.PLAYER_KEYS.P1,
         card_id: payload.uuid,
         target_ids: payload.target_ids,
         extra: payload.extra
@@ -144,7 +145,7 @@ export const RealGame = () => {
               const result = await apiClient.sendAction(gameState.game_id, {
                 request_id: Math.random().toString(36).substring(2, 15),
                 action_type: 'ATTACK' as any,
-                player_id: CONST.PLAYER_KEYS.P1,
+                player_id: pendingRequest?.player_id || CONST.PLAYER_KEYS.P1,
                 card_id: attackingCardUuid || undefined,
                 target_ids: [card.uuid]
               });
