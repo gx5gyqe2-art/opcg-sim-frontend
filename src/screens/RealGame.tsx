@@ -163,10 +163,6 @@ export const RealGame = () => {
           return;
         }
 
-        if (pendingRequest) {
-          if (!pendingRequest.selectable_uuids.includes(card.uuid)) return;
-        }
-
         logger.log({
           level: 'info',
           action: 'ui.onCardClick',
