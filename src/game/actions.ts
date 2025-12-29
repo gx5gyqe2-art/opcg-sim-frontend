@@ -12,6 +12,7 @@ export const useGameAction = (
   const [isPending, setIsPending] = useState(false);
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [gameId, setGameId] = useState<string | null>(null);
+  const [currentRequest, setCurrentRequest] = useState<PendingRequest | null>(null);
 
   useEffect(() => {
     apiClient.checkHealth().catch(e => setErrorToast(`サーバー接続エラー: ${e.message}`));
@@ -45,6 +46,7 @@ export const useGameAction = (
       });
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
+      setCurrentRequest(result.pending_request || null);
     } catch (e: any) {
       setErrorToast(`アクション失敗: ${e.message}`);
     } finally {
@@ -62,19 +64,20 @@ export const useGameAction = (
     try {
       const result = await apiClient.sendBattleAction({
         game_id: gameId,
-        player_id: playerId,
+        player_id: currentRequest?.player_id || playerId,
         action_type: actionType,
         card_uuid: cardUuid,
         request_id: requestId || uuidv4()
       });
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
+      setCurrentRequest(result.pending_request || null);
     } catch (e: any) {
       setErrorToast(`バトルアクション失敗: ${e.message}`);
     } finally {
       setIsPending(false);
     }
-  }, [gameId, playerId, setGameState, setPendingRequest]);
+  }, [gameId, playerId, currentRequest, setGameState, setPendingRequest]);
 
   return { sendAction, sendBattleAction, startGame, gameId, isPending, errorToast, setErrorToast };
 };
