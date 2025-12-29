@@ -200,7 +200,7 @@ export const RealGame = () => {
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
       )}
-      {pendingRequest && !isAttackTargeting && (
+      {pendingRequest && !isAttackTargeting && pendingRequest.type !== 'MAIN_ACTION' && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
           {pendingRequest.can_skip && (
