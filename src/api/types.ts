@@ -10,7 +10,7 @@ export type ActionType =
 
 export interface PendingRequest {
   request_id: string;
-  type: string;
+  action: string;
   message: string;
   player_id: string;
   selectable_uuids: string[];

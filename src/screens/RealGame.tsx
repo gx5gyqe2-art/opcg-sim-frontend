@@ -197,7 +197,7 @@ export const RealGame = () => {
         </div>
       )}
       {pendingRequest && !isAttackTargeting && 
-       (pendingRequest.type === 'SELECT_BLOCKER' || pendingRequest.type === 'SELECT_COUNTER') && (
+       (pendingRequest.action === 'SELECT_BLOCKER' || pendingRequest.action === 'SELECT_COUNTER') && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
           {pendingRequest.can_skip && (
