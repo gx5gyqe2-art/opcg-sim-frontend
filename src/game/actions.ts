@@ -75,8 +75,10 @@ export const useGameAction = (
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
     } catch (e: any) {
-      if (e.game_state || e.pending_request) {
+      if (e.game_state) {
         setGameState(e.game_state);
+      }
+      if (e.pending_request !== undefined) {
         setPendingRequest(e.pending_request || null);
       }
       setErrorToast(`バトルアクション失敗: ${e.message}`);

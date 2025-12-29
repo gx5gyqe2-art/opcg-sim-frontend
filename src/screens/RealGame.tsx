@@ -78,7 +78,11 @@ export const RealGame = () => {
 
   const handlePass = async () => {
     if (!pendingRequest || !gameState?.game_id || isPending) return;
-    await sendBattleAction('PASS', undefined, pendingRequest.request_id);
+    
+    const currentRequestId = pendingRequest.request_id;
+    setPendingRequest(null);
+    
+    await sendBattleAction('PASS', undefined, currentRequestId);
   };
 
   const handleTurnEnd = () => {
