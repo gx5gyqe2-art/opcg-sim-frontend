@@ -8,7 +8,7 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 import { apiClient } from '../api/client';
 import { logger } from '../utils/logger';
-import { PendingRequest } from '../api/types';
+import type { PendingRequest } from '../api/types';
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -18,7 +18,7 @@ export const RealGame = () => {
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
 
-  const { startGame, sendAction, sendBattleAction } = useGameAction(
+  const { startGame, sendBattleAction } = useGameAction(
     CONST.PLAYER_KEYS.P1, 
     setGameState,
     setPendingRequest
