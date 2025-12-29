@@ -1,4 +1,3 @@
-// src/layout/layoutEngine.ts
 import { logger } from '../utils/logger';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from './layout.config';
 
@@ -7,6 +6,7 @@ export interface LayoutCoords {
   CW: number;
   V_GAP: number;
   Y_CTRL_START: number;
+  turnEndPos: { x: number; y: number };
   getLifeX: (width: number) => number;
   getLeaderX: (width: number) => number;
   getStageX: (width: number) => number;
@@ -39,6 +39,10 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
 
   return {
     CH, CW, V_GAP, Y_CTRL_START,
+    turnEndPos: {
+      x: validateCoordinate(W - 100, 'turnEndPos.x'),
+      y: validateCoordinate(H / 2, 'turnEndPos.y')
+    },
     getLifeX: (width) => validateCoordinate(width * P.X_RATIOS.LIFE, 'lifeX'),
     getLeaderX: (width) => validateCoordinate(width * P.X_RATIOS.LEADER, 'leaderX'),
     getStageX: (width) => validateCoordinate(width * P.X_RATIOS.STAGE, 'stageX'),
