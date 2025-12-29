@@ -84,3 +84,18 @@ export interface GameResponse {
   gameId: string;
   state: GameState;
 }
+
+export interface GameState {
+  game_id: string;
+  turn_info: {
+    turn_count: number;
+    current_phase: string;
+    active_player_id: string;
+    winner: string | null;
+  };
+  players: {
+    [key: string]: PlayerState;
+  };
+  pending_request?: any; 
+}
+

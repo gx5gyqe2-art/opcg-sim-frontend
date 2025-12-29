@@ -8,6 +8,7 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 import { apiClient } from '../api/client';
 import { logger } from '../utils/logger';
+import { PendingRequest } from '../api/types';
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -15,22 +16,42 @@ export const RealGame = () => {
   const [gameState, setGameState] = useState<any>(null);
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
 
-  const { startGame } = useGameAction(CONST.PLAYER_KEYS.P1, setGameState);
+  const { startGame, sendAction, sendBattleAction } = useGameAction(
+    CONST.PLAYER_KEYS.P1, 
+    setGameState,
+    setPendingRequest
+  );
 
   const handleAction = async (type: string, payload: any = {}) => {
     if (!gameState?.game_id) return;
+
+    if (pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1) {
+      const battleTypes: Record<string, 'COUNTER' | 'BLOCK'> = {
+        'COUNTER': 'COUNTER',
+        'BLOCK': 'BLOCK'
+      };
+      if (battleTypes[type]) {
+        await sendBattleAction(battleTypes[type], payload.uuid, pendingRequest.request_id);
+        setIsDetailMode(false);
+        setSelectedCard(null);
+        return;
+      }
+    }
+
     try {
-      const newState = await apiClient.sendAction(gameState.game_id, {
+      const result = await apiClient.sendAction(gameState.game_id, {
         request_id: Math.random().toString(36).substring(2, 15),
         action_type: type as any,
-        player_id: CONST.c_to_s_interface.PLAYER_KEYS.P1,
+        player_id: CONST.PLAYER_KEYS.P1,
         card_id: payload.uuid,
         extra: payload.extra
       });
 
-      if (newState) {
-        setGameState(newState);
+      if (result.game_state) {
+        setGameState(result.game_state);
+        setPendingRequest(result.pending_request || null);
         setIsDetailMode(false);
         setSelectedCard(null);
       }
@@ -42,6 +63,11 @@ export const RealGame = () => {
         payload: { err, type, payload }
       });
     }
+  };
+
+  const handlePass = async () => {
+    if (!pendingRequest || !gameState?.game_id) return;
+    await sendBattleAction('PASS', undefined, pendingRequest.request_id);
   };
 
   useEffect(() => {
@@ -89,6 +115,10 @@ export const RealGame = () => {
       app.stage.addChild(bg);
 
       const onCardClick = (card: any) => { 
+        if (pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1) {
+          if (!pendingRequest.selectable_uuids.includes(card.uuid)) return;
+        }
+
         let currentLoc = 'unknown';
         const p1 = gameState.players.p1;
         const p2 = gameState.players.p2;
@@ -130,10 +160,23 @@ export const RealGame = () => {
     };
 
     renderScene();
-  }, [gameState]);
+  }, [gameState, pendingRequest]);
 
   return (
-    <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      {pendingRequest && pendingRequest.player_id === CONST.PLAYER_KEYS.P1 && (
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
+          {pendingRequest.can_skip && (
+            <button 
+              onClick={handlePass}
+              style={{ padding: '8px 24px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              パス
+            </button>
+          )}
+        </div>
+      )}
       {isDetailMode && selectedCard && (
         <CardDetailSheet
           card={selectedCard.card}

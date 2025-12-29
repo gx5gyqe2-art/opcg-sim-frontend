@@ -1,4 +1,3 @@
-// 変更前: import type { GameState } from './game';
 import type { GameState } from '../game/types';
 
 export type ActionType = 
@@ -8,6 +7,15 @@ export type ActionType =
   | 'ATTACH_DON' 
   | 'END_TURN' 
   | 'RESOLVE_INPUT';
+
+export interface PendingRequest {
+  request_id: string;
+  type: string;
+  message: string;
+  player_id: string;
+  selectable_uuids: string[];
+  can_skip: boolean;
+}
 
 export interface GameActionRequest {
   request_id: string;
@@ -22,16 +30,19 @@ export interface GameActionRequest {
   };
 }
 
+export interface BattleActionRequest {
+  game_id: string;
+  player_id: string;
+  action_type: 'COUNTER' | 'BLOCK' | 'PASS';
+  card_uuid?: string;
+  request_id: string;
+}
+
 export interface GameActionResult {
   success: boolean;
   game_id: string;
   game_state: GameState;
-  input_request?: {
-    request_id: string;
-    type: string;
-    message: string;
-    valid_targets: string[];
-  };
+  pending_request?: PendingRequest;
   error?: {
     code: string;
     message: string;

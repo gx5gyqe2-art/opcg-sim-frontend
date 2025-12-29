@@ -1,4 +1,4 @@
-import type { GameActionRequest } from './types';
+import type { GameActionRequest, BattleActionRequest, GameActionResult } from './types';
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
@@ -80,7 +80,7 @@ export const apiClient = {
     return { game_id: gameId, state: newState };
   },
 
-  async sendAction(gameId: string, request: GameActionRequest): Promise<GameState> {
+  async sendAction(gameId: string, request: GameActionRequest): Promise<GameActionResult> {
     const actionBody = {
       game_id: gameId,
       player_id: request.player_id,
@@ -118,6 +118,32 @@ export const apiClient = {
       throw new Error("Action failed");
     }
 
-    return result[CONST.API_ROOT_KEYS.GAME_STATE];
+    return {
+      success: true,
+      game_id: newGameId,
+      game_state: result[CONST.API_ROOT_KEYS.GAME_STATE],
+      pending_request: result.pending_request
+    };
+  },
+
+  async sendBattleAction(request: BattleActionRequest): Promise<GameActionResult> {
+    const response = await fetchWithLog(`${BASE_URL}/api/game/battle`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
+      logger.error('api.send_battle_action', 'Battle action failed', { request, response: result });
+      throw new Error(result.error?.message || "Battle action failed");
+    }
+
+    return {
+      success: true,
+      game_id: request.game_id,
+      game_state: result[CONST.API_ROOT_KEYS.GAME_STATE],
+      pending_request: result.pending_request
+    };
   }
 };
