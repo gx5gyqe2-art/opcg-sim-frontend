@@ -21,7 +21,6 @@ export const RealGame = () => {
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
 
   const { startGame, sendBattleAction, isPending } = useGameAction(
-    CONST.PLAYER_KEYS.P1, 
     setGameState,
     setPendingRequest,
     pendingRequest

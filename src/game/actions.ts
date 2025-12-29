@@ -6,7 +6,6 @@ import type { GameState } from './types';
 import { logger } from '../utils/logger';
 
 export const useGameAction = (
-  playerId: string, 
   setGameState: (state: GameState) => void,
   setPendingRequest: (req: PendingRequest | null) => void,
   pendingRequest: PendingRequest | null
