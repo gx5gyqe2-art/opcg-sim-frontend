@@ -58,12 +58,14 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
     }
     
 // 58行目付近に追加
+// src/screens/RealGame.tsx 60行目付近
+
 if (type === 'ATTACK_CONFIRM') {
-  await sendAction(type as any, {
+  // 修正：戻り値を result 変数で受け取る
+  const result = await sendAction(type as any, {
     card_id: payload.uuid,
     target_ids: payload.target_ids,
   });
-  // 58行目付近: ATTACK_CONFIRM の分岐
 
   logger.log({
     level: 'info',
@@ -79,6 +81,7 @@ if (type === 'ATTACK_CONFIRM') {
   setSelectedCard(null);
   return;
 }
+
 
     await sendAction(type as any, {
       card_id: payload.uuid,
