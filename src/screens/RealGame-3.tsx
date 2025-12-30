@@ -77,46 +77,65 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
-const onCardClick = async (card: CardInstance) => { 
-  if (isPending || !gameState) return;
+  useEffect(() => {
+    if (!pixiContainerRef.current) return;
 
-  // 【追加】アタックターゲット選択中なら、詳細を開かずにアタックを実行
-  if (isAttackTargeting && attackingCardUuid) {
-    await handleAction('ATTACK_CONFIRM', { 
-      uuid: attackingCardUuid, 
-      target_ids: [card.uuid] 
+    const app = new PIXI.Application({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: 0x1a1a1a,
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
     });
-    setIsAttackTargeting(false);
-    setAttackingCardUuid(null);
-    return; // ここで終了させる
-  }
+
+    pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
+    appRef.current = app;
+
+    startGame();
+
+    const handleResize = () => {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      app.destroy(true, { children: true });
+    };
+  }, []);
+
+  useEffect(() => {
+    const app = appRef.current;
+    if (!app || !gameState) return;
+
+    const renderScene = () => {
+      app.stage.removeChildren();
+      const { width: W, height: H } = app.screen;
+      const coords = calculateCoordinates(W, H);
+      const midY = H / 2;
+
+      const bg = new PIXI.Graphics();
+      bg.beginFill(LAYOUT_CONSTANTS.COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
+      bg.beginFill(LAYOUT_CONSTANTS.COLORS.CONTROL_BG).drawRect(0, midY - 40, W, 80).endFill();
+      bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
+      app.stage.addChild(bg);
+
+const onCardClick = async (card: CardInstance) => { 
+  if (isPending) return;
 
   let currentLoc = 'unknown';
   const { p1, p2 } = gameState.players;
 
   // 1. 各プレイヤーのどのゾーンに存在するかを判定する関数
-    const getPhysicalLocation = (playerState: typeof p1, targetCard: CardInstance) => {
-      // ダミーID（プレフィックス）での判定を優先
-      if (targetCard.uuid.startsWith('life-')) return 'life';
-      if (targetCard.uuid.startsWith('trash-')) return 'trash';
-      if (targetCard.uuid.startsWith('deck-')) return 'deck';
-      if (targetCard.uuid.startsWith('don')) {
-// RealGame.tsx 内の判定を ID 生成側（BoardSide）に合わせる
-if (targetCard.uuid.includes('donactive')) return 'don_active';
-if (targetCard.uuid.includes('donrest')) return 'don_rest';
-
-        return 'don_deck';
-      }
-
-      // 通常カードの判定
-      if (playerState.leader?.uuid === targetCard.uuid) return 'leader';
-      if (playerState.zones.field.some(c => c.uuid === targetCard.uuid)) return 'field';
-      if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
-      if (playerState.zones.trash.some(c => c.uuid === targetCard.uuid)) return 'trash';
-      if (playerState.zones.life.some(c => c.uuid === targetCard.uuid)) return 'life';
-      return null;
-    };
-
+  const getPhysicalLocation = (playerState: typeof p1, targetCard: CardInstance) => {
+    if (playerState.leader?.uuid === targetCard.uuid) return 'leader';
+    if (playerState.zones.field.some(c => c.uuid === targetCard.uuid)) return 'field';
+    if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
+    if (playerState.zones.trash.some(c => c.uuid === targetCard.uuid)) return 'trash';
+    if (playerState.zones.life.some(c => c.uuid === targetCard.uuid)) return 'life';
+    return null;
+  };
 
   const p1Loc = getPhysicalLocation(p1, card);
   const p2Loc = getPhysicalLocation(p2, card);
@@ -159,70 +178,22 @@ if (targetCard.uuid.includes('donrest')) return 'don_rest';
   }); 
   setIsDetailMode(true); 
 };
-  
-  useEffect(() => {
-    if (!pixiContainerRef.current) return;
 
-    const app = new PIXI.Application({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      backgroundColor: 0x1a1a1a,
-      antialias: true,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
-    });
 
-    pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
-    appRef.current = app;
 
-    startGame();
-
-    const handleResize = () => {
-      app.renderer.resize(window.innerWidth, window.innerHeight);
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      app.destroy(true, { children: true });
-    };
-  }, []);
-
-  useEffect(() => {
-    const app = appRef.current;
-    if (!app || !gameState) return;
-
-    const renderScene = () => {
-      app.stage.removeChildren();
-      const { width: W, height: H } = app.screen;
-      const coords = calculateCoordinates(W, H);
-      const midY = H / 2;
-
-      // 背景描画
-      const bg = new PIXI.Graphics();
-      bg.beginFill(LAYOUT_CONSTANTS.COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
-      bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
-      app.stage.addChild(bg);
-
-      // 視点の入れ替えロジック
-      const isP2Turn = activePlayerId === 'p2';
-      const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
-      const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
-
-      // 上側（相手視点で描画）
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
-      topSide.y = 0; 
+      const p2Side = createBoardSide(gameState.players.p2, true, W, coords, onCardClick);
+      p2Side.x = W;      
+      p2Side.y = midY - 40; 
+      p2Side.rotation = Math.PI; 
       
-      // 下側（自分視点で描画）
-      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
-      bottomSide.y = midY;
+      const p1Side = createBoardSide(gameState.players.p1, false, W, coords, onCardClick);
+      p1Side.y = midY + 40;
 
-      app.stage.addChild(topSide, bottomSide);
+      app.stage.addChild(p2Side, p1Side);
     };
 
     renderScene();
-    // 依存配列に onCardClick で使う変数も入れておく
-  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
+  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid, isPending, sendAction, activePlayerId]);
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>

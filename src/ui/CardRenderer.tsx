@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 
 const { COLORS } = LAYOUT_CONSTANTS;
 
+// 修正案
 export const createCardContainer = (
   card: any,
   cw: number,
@@ -12,17 +13,13 @@ export const createCardContainer = (
 ) => {
   const container = new PIXI.Container();
   
-  const loc = (card?.location || "").toLowerCase();
-  const isOpponent = options.isOpponent ?? (
-    card?.isOpponentFlag === true || 
-    card?.owner_id === 'p2' || 
-    loc.includes('opp') || 
-    loc.includes('p2')
-  );
+  const isOpponent = options.isOpponent ?? false;
 
-  const textRotation = isOpponent ? Math.PI : 0;
-  const isRest = card?.is_rest === true || loc.includes('rest');
+  // 相手側であっても、文字は常に操作ユーザーから見て正位置（0度）に固定
+  const textRotation = 0; 
   
+  const isRest = card?.is_rest === true;
+
   if (isRest) container.rotation = Math.PI / 2;
 
   const isBack = card?.is_face_up === false;
@@ -49,8 +46,9 @@ export const createCardContainer = (
     txt.anchor.set(0.5);
     txt.position.set(x, y);
     
+    // カスタム回転（カウンター等）がない場合は、状態に合わせて回転
     if (customRotation !== undefined) {
-      txt.rotation = customRotation;
+      txt.rotation = customRotation + textRotation;
     } else {
       txt.rotation = isRest ? (-Math.PI / 2 + textRotation) : textRotation;
     }
@@ -58,10 +56,10 @@ export const createCardContainer = (
     container.addChild(txt);
   };
 
+
   if (!isBack) {
     const cardName = card?.name || "";
-    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName) || 
-                       loc.includes('don');
+    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName);
 
     if (card?.cost !== undefined) {
       const cx = -cw / 2 + 10;
@@ -74,11 +72,13 @@ export const createCardContainer = (
     if (card?.counter !== undefined && card.counter > 0) {
       const ctx = -cw / 2 + 6;
       const cty = 0;
+      // カウンターは横に-90度回転させた状態で配置
       addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, -Math.PI / 2);
     }
 
     if (card?.power !== undefined && !isResource) {
-      const posY = isOpponent ? (ch / 2 + 10) : (-ch / 2 - 10);
+      // 常にカードの上側にパワーを表示
+      const posY = -ch / 2 - 12;
       addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY);
     }
 
@@ -91,9 +91,11 @@ export const createCardContainer = (
     if (isResource) {
       addText(cardName, nameStyle, 0, 0);
     } else {
-      const posY = isOpponent ? (-ch / 2 - 2) : (ch / 2 + 2);
+      // 常にカードの下側に名前を配置
+      const posY = ch / 2 + 4;
       addText(cardName, nameStyle, 0, posY);
     }
+
 
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
@@ -124,14 +126,10 @@ export const createCardContainer = (
       level: 'info',
       action: 'ui.card_tap',
       msg: `Card tapped: ${card?.name || 'unknown'}`,
-      payload: { uuid: card?.uuid, isOpponent, cost: card?.cost, counter: card?.counter }
+      payload: { uuid: card?.uuid, isOpponent, power: card?.power }
     });
 
-    if (options.onClick) {
-      options.onClick();
-    } else {
-      logger.warn('ui.card_tap', `onClick missing for card: ${card?.name}`);
-    }
+    if (options.onClick) options.onClick();
   });
 
   return container;
