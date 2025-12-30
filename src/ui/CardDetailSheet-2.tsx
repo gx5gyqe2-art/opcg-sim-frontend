@@ -1,10 +1,9 @@
 import React, { useEffect } from 'react';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
-import { CardInstance, BoardCard, LeaderCard } from '../game/types';
 
 interface CardDetailSheetProps {
-  card: CardInstance;
+  card: any;
   location: string;
   isMyTurn: boolean; 
   onAction: (type: string, payload: any) => Promise<void>;
@@ -30,9 +29,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       msg: `Execute clicked: ${type}`,
       payload: { type, uuid: card.uuid }
     });
-    // payloadにcard情報を乗せる既存の形式を維持
-    await onAction(type, { uuid: card.uuid, extra });
-
+    await onAction(type, { ...card, extra });
   };
 
   const renderButtons = () => {
@@ -60,8 +57,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
         </button>
       );
 
-      // 型ガードを用いて text を安全に参照（HiddenCardなどは text を持たない可能性があるため）
-      if ('text' in card && card.text?.includes('起動メイン')) {
+      if (card.text?.includes('起動メイン')) {
         btns.push(
           <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
             効果起動
@@ -69,6 +65,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
         );
       }
     }
+    // 相手のカード(locationがopp_fieldなど)を触った場合は、
+    // 上記のif文をすべてスルーするため、btnsは空のまま返されます（＝詳細テキストだけ見える）
     
     return btns;
   };
@@ -78,25 +76,21 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
         <div style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{card.name || 'Unknown Card'}</h2>
+            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{card.name}</h2>
             <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999' }}>×</button>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
             <span style={badgeStyle('#333')}>{location.toUpperCase()}</span>
-            {'attribute' in card && card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
-            {'traits' in card && card.traits && card.traits.map((trait: string, idx: number) => (
+            {card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
+            {card.traits && card.traits.map((trait: string, idx: number) => (
               <span key={idx} style={badgeStyle('#34495e')}>{trait}</span>
             ))}
           </div>
-          <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-            {'text' in card ? card.text : ''}
-          </p>
+          <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{card.text}</p>
           <div style={{ marginTop: '15px', fontWeight: 'bold', display: 'flex', gap: '20px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
-            {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}</span>}
-            {'cost' in card && <span>COST: {(card as BoardCard).cost}</span>}
-            {'counter' in card && (card as BoardCard).counter !== undefined && (card as BoardCard).counter! > 0 && (
-              <span>COUNTER: +{(card as BoardCard).counter}</span>
-            )}
+            {card.power !== undefined && <span>POWER: {card.power}</span>}
+            {card.cost !== undefined && <span>COST: {card.cost}</span>}
+            {card.counter !== undefined && card.counter > 0 && <span>COUNTER: +{card.counter}</span>}
           </div>
         </div>
 
@@ -109,7 +103,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   );
 };
 
-// --- スタイル定義（バックアップの内容を完全維持） ---
 const badgeStyle = (bg: string): React.CSSProperties => ({
   backgroundColor: bg,
   color: 'white',
