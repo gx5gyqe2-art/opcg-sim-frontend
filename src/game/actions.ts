@@ -45,8 +45,13 @@ export const useGameAction = (
       level: 'info',
       action: 'game.sendAction',
       msg: 'Sending action to server',
-      payload: { type, targetPlayerId }
+      payload: { 
+        type, 
+        targetPlayerId,
+        full_payload: payload
+      }
     });
+
 
     try {
       const result = await apiClient.sendAction(gameId, {
