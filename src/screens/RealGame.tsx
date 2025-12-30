@@ -63,6 +63,18 @@ if (type === 'ATTACK_CONFIRM') {
     card_id: payload.uuid,
     target_ids: payload.target_ids,
   });
+  // 58行目付近: ATTACK_CONFIRM の分岐
+
+  logger.log({
+    level: 'info',
+    action: 'debug.attack_response',
+    msg: 'Response after ATTACK_CONFIRM',
+    payload: { 
+      pending: result?.pending_request,
+      turnInfo: result?.game_state?.turn_info 
+    }
+  });
+
   setIsDetailMode(false);
   setSelectedCard(null);
   return;
