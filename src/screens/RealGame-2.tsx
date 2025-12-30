@@ -7,32 +7,37 @@ import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
-import type { PendingRequest } from '../api/types';
+import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
 export const RealGame = () => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const [gameState, setGameState] = useState<any>(null);
-  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [selectedCard, setSelectedCard] = useState<{
+    card: CardInstance;
+    location: string;
+    isMyTurn: boolean;
+  } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
 
-  const activePlayerId = gameState?.turn_info?.active_player_id;
+const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
+
 
   const { startGame, sendAction, sendBattleAction, isPending } = useGameAction(
-    activePlayerId || CONST.PLAYER_KEYS.P1,
+    activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1"),
     setGameState,
     setPendingRequest,
     pendingRequest
   );
 
-  const handleAction = async (type: string, payload: any = {}) => {
+  const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
     if (type === 'ATTACK') {
-      setAttackingCardUuid(payload.uuid);
+      setAttackingCardUuid(payload.uuid || null);
       setIsAttackTargeting(true);
       setIsDetailMode(false);
       return;
@@ -43,13 +48,44 @@ export const RealGame = () => {
         'COUNTER': 'COUNTER',
         'BLOCK': 'BLOCK'
       };
-      if (battleTypes[type]) {
-        await sendBattleAction(battleTypes[type], payload.uuid, pendingRequest.request_id);
+      const actionType = battleTypes[type];
+      if (actionType) {
+        await sendBattleAction(actionType, payload.uuid, pendingRequest.request_id);
         setIsDetailMode(false);
         setSelectedCard(null);
         return;
       }
     }
+    
+// 58行目付近に追加
+// src/screens/RealGame.tsx 60行目付近
+
+if (type === 'ATTACK_CONFIRM') {
+  // 修正：戻り値を result 変数で受け取る
+  const result = await sendAction(type as any, {
+    card_id: payload.uuid,
+    target_ids: payload.target_ids,
+  });
+
+// src/screens/RealGame.tsx 70行目付近
+
+  logger.log({
+    level: 'info',
+    action: 'debug.attack_response',
+    msg: 'Response after ATTACK_CONFIRM',
+    payload: { 
+      // result を any 型として扱うことで TS2339 エラーを回避
+      pending: (result as any)?.pending_request,
+      turnInfo: (result as any)?.game_state?.turn_info 
+    }
+  });
+
+
+  setIsDetailMode(false);
+  setSelectedCard(null);
+  return;
+}
+
 
     await sendAction(type as any, {
       card_id: payload.uuid,
@@ -62,10 +98,8 @@ export const RealGame = () => {
 
   const handlePass = async () => {
     if (!pendingRequest || !gameState?.game_id || isPending) return;
-    
     const currentRequestId = pendingRequest.request_id;
     setPendingRequest(null);
-    
     await sendBattleAction('PASS', undefined, currentRequestId);
   };
 
@@ -73,6 +107,89 @@ export const RealGame = () => {
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
+const onCardClick = async (card: CardInstance) => { 
+  if (isPending || !gameState) return;
+
+  // 【追加】アタックターゲット選択中なら、詳細を開かずにアタックを実行
+  if (isAttackTargeting && attackingCardUuid) {
+    await handleAction('ATTACK_CONFIRM', { 
+      uuid: attackingCardUuid, 
+      target_ids: [card.uuid] 
+    });
+    setIsAttackTargeting(false);
+    setAttackingCardUuid(null);
+    return; // ここで終了させる
+  }
+
+  let currentLoc = 'unknown';
+  const { p1, p2 } = gameState.players;
+
+  // 1. 各プレイヤーのどのゾーンに存在するかを判定する関数
+    const getPhysicalLocation = (playerState: typeof p1, targetCard: CardInstance) => {
+      // ダミーID（プレフィックス）での判定を優先
+      if (targetCard.uuid.startsWith('life-')) return 'life';
+      if (targetCard.uuid.startsWith('trash-')) return 'trash';
+      if (targetCard.uuid.startsWith('deck-')) return 'deck';
+      if (targetCard.uuid.startsWith('don')) {
+// RealGame.tsx 内の判定を ID 生成側（BoardSide）に合わせる
+// 91行目付近
+if (targetCard.uuid.includes('donactive')) return 'don_active'; // _を消す修正
+if (targetCard.uuid.includes('donrest')) return 'don_rest';     // _を消す修正
+if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
+      }
+
+      // 通常カードの判定
+      if (playerState.leader?.uuid === targetCard.uuid) return 'leader';
+      if (playerState.zones.field.some(c => c.uuid === targetCard.uuid)) return 'field';
+      if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
+      if (playerState.zones.trash.some(c => c.uuid === targetCard.uuid)) return 'trash';
+      if (playerState.zones.life.some(c => c.uuid === targetCard.uuid)) return 'life';
+      return null;
+    };
+
+
+  const p1Loc = getPhysicalLocation(p1, card);
+  const p2Loc = getPhysicalLocation(p2, card);
+
+  // 2. 「現在のターンのプレイヤー（activePlayerId）」を基準に location を翻訳する
+  if (activePlayerId === 'p1') {
+    if (p1Loc) {
+      // P1のターンにP1のカードを触った場合
+      currentLoc = p1Loc;
+    } else if (p2Loc) {
+      // P1のターンにP2のカードを触った場合（すべて opp_ をつける）
+      currentLoc = `opp_${p2Loc}`;
+    }
+  } else if (activePlayerId === 'p2') {
+    if (p2Loc) {
+      // P2のターンにP2のカードを触った場合（自分として扱うので opp_ なし）
+      currentLoc = p2Loc;
+    } else if (p1Loc) {
+      // P2のターンにP1のカードを触った場合（相手として扱う）
+      currentLoc = `opp_${p1Loc}`;
+    }
+  }
+
+  // 3. 操作可能フラグ（isOperatable）を判定
+  // location が 'hand', 'field', 'leader' のいずれかなら、自分のターンの操作対象
+  const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc);
+
+  // ログに判定結果を出力（既存ロガーを使用）
+  logger.log({
+    level: 'info',
+    action: "ui.onCardClick",
+    msg: `Card: ${card.name}, Loc: ${currentLoc}, Turn: ${activePlayerId}, Operatable: ${isOperatable}`,
+    payload: { uuid: card.uuid, activePlayerId, currentLoc }
+  });
+
+  setSelectedCard({ 
+    card, 
+    location: currentLoc, 
+    isMyTurn: isOperatable 
+  }); 
+  setIsDetailMode(true); 
+};
+  
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -111,148 +228,64 @@ export const RealGame = () => {
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
 
+      // 背景描画
       const bg = new PIXI.Graphics();
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
-      bg.beginFill(LAYOUT_CONSTANTS.COLORS.CONTROL_BG).drawRect(0, midY - 40, W, 80).endFill();
-      bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY + 40, W, H - (midY + 40)).endFill();
+      bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
       app.stage.addChild(bg);
 
-      const onCardClick = async (card: any) => { 
-        if (isPending) return;
+      // 視点の入れ替えロジック
+      const isP2Turn = activePlayerId === 'p2';
+      const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
+      const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
 
-        let currentLoc = 'unknown';
-        const p1 = gameState.players.p1;
-        const p2 = gameState.players.p2;
-
-        if (p1.leader?.uuid === card.uuid) currentLoc = 'leader';
-        else if (p1.zones.hand.some((c: any) => c.uuid === card.uuid)) currentLoc = 'hand';
-        else if (p1.zones.field.some((c: any) => c.uuid === card.uuid)) currentLoc = 'field';
-        else if (p1.zones.trash.some((c: any) => c.uuid === card.uuid)) currentLoc = 'trash';
-        else if (p1.zones.life.some((c: any) => c.uuid === card.uuid)) currentLoc = 'life';
-        else if (p2.leader?.uuid === card.uuid) currentLoc = 'opp_leader';
-        else if (p2.zones.field.some((c: any) => c.uuid === card.uuid)) currentLoc = 'opp_field';
-
-        const isPlayer1Turn = activePlayerId === "p1";
-        const isPlayer2Turn = activePlayerId === "p2";
-        const isP1Card = ['leader', 'hand', 'field', 'life', 'trash'].includes(currentLoc);
-        const isP2Card = ['opp_leader', 'opp_field'].includes(currentLoc);
-        const isOperatable = (isPlayer1Turn && isP1Card) || (isPlayer2Turn && isP2Card);
-
-        if (isAttackTargeting) {
-          const isOpponentOfActive = 
-            (activePlayerId === "p1" && (currentLoc === 'opp_leader' || currentLoc === 'opp_field')) ||
-            (activePlayerId === "p2" && (currentLoc === 'leader' || currentLoc === 'field'));
-          
-          if (isOpponentOfActive) {
-            logger.log({
-              level: 'info',
-              action: 'ui.onCardClick.attack',
-              msg: `Attack target selected: ${card.uuid} by ${activePlayerId}`,
-              payload: { target_id: card.uuid, attacker_id: attackingCardUuid }
-            });
-            setIsAttackTargeting(false);
-            await sendAction('ATTACK' as any, {
-              card_id: attackingCardUuid || undefined,
-              target_ids: [card.uuid]
-            });
-            setAttackingCardUuid(null);
-            return;
-          }
-        }
-
-        logger.log({
-          level: 'info',
-          action: 'ui.onCardClick',
-          msg: `Card selected: ${currentLoc}, Turn: ${activePlayerId}, Operatable: ${isOperatable}`,
-          payload: { uuid: card.uuid, location: currentLoc, activePlayerId }
-        });
-
-        setSelectedCard({ 
-          card, 
-          location: currentLoc, 
-          isMyTurn: isOperatable 
-        }); 
-        setIsDetailMode(true); 
-      };
-
-      const p2Side = createBoardSide(gameState.players.p2, true, W, coords, onCardClick);
-      p2Side.x = W;      
-      p2Side.y = midY - 40; 
-      p2Side.rotation = Math.PI; 
+      // 上側（相手視点で描画）
+      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
+      topSide.y = 0; 
       
-      const p1Side = createBoardSide(gameState.players.p1, false, W, coords, onCardClick);
-      p1Side.y = midY + 40;
+      // 下側（自分視点で描画）
+      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
+      bottomSide.y = midY;
 
-      app.stage.addChild(p2Side, p1Side);
+      app.stage.addChild(topSide, bottomSide);
     };
 
     renderScene();
-  }, [gameState, pendingRequest, isAttackTargeting, attackingCardUuid, isPending, sendAction, activePlayerId]);
+    // 依存配列に onCardClick で使う変数も入れておく
+  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: '10px', right: '10px', color: 'white', background: 'rgba(0,0,0,0.6)', padding: '8px 15px', borderRadius: '5px', fontSize: '0.8rem', borderLeft: `5px solid ${activePlayerId === 'p1' ? '#3498db' : '#e67e22'}`, zIndex: 100 }}>
-        現在のターン: <strong>{activePlayerId?.toUpperCase()}</strong>
-      </div>
-
       {isAttackTargeting && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 110, background: 'rgba(231, 76, 60, 0.9)', padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
-          【{activePlayerId?.toUpperCase()}攻撃中】対象を選択してください
+          攻撃対象を選択してください
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
       )}
-
       {pendingRequest && !isAttackTargeting && 
        (pendingRequest.action === 'SELECT_BLOCKER' || pendingRequest.action === 'SELECT_COUNTER') && (
-        <div style={{ 
-          position: 'absolute', 
-          top: '20px', 
-          left: '50%', 
-          transform: 'translateX(-50%)', 
-          zIndex: 100, 
-          background: 'rgba(0,0,0,0.85)', 
-          padding: '15px 25px', 
-          borderRadius: '12px', 
-          color: 'white', 
-          textAlign: 'center', 
-          border: `3px solid ${pendingRequest.player_id === 'p1' ? '#3498db' : '#e67e22'}`, 
-          boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
-        }}>
-          <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '4px' }}>
-            DEFENSE STEP: {pendingRequest.player_id?.toUpperCase()}
-          </div>
-          <div style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '1.1rem' }}>
-            {pendingRequest.message}
-          </div>
-          
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            {pendingRequest.can_skip && (
-              <button 
-                onClick={handlePass}
-                disabled={isPending}
-                style={{ 
-                  padding: '10px 30px', 
-                  backgroundColor: isPending ? '#95a5a6' : '#e74c3c', 
-                  color: 'white', 
-                  border: 'none', 
-                  borderRadius: '6px', 
-                  cursor: isPending ? 'not-allowed' : 'pointer', 
-                  fontWeight: 'bold',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                }}
-              >
-                {isPending ? '送信中...' : (pendingRequest.action === 'SELECT_BLOCKER' ? 'ブロックしない' : 'カウンターなし')}
-              </button>
-            )}
-          </div>
-          
-          <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#f1c40f' }}>
-            ※カードをタップして{pendingRequest.action === 'SELECT_BLOCKER' ? 'ブロッカーを選択' : 'カウンター値を追加'}してください
-          </div>
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
+          {pendingRequest.can_skip && (
+            <button 
+              onClick={handlePass}
+              disabled={isPending}
+              style={{ 
+                padding: '8px 24px', 
+                backgroundColor: isPending ? '#95a5a6' : '#e74c3c', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                cursor: isPending ? 'not-allowed' : 'pointer', 
+                fontWeight: 'bold' 
+              }}
+            >
+              {isPending ? '送信中...' : 'パス'}
+            </button>
+          )}
         </div>
       )}
-
-      {pendingRequest?.action === 'MAIN_ACTION' && pendingRequest?.player_id === activePlayerId && (
+      {pendingRequest?.action === 'MAIN_ACTION' && (
         <button 
           onClick={handleTurnEnd}
           disabled={isPending}
@@ -262,7 +295,7 @@ export const RealGame = () => {
             top: '50%',
             transform: 'translateY(-50%)',
             padding: '10px 20px',
-            backgroundColor: isPending ? '#95a5a6' : (activePlayerId === 'p1' ? '#3498db' : '#e67e22'),
+            backgroundColor: isPending ? '#95a5a6' : '#3498db',
             color: 'white',
             border: 'none',
             borderRadius: '5px',
@@ -271,22 +304,21 @@ export const RealGame = () => {
             fontWeight: 'bold'
           }}
         >
-          {isPending ? '送信中...' : `${activePlayerId?.toUpperCase()} ターン終了`}
+          {isPending ? '送信中...' : 'ターン終了'}
         </button>
       )}
-
-      {isDetailMode && selectedCard && (
-        <CardDetailSheet
-          card={selectedCard.card}
-          location={selectedCard.location}
-          isMyTurn={selectedCard.isMyTurn}
-          onAction={handleAction}
-          onClose={() => {
-            setIsDetailMode(false);
-            setSelectedCard(null);
-          }}
-        />
-      )}
+    {isDetailMode && selectedCard && (
+      <CardDetailSheet
+        card={selectedCard.card}
+        location={selectedCard.location}
+        isMyTurn={selectedCard.isMyTurn}
+        onAction={handleAction}
+        onClose={() => {
+          setIsDetailMode(false);
+          setSelectedCard(null);
+        }}
+      />
+    )}
     </div>
   );
 };

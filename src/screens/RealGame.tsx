@@ -253,6 +253,21 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
     renderScene();
     // 依存配列に onCardClick で使う変数も入れておく
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
+  // --- ここから追加 ---
+  const BATTLE_TYPES = CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES;
+
+  // pendingRequest の変化を監視するログ（切り分け用）
+  useEffect(() => {
+    if (pendingRequest) {
+      logger.log({
+        level: 'info',
+        action: 'trace.pending_request_state',
+        msg: `Current Pending Action: ${pendingRequest.action}`,
+        payload: { action: pendingRequest.action, full: pendingRequest }
+      });
+    }
+  }, [pendingRequest]);
+  // --- ここまで追加 ---
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
@@ -262,10 +277,15 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
       )}
-      {pendingRequest && !isAttackTargeting && 
-       (pendingRequest.action === 'SELECT_BLOCKER' || pendingRequest.action === 'SELECT_COUNTER') && (
+      {pendingRequest && !isAttackTargeting && (
+        pendingRequest.action === BATTLE_TYPES.SELECT_BLOCKER || 
+        pendingRequest.action === BATTLE_TYPES.SELECT_COUNTER
+      ) && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+              [{pendingRequest.action}] {pendingRequest.message}
+            </div>
+
           {pendingRequest.can_skip && (
             <button 
               onClick={handlePass}
