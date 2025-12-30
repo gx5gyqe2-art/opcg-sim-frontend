@@ -67,15 +67,19 @@ if (type === 'ATTACK_CONFIRM') {
     target_ids: payload.target_ids,
   });
 
+// src/screens/RealGame.tsx 70行目付近
+
   logger.log({
     level: 'info',
     action: 'debug.attack_response',
     msg: 'Response after ATTACK_CONFIRM',
     payload: { 
-      pending: result?.pending_request,
-      turnInfo: result?.game_state?.turn_info 
+      // result を any 型として扱うことで TS2339 エラーを回避
+      pending: (result as any)?.pending_request,
+      turnInfo: (result as any)?.game_state?.turn_info 
     }
   });
+
 
   setIsDetailMode(false);
   setSelectedCard(null);
