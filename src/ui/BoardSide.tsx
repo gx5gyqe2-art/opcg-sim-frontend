@@ -44,32 +44,32 @@ export const createBoardSide = (
   }
 
   const lifeCount = z.life?.length || 0;
-  const life = createCardContainer({ uuid: `life-${p.player_id}`, name: 'Life' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `life-${p.player_id}` } as any), count: lifeCount });
+const life = createCardContainer({ uuid: `life-${p.player_id}`, name: 'Life' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `life-${p.player_id}`, name: 'Life' } as any), count: lifeCount });
   life.x = coords.getLifeX(W); life.y = r2Y;
   side.addChild(life);
 
   const trashCount = z.trash?.length || 0;
-  const trash = createCardContainer({ uuid: `trash-${p.player_id}`, name: 'Trash' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `trash-${p.player_id}` } as any), count: trashCount });
+const trash = createCardContainer({ uuid: `trash-${p.player_id}`, name: 'Trash' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `trash-${p.player_id}`, name: 'Trash' } as any), count: trashCount });
   trash.x = coords.getTrashX(W); trash.y = r2Y;
   side.addChild(trash);
 
   const deckCount = p.don_count ?? 0; 
-  const deck = createCardContainer({ uuid: `deck-${p.player_id}`, name: 'Deck' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `deck-${p.player_id}` } as any), count: deckCount });
+const deck = createCardContainer({ uuid: `deck-${p.player_id}`, name: 'Deck' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `deck-${p.player_id}`, name: 'Deck' } as any), count: deckCount });
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   side.addChild(deck);
 
   const donDeckCount = 10 - (p.don_count ?? 0); 
-  const donDeck = createCardContainer({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `dondeck-${p.player_id}` } as any), count: donDeckCount });
+const donDeck = createCardContainer({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any), count: donDeckCount });
   donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
   side.addChild(donDeck);
 
   const donActiveCount = p.active_don ?? 0;
-  const donActive = createCardContainer({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `donactive-${p.player_id}` } as any), count: donActiveCount });
+const donActive = createCardContainer({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any), count: donActiveCount });
   donActive.x = coords.getDonActiveX(W); donActive.y = r3Y;
   side.addChild(donActive);
 
   const donRestCount = (p.don_count ?? 0) - (p.active_don ?? 0);
-  const donRest = createCardContainer({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `donrest-${p.player_id}` } as any), count: donRestCount });
+  const donRest = createCardContainer({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any, coords.CW, coords.CH, { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any), count: donRestCount });
   donRest.x = coords.getDonRestX(W); donRest.y = r3Y;
   side.addChild(donRest);
 

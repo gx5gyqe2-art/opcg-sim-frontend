@@ -56,6 +56,17 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
         return;
       }
     }
+    
+// 58行目付近に追加
+if (type === 'ATTACK_CONFIRM') {
+  await sendAction(type as any, {
+    card_id: payload.uuid,
+    target_ids: payload.target_ids,
+  });
+  setIsDetailMode(false);
+  setSelectedCard(null);
+  return;
+}
 
     await sendAction(type as any, {
       card_id: payload.uuid,
@@ -102,10 +113,10 @@ const onCardClick = async (card: CardInstance) => {
       if (targetCard.uuid.startsWith('deck-')) return 'deck';
       if (targetCard.uuid.startsWith('don')) {
 // RealGame.tsx 内の判定を ID 生成側（BoardSide）に合わせる
-if (targetCard.uuid.includes('donactive')) return 'don_active';
-if (targetCard.uuid.includes('donrest')) return 'don_rest';
-
-        return 'don_deck';
+// 91行目付近
+if (targetCard.uuid.includes('donactive')) return 'don_active'; // _を消す修正
+if (targetCard.uuid.includes('donrest')) return 'don_rest';     // _を消す修正
+if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
       }
 
       // 通常カードの判定
