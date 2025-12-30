@@ -195,8 +195,69 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      {/* 以前の実装と同じUIコンポーネント */}
-      {/* ... UI表示部分は変更なしのため省略 ... */}
+      {isAttackTargeting && (
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 110, background: 'rgba(231, 76, 60, 0.9)', padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
+          攻撃対象を選択してください
+          <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
+        </div>
+      )}
+      {pendingRequest && !isAttackTargeting && 
+       (pendingRequest.action === 'SELECT_BLOCKER' || pendingRequest.action === 'SELECT_COUNTER') && (
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{pendingRequest.message}</div>
+          {pendingRequest.can_skip && (
+            <button 
+              onClick={handlePass}
+              disabled={isPending}
+              style={{ 
+                padding: '8px 24px', 
+                backgroundColor: isPending ? '#95a5a6' : '#e74c3c', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                cursor: isPending ? 'not-allowed' : 'pointer', 
+                fontWeight: 'bold' 
+              }}
+            >
+              {isPending ? '送信中...' : 'パス'}
+            </button>
+          )}
+        </div>
+      )}
+      {pendingRequest?.action === 'MAIN_ACTION' && (
+        <button 
+          onClick={handleTurnEnd}
+          disabled={isPending}
+          style={{
+            position: 'absolute',
+            right: '20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            padding: '10px 20px',
+            backgroundColor: isPending ? '#95a5a6' : '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: isPending ? 'not-allowed' : 'pointer',
+            zIndex: 100,
+            fontWeight: 'bold'
+          }}
+        >
+          {isPending ? '送信中...' : 'ターン終了'}
+        </button>
+      )}
+    {isDetailMode && selectedCard && (
+      <CardDetailSheet
+        card={selectedCard.card}
+        location={selectedCard.location}
+        isMyTurn={selectedCard.isMyTurn}
+        onAction={handleAction}
+        onClose={() => {
+          setIsDetailMode(false);
+          setSelectedCard(null);
+        }}
+      />
+    )}
     </div>
   );
 };

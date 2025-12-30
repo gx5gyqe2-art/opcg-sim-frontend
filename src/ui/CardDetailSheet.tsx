@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
-import { CardInstance, BoardCard, LeaderCard } from '../game/types';
+import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 
 interface CardDetailSheetProps {
   card: CardInstance;

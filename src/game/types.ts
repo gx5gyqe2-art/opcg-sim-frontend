@@ -1,4 +1,4 @@
-import { 
+import type { 
   PendingRequest as ApiPendingRequest, 
 } from '../api/types';
 
