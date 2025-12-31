@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 
 interface CardDetailSheetProps {
-  card: CardInstance & { cards?: CardInstance[] };
+  card: CardInstance & { cards?: CardInstance[] }; // cardsプロパティ（トラッシュの中身等）を許容
   location: string;
   isMyTurn: boolean; 
   onAction: (type: string, payload: any) => Promise<void>;
@@ -82,13 +82,15 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
                 backgroundColor: '#fff'
               }}>
                 <div style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                {/* 修正: プロパティ存在チェックを追加して型エラーを回避 */}
+                
+                {/* 修正: String()で明示的に文字列化し、(c as any)で型エラーを回避 */}
                 <div style={{ textAlign: 'center', fontSize: '1rem', color: '#e74c3c' }}>
-                  {'power' in c ? c.power : '-'}
+                  {'power' in c ? String((c as any).power) : '-'}
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#666' }}>
-                  {'type' in c ? c.type : ''}
+                  {'type' in c ? String((c as any).type) : ''}
                 </div>
+                
               </div>
             ))}
           </div>
