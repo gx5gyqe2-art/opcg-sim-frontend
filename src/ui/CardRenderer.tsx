@@ -31,6 +31,7 @@ export const createCardContainer = (
   // --- 3. テキスト描画ヘルパー ---
   const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
     const txt = new PIXI.Text(content, style);
+    // 幅制限: 横向きなら高さ(ch)が幅になる
     const maxWidth = isRest ? ch * 1.1 : cw * 1.1;
 
     if (txt.width > maxWidth) {
@@ -58,10 +59,12 @@ export const createCardContainer = (
   // --- 4. コンテンツ配置ロジック ---
   if (!isBack) {
     const cardName = card?.name || "";
-    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName);
+    // リソース判定の修正: 'Trash', 'Deck' 等に加えて 'Don!!' で始まるものも含める
+    const isResource = ['Trash', 'Deck', 'Life', 'Stage'].includes(cardName) || cardName.startsWith('Don!!');
+    const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
 
     // ■ コスト (左上)
-    if (card?.cost !== undefined) {
+    if (card?.cost !== undefined && !isLeader && !isResource) {
       const cx = -cw / 2 + 10;
       const cy = -ch / 2 + 10;
       const costBadge = new PIXI.Graphics().beginFill(0x2c3e50, 0.9).drawCircle(cx, cy, 9).endFill();
@@ -69,24 +72,21 @@ export const createCardContainer = (
       addText(`${card.cost}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
-    // ■ カウンター (左辺中央)
+    // ■ カウンター
     if (card?.counter !== undefined && card.counter > 0) {
-      const ctx = -cw / 2 + 6;
+      const xOffset = isOpponent ? (cw / 2 - 6) : (-cw / 2 + 6);
       const cty = 0; 
-      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, -Math.PI / 2);
+      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, xOffset, cty, -Math.PI / 2);
     }
 
     // ■ パワー (上辺中央)
     if (card?.power !== undefined && !isResource) {
       if (isRest) {
-        // 【レスト時】カードの「左辺（画面の上側）」かつ「中央」に配置
-        // Y=0 にすることで、画面上での横位置(X)が中心になります
-        const posX = -cw / 2 - 12; // カード左辺の外側 (画面上)
-        const posY = 0;            // 左辺の中央 (名前と軸を合わせる)
+        const posX = -cw / 2 - 6; 
+        const posY = 0;
         addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, posX, posY, 'screen');
       } else {
-        // 【通常時】カードの上辺
-        const posY = -ch / 2 - 12;
+        const posY = -ch / 2 - 6;
         addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY, 'screen');
       }
     }
@@ -99,15 +99,14 @@ export const createCardContainer = (
     };
 
     if (isResource) {
+      // リソースカードはカード中央に表示
       addText(cardName, nameStyle, 0, 0, 'screen');
     } else {
       if (isRest) {
-        // 【レスト時】カードの「右辺（画面の下側）」に配置
-        const posX = cw / 2 + 4; // カード右辺の外側 (画面下)
+        const posX = cw / 2 + 12;
         addText(cardName, nameStyle, posX, 0, 'screen'); 
       } else {
-        // 【通常時】カードの下辺
-        const posY = ch / 2 + 4;
+        const posY = ch / 2 + 12;
         addText(cardName, nameStyle, 0, posY, 'screen');
       }
     }
@@ -116,7 +115,7 @@ export const createCardContainer = (
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
-      const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
+      const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 9).endFill();
       container.addChild(donBadge);
       addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by, 'screen');
     }
@@ -126,12 +125,13 @@ export const createCardContainer = (
     addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0, 'screen');
   }
 
-  // ■ 重なり枚数バッジ
-  if (options.count && options.count > 0) {
+  // ■ 重なり枚数バッジ (最前面に描画)
+  if (options.count !== undefined && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
-    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 12).endFill();
+    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 9).endFill();
     container.addChild(badge);
+    // バッジ内の数字も画面に対して水平(screen)にする
     addText(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by, 'screen');
   }
 
