@@ -233,8 +233,6 @@ export const RealGame = () => {
     renderScene();
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
 
-  const BATTLE_TYPES = CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES;
-
   useEffect(() => {
     if (pendingRequest) {
       logger.log({
@@ -254,20 +252,34 @@ export const RealGame = () => {
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
       )}
+
+      {/* 修正: pendingRequestがあればアクションタイプに関わらず常に表示する */}
       {pendingRequest && !isAttackTargeting && (
-        pendingRequest.action === BATTLE_TYPES.SELECT_BLOCKER || 
-        pendingRequest.action === BATTLE_TYPES.SELECT_COUNTER
-      ) && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG, padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}` }}>
+        <div style={{ 
+            position: 'absolute', 
+            top: '20px', 
+            left: '50%', 
+            transform: 'translateX(-50%)', 
+            zIndex: Z_INDEX.NOTIFICATION, 
+            background: COLORS.OVERLAY_INFO_BG, 
+            padding: '15px', 
+            borderRadius: '8px', 
+            color: 'white', 
+            textAlign: 'center', 
+            border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}` 
+        }}>
 
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+            {/* アクションとメッセージを常に表示 */}
             [{pendingRequest.action}] {pendingRequest.message}
           </div>
-          <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
-            {gameState?.active_battle 
-              ? `ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}` 
-              : "BATTLE DATA LOADING..."}
-          </div>
+          
+          {/* 修正: バトル情報がある場合のみ攻撃詳細を表示 ("LOADING"は表示しない) */}
+          {gameState?.active_battle && (
+            <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
+              {`ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}`}
+            </div>
+          )}
 
           {pendingRequest.can_skip && (
             <button 
