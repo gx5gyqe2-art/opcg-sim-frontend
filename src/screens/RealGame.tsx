@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -17,13 +17,14 @@ export const RealGame = () => {
     card: CardInstance;
     location: string;
     isMyTurn: boolean;
-    // 追加: カードリスト（トラッシュ用）
-    cardList?: CardInstance[];
   } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
+  
+  // 座標計算結果をStateで保持してボタン配置に使用
+  const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
@@ -37,7 +38,7 @@ export const RealGame = () => {
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
-    if (type === 'ATTACK') {
+    if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK) {
       setAttackingCardUuid(payload.uuid || null);
       setIsAttackTargeting(true);
       setIsDetailMode(false);
@@ -58,12 +59,11 @@ export const RealGame = () => {
       }
     }
     
-    if (type === 'ATTACK_CONFIRM') {
+    if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM) {
       await sendAction(type as any, {
         card_id: payload.uuid,
         target_ids: payload.target_ids,
       }); 
-
       setIsDetailMode(false);
       setSelectedCard(null);
       return;
@@ -82,7 +82,7 @@ export const RealGame = () => {
     if (!pendingRequest || !gameState?.game_id || isPending) return;
     const currentRequestId = pendingRequest.request_id;
     setPendingRequest(null);
-    await sendBattleAction('PASS', undefined, currentRequestId);
+    await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
   };
 
   const handleTurnEnd = () => {
@@ -93,13 +93,13 @@ export const RealGame = () => {
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
-      await handleAction('ATTACK_CONFIRM', { 
+      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, { 
         uuid: attackingCardUuid, 
         target_ids: [card.uuid] 
       });
       setIsAttackTargeting(false);
       setAttackingCardUuid(null);
-      return; 
+      return;
     }
 
     let currentLoc = 'unknown';
@@ -114,7 +114,6 @@ export const RealGame = () => {
         if (targetCard.uuid.includes('donrest')) return 'don_rest';
         if (targetCard.uuid.includes('dondeck')) return 'don_deck';
       }
-
       if (playerState.leader?.uuid === targetCard.uuid) return 'leader';
       if (playerState.zones.field.some(c => c.uuid === targetCard.uuid)) return 'field';
       if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
@@ -149,21 +148,10 @@ export const RealGame = () => {
       payload: { uuid: card.uuid, activePlayerId, currentLoc }
     });
 
-    // トラッシュクリック時の特別処理
-    let trashList: CardInstance[] | undefined = undefined;
-    if (card.uuid.startsWith('trash-')) {
-      const ownerId = card.uuid.split('-')[1]; // trash-p1 -> p1
-      const ownerState = gameState.players[ownerId as 'p1' | 'p2'];
-      if (ownerState) {
-        trashList = ownerState.zones.trash;
-      }
-    }
-
     setSelectedCard({ 
       card, 
       location: currentLoc, 
-      isMyTurn: isOperatable,
-      cardList: trashList // トラッシュの場合はリストを渡す
+      isMyTurn: isOperatable 
     }); 
     setIsDetailMode(true); 
   };
@@ -183,10 +171,16 @@ export const RealGame = () => {
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
+    // 初期レイアウト計算
+    const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
+    setLayoutCoords(coords.turnEndPos);
+
     startGame();
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
+      const newCoords = calculateCoordinates(window.innerWidth, window.innerHeight);
+      setLayoutCoords(newCoords.turnEndPos);
     };
     window.addEventListener('resize', handleResize);
 
@@ -211,6 +205,13 @@ export const RealGame = () => {
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
       app.stage.addChild(bg);
 
+      // 境界線（中央線）を描画して位置を確認しやすくする
+      const border = new PIXI.Graphics();
+      border.lineStyle(2, 0x000000, 0.3);
+      border.moveTo(0, midY);
+      border.lineTo(W, midY);
+      app.stage.addChild(border);
+
       const isP2Turn = activePlayerId === 'p2';
       const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
@@ -218,6 +219,7 @@ export const RealGame = () => {
       const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
       topSide.y = 0; 
       
+      // BottomSideは midY を基準に配置 (BoardSide内で調整済み)
       const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
       bottomSide.y = midY;
 
@@ -282,14 +284,16 @@ export const RealGame = () => {
           )}
         </div>
       )}
-      {pendingRequest?.action === 'MAIN_ACTION' && (
+      {(pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
         <button 
           onClick={handleTurnEnd}
           disabled={isPending}
           style={{
             position: 'absolute',
-            right: '20px',
-            top: '50%',
+            // layoutCoordsを使用して配置。なければ中央にフォールバック
+            left: layoutCoords ? `${layoutCoords.x}px` : 'auto',
+            top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+            right: layoutCoords ? 'auto' : '20px',
             transform: 'translateY(-50%)',
             padding: '10px 20px',
             backgroundColor: isPending ? '#95a5a6' : '#3498db',
@@ -315,7 +319,6 @@ export const RealGame = () => {
           setIsDetailMode(false);
           setSelectedCard(null);
         }}
-        cardList={selectedCard.cardList} // 追加
       />
     )}
     </div>
