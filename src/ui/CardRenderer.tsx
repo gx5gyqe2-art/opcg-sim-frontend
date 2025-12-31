@@ -15,12 +15,10 @@ export const createCardContainer = (
   const isRest = card?.is_rest === true;
   const isBack = card?.is_face_up === false;
 
-  // --- 1. コンテナの回転設定 ---
   if (isRest) {
     container.rotation = Math.PI / 2;
   }
 
-  // --- 2. カード背景の描画 ---
   const g = new PIXI.Graphics();
   g.lineStyle(2, COLORS.ZONE_BORDER);
   g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
@@ -28,10 +26,8 @@ export const createCardContainer = (
   g.endFill();
   container.addChild(g);
 
-  // --- 3. テキスト描画ヘルパー ---
   const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
     const txt = new PIXI.Text(content, style);
-    // 幅制限: 横向きなら高さ(ch)が幅になる
     const maxWidth = isRest ? ch * 1.1 : cw * 1.1;
 
     if (txt.width > maxWidth) {
@@ -56,14 +52,11 @@ export const createCardContainer = (
     container.addChild(txt);
   };
 
-  // --- 4. コンテンツ配置ロジック ---
   if (!isBack) {
     const cardName = card?.name || "";
-    // ★修正: 'Stage' をリソース判定から除外
     const isResource = ['Trash', 'Deck', 'Life'].includes(cardName) || cardName.startsWith('Don!!');
     const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
 
-    // ■ コスト (左上)
     if (card?.cost !== undefined && !isLeader && !isResource) {
       const cx = -cw / 2 + 10;
       const cy = -ch / 2 + 10;
@@ -72,14 +65,12 @@ export const createCardContainer = (
       addText(`${card.cost}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
-    // ■ カウンター
     if (card?.counter !== undefined && card.counter > 0) {
       const xOffset = isOpponent ? (cw / 2 - 6) : (-cw / 2 + 6);
       const cty = 0; 
       addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, xOffset, cty, -Math.PI / 2);
     }
 
-    // ■ パワー (上辺中央)
     if (card?.power !== undefined && !isResource) {
       if (isRest) {
         const posX = -cw / 2 - 6; 
@@ -91,7 +82,6 @@ export const createCardContainer = (
       }
     }
 
-    // ■ 名前 (下辺中央)
     const nameStyle = { 
       fontSize: isResource ? 11 : 9, 
       fontWeight: 'bold', 
@@ -99,7 +89,6 @@ export const createCardContainer = (
     };
 
     if (isResource) {
-      // リソースカードはカード中央に表示
       addText(cardName, nameStyle, 0, 0, 'screen');
     } else {
       if (isRest) {
@@ -111,7 +100,6 @@ export const createCardContainer = (
       }
     }
 
-    // ■ ドン!!付与 (中央)
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
@@ -121,42 +109,31 @@ export const createCardContainer = (
     }
 
   } else {
-    // 裏面
     addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0, 'screen');
   }
 
-  // ■ 重なり枚数バッジ (最前面に描画)
   if (options.count !== undefined && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
     const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 9).endFill();
     container.addChild(badge);
-    // バッジ内の数字も画面に対して水平(screen)にする
     addText(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by, 'screen');
   }
 
   container.eventMode = 'static';
   container.cursor = 'pointer';
 
-  // ★修正: 誤タップ防止（ドラッグ判定）
   let pointerDownPos = { x: 0, y: 0 };
-  let isPressed = false;
 
   container.on('pointerdown', (e) => {
-    isPressed = true;
     pointerDownPos = { x: e.global.x, y: e.global.y };
   });
 
-  container.on('pointerup', () => { isPressed = false; });
-  container.on('pointerupoutside', () => { isPressed = false; });
-
   container.on('pointertap', (e) => {
-    // タップ時、downからの移動距離をチェック
     const dx = e.global.x - pointerDownPos.x;
     const dy = e.global.y - pointerDownPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // 10px以上動いていたらドラッグとみなしてクリック処理をスキップ
     if (dist > 10) {
       return;
     }
