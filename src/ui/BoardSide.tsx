@@ -27,10 +27,24 @@ export const createBoardSide = (
     isOpponent: isOpponent 
   });
 
-  // Row 1: フィールド
-  (z.field || []).forEach((c: BoardCard, i: number) => {
+  // ★修正: ステージカードの抽出とフィールドカードの分離
+  let stageCard = p.stage;
+  let fieldCards = [...(z.field || [])]; // 配列をコピーして加工可能にする
+
+  if (!stageCard) {
+    // 明示的なstageがない場合、フィールド内から type='STAGE' を探す
+    const sIdx = fieldCards.findIndex(c => c.type === 'STAGE' || c.type === 'ステージ');
+    if (sIdx >= 0) {
+      stageCard = fieldCards[sIdx];
+      // フィールドリストからは除外（2重表示防止）
+      fieldCards.splice(sIdx, 1);
+    }
+  }
+
+  // Row 1: フィールド (ステージを除いたカードを描画)
+  fieldCards.forEach((c: BoardCard, i: number) => {
     const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
-    card.x = coords.getFieldX(i, W, coords.CW, z.field.length);
+    card.x = coords.getFieldX(i, W, coords.CW, fieldCards.length);
     card.y = getAdjustedY(1);
     side.addChild(card);
   });
@@ -47,11 +61,11 @@ export const createBoardSide = (
     side.addChild(ldr);
   }
 
-  // ★追加: ステージカード
-  if (p.stage) {
-    const stg = createCardContainer(p.stage, coords.CW, coords.CH, getCardOpts(p.stage));
+  // ステージカードの描画 (存在する場合のみ)
+  if (stageCard) {
+    const stg = createCardContainer(stageCard, coords.CW, coords.CH, getCardOpts(stageCard));
     stg.x = coords.getStageX(W);
-    stg.y = r2Y; // リーダーと同じ列に配置
+    stg.y = r2Y; 
     side.addChild(stg);
   }
 
@@ -171,11 +185,10 @@ export const createBoardSide = (
       handContainer.eventMode = 'static';
       handContainer.cursor = 'grab';
       
-      // ★修正: 慣性スクロール変数の追加
       let isDragging = false;
       let startX = 0;
-      let lastX = 0; // 前回のX座標
-      let velocity = 0; // 速度
+      let lastX = 0;
+      let velocity = 0;
       let containerStartX = 0;
 
       // ★修正: 慣性ループ用のTicker
@@ -198,17 +211,15 @@ export const createBoardSide = (
 
         // 慣性移動
         innerHand.x += velocity;
-        velocity *= 0.92; // 減衰率（摩擦）
+        velocity *= 0.92; // 減衰率
 
-        // 境界チェック（バウンス効果のために少しはみ出しを許容してから戻す処理は上記で行う）
-        // ドラッグ中でないとき、大きくはみ出していたら減衰を強める
+        // 境界チェック（バウンス効果）
         const minX = W - totalHandWidth;
         if (innerHand.x > 0 || innerHand.x < minX) {
             velocity *= 0.5; // 端に達したら急減速
         }
       };
       
-      // Tickerへの登録とクリーンアップ
       PIXI.Ticker.shared.add(inertiaTicker);
       handContainer.on('destroyed', () => {
         PIXI.Ticker.shared.remove(inertiaTicker);
@@ -219,7 +230,7 @@ export const createBoardSide = (
         startX = e.global.x;
         lastX = startX;
         containerStartX = innerHand.x;
-        velocity = 0; // ドラッグ開始時は速度リセット
+        velocity = 0;
         handContainer.cursor = 'grabbing';
       });
 
@@ -235,14 +246,13 @@ export const createBoardSide = (
         const currentX = e.global.x;
         const dx = currentX - startX;
         
-        // 速度計算
         velocity = currentX - lastX;
         lastX = currentX;
 
         let newX = containerStartX + dx;
 
-        // 端での抵抗感
         const minX = W - totalHandWidth;
+        // 端での抵抗感
         if (newX > 0) {
             newX = newX * 0.5;
         } else if (newX < minX) {

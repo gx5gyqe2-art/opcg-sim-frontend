@@ -10,6 +10,7 @@ interface BaseCard {
   text?: string;
   attribute?: string;
   traits?: string[];
+  type?: string; // ★追加: ステージ判定などに使用
 }
 
 export interface LeaderCard extends BaseCard {
@@ -41,7 +42,7 @@ export interface PlayerState {
   player_id: string;
   name: string;
   leader: LeaderCard;
-  stage?: BoardCard | null; // ★追加: ステージカード用
+  stage?: BoardCard | null; // ★追加
   zones: {
     field: BoardCard[];
     hand: CardInstance[];

@@ -59,8 +59,8 @@ export const createCardContainer = (
   // --- 4. コンテンツ配置ロジック ---
   if (!isBack) {
     const cardName = card?.name || "";
-    // リソース判定の修正: 'Trash', 'Deck' 等に加えて 'Don!!' で始まるものも含める
-    const isResource = ['Trash', 'Deck', 'Life', 'Stage'].includes(cardName) || cardName.startsWith('Don!!');
+    // ★修正: 'Stage' をリソース判定から除外
+    const isResource = ['Trash', 'Deck', 'Life'].includes(cardName) || cardName.startsWith('Don!!');
     const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
 
     // ■ コスト (左上)
@@ -138,7 +138,29 @@ export const createCardContainer = (
   container.eventMode = 'static';
   container.cursor = 'pointer';
 
+  // ★修正: 誤タップ防止（ドラッグ判定）
+  let pointerDownPos = { x: 0, y: 0 };
+  let isPressed = false;
+
+  container.on('pointerdown', (e) => {
+    isPressed = true;
+    pointerDownPos = { x: e.global.x, y: e.global.y };
+  });
+
+  container.on('pointerup', () => { isPressed = false; });
+  container.on('pointerupoutside', () => { isPressed = false; });
+
   container.on('pointertap', (e) => {
+    // タップ時、downからの移動距離をチェック
+    const dx = e.global.x - pointerDownPos.x;
+    const dy = e.global.y - pointerDownPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // 10px以上動いていたらドラッグとみなしてクリック処理をスキップ
+    if (dist > 10) {
+      return;
+    }
+
     e.stopPropagation();
     
     logger.log({
