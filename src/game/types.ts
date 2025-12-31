@@ -41,6 +41,7 @@ export interface PlayerState {
   player_id: string;
   name: string;
   leader: LeaderCard;
+  stage?: BoardCard | null; // ★追加: ステージカード用
   zones: {
     field: BoardCard[];
     hand: CardInstance[];

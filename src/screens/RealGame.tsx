@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'; // useMemo を削除
+import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -23,7 +23,6 @@ export const RealGame = () => {
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
   
-  // 座標計算結果をStateで保持してボタン配置に使用
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
@@ -171,7 +170,6 @@ export const RealGame = () => {
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
-    // 初期レイアウト計算
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
@@ -195,7 +193,12 @@ export const RealGame = () => {
     if (!app || !gameState) return;
 
     const renderScene = () => {
-      app.stage.removeChildren();
+      while (app.stage.children.length > 0) {
+        const child = app.stage.children[0];
+        app.stage.removeChild(child);
+        child.destroy({ children: true });
+      }
+
       const { width: W, height: H } = app.screen;
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
@@ -205,7 +208,6 @@ export const RealGame = () => {
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
       app.stage.addChild(bg);
 
-      // 境界線（中央線）を描画して位置を確認しやすくする
       const border = new PIXI.Graphics();
       border.lineStyle(2, 0x000000, 0.3);
       border.moveTo(0, midY);
@@ -219,7 +221,6 @@ export const RealGame = () => {
       const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
       topSide.y = 0; 
       
-      // BottomSideは midY を基準に配置 (BoardSide内で調整済み)
       const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
       bottomSide.y = midY;
 
@@ -290,7 +291,6 @@ export const RealGame = () => {
           disabled={isPending}
           style={{
             position: 'absolute',
-            // layoutCoordsを使用して配置。なければ中央にフォールバック
             left: layoutCoords ? `${layoutCoords.x}px` : 'auto',
             top: layoutCoords ? `${layoutCoords.y}px` : '50%',
             right: layoutCoords ? 'auto' : '20px',

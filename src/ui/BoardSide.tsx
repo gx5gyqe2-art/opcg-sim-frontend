@@ -47,6 +47,14 @@ export const createBoardSide = (
     side.addChild(ldr);
   }
 
+  // ★追加: ステージカード
+  if (p.stage) {
+    const stg = createCardContainer(p.stage, coords.CW, coords.CH, getCardOpts(p.stage));
+    stg.x = coords.getStageX(W);
+    stg.y = r2Y; // リーダーと同じ列に配置
+    side.addChild(stg);
+  }
+
   // ライフ
   const lifeCount = z.life?.length || 0;
   const life = createCardContainer(
@@ -68,13 +76,13 @@ export const createBoardSide = (
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   side.addChild(deck);
 
-  // トラッシュ (中身のリスト 'cards' を持たせる)
+  // トラッシュ
   const trashCount = z.trash?.length || 0;
   const trash = createCardContainer(
     { 
       uuid: `trash-${p.player_id}`, 
       name: 'Trash', 
-      cards: z.trash // ここで中身を渡す
+      cards: z.trash
     } as any, 
     coords.CW, 
     coords.CH, 
@@ -106,7 +114,7 @@ export const createBoardSide = (
   donActive.x = coords.getDonActiveX(W); donActive.y = r3Y;
   side.addChild(donActive);
 
-  // レストドン (is_rest: true を明示)
+  // レストドン
   const donRestList = (p as any).don_rested || [];
   const donRestCount = donRestList.length;
   const donRest = createCardContainer(
@@ -163,14 +171,55 @@ export const createBoardSide = (
       handContainer.eventMode = 'static';
       handContainer.cursor = 'grab';
       
+      // ★修正: 慣性スクロール変数の追加
       let isDragging = false;
       let startX = 0;
+      let lastX = 0; // 前回のX座標
+      let velocity = 0; // 速度
       let containerStartX = 0;
+
+      // ★修正: 慣性ループ用のTicker
+      const inertiaTicker = () => {
+        if (isDragging) return;
+        
+        // 速度が十分小さい場合は停止
+        if (Math.abs(velocity) < 0.1) {
+            // 境界外にいる場合は戻すアニメーション（簡易的にlerp）
+            const minX = W - totalHandWidth;
+            if (innerHand.x > 0) {
+                innerHand.x += (0 - innerHand.x) * 0.2;
+                if (Math.abs(innerHand.x) < 1) innerHand.x = 0;
+            } else if (innerHand.x < minX) {
+                innerHand.x += (minX - innerHand.x) * 0.2;
+                if (Math.abs(innerHand.x - minX) < 1) innerHand.x = minX;
+            }
+            return;
+        }
+
+        // 慣性移動
+        innerHand.x += velocity;
+        velocity *= 0.92; // 減衰率（摩擦）
+
+        // 境界チェック（バウンス効果のために少しはみ出しを許容してから戻す処理は上記で行う）
+        // ドラッグ中でないとき、大きくはみ出していたら減衰を強める
+        const minX = W - totalHandWidth;
+        if (innerHand.x > 0 || innerHand.x < minX) {
+            velocity *= 0.5; // 端に達したら急減速
+        }
+      };
+      
+      // Tickerへの登録とクリーンアップ
+      PIXI.Ticker.shared.add(inertiaTicker);
+      handContainer.on('destroyed', () => {
+        PIXI.Ticker.shared.remove(inertiaTicker);
+      });
 
       handContainer.on('pointerdown', (e) => {
         isDragging = true;
         startX = e.global.x;
+        lastX = startX;
         containerStartX = innerHand.x;
+        velocity = 0; // ドラッグ開始時は速度リセット
         handContainer.cursor = 'grabbing';
       });
 
@@ -183,12 +232,22 @@ export const createBoardSide = (
 
       handContainer.on('pointermove', (e) => {
         if (!isDragging) return;
-        const dx = e.global.x - startX;
+        const currentX = e.global.x;
+        const dx = currentX - startX;
+        
+        // 速度計算
+        velocity = currentX - lastX;
+        lastX = currentX;
+
         let newX = containerStartX + dx;
 
+        // 端での抵抗感
         const minX = W - totalHandWidth;
-        if (newX > 0) newX = 0;
-        if (newX < minX) newX = minX;
+        if (newX > 0) {
+            newX = newX * 0.5;
+        } else if (newX < minX) {
+            newX = minX + (newX - minX) * 0.5;
+        }
 
         innerHand.x = newX;
       });
