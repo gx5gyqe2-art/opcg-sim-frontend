@@ -15,7 +15,9 @@ export const createBoardSide = (
   const side = new PIXI.Container();
   const z = p.zones;
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { PHYSICS, ALPHA } = LAYOUT_PARAMS;
+  // 修正前: const { PHYSICS, ALPHA } = LAYOUT_PARAMS;
+  // 修正後: ALPHA を削除
+  const { PHYSICS } = LAYOUT_PARAMS;
 
   const getAdjustedY = (row: number) => {
     const offset = coords.getY(row);
@@ -30,6 +32,8 @@ export const createBoardSide = (
     onClick: () => onCardClick(c as CardInstance),
     isOpponent: isOpponent 
   });
+
+  // ... (以下、変更なし) ...
 
   if (z.field && z.field.length > 0 && !isOpponent) {
      logger.log({
