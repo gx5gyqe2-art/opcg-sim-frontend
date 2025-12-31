@@ -55,7 +55,10 @@ export const apiClient = {
 
     const data = await res.json();
     const oldSid = sessionManager.getSessionId();
-    const gameId = data.game_id || (data[CONST.API_ROOT_KEYS.GAME_STATE] as any)?.game_id;
+    
+    // 定数を使って game_id を取得
+    const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
+    const gameId = data[GAME_ID_KEY] || (data[CONST.API_ROOT_KEYS.GAME_STATE] as any)?.[GAME_ID_KEY];
     
     if (gameId) {
       sessionManager.setSessionId(gameId);
@@ -99,7 +102,10 @@ export const apiClient = {
 
     const result = await response.json();
     const oldSid = sessionManager.getSessionId();
-    const newGameId = result.game_id || result[CONST.API_ROOT_KEYS.GAME_STATE]?.game_id;
+    
+    // 定数を使って game_id を取得
+    const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
+    const newGameId = result[GAME_ID_KEY] || result[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
 
     if (newGameId) {
       sessionManager.setSessionId(newGameId);

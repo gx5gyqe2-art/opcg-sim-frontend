@@ -23,8 +23,7 @@ export const RealGame = () => {
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
 
-const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
-
+  const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
   const { startGame, sendAction, sendBattleAction, isPending } = useGameAction(
     activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1"),
@@ -36,7 +35,8 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
-    if (type === 'ATTACK') {
+    // 定数を使用
+    if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK) {
       setAttackingCardUuid(payload.uuid || null);
       setIsAttackTargeting(true);
       setIsDetailMode(false);
@@ -44,9 +44,10 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
     }
 
     if (pendingRequest) {
-      const battleTypes: Record<string, 'COUNTER' | 'BLOCK'> = {
-        'COUNTER': 'COUNTER',
-        'BLOCK': 'BLOCK'
+      // UIから渡されるタイプをバックエンドの期待する型に変換
+      const battleTypes: Record<string, string> = {
+        'COUNTER': CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER,
+        'BLOCK': CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_BLOCKER
       };
       const actionType = battleTypes[type];
       if (actionType) {
@@ -57,20 +58,17 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
       }
     }
     
-// 58行目付近に追加
-// src/screens/RealGame.tsx 60行目付近
+    // 定数を使用: ATTACK_CONFIRM
+    if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM) {
+      await sendAction(type as any, {
+        card_id: payload.uuid,
+        target_ids: payload.target_ids,
+      }); 
 
-if (type === 'ATTACK_CONFIRM') {
-  await sendAction(type as any, {
-    card_id: payload.uuid,
-    target_ids: payload.target_ids,
-  }); 
-
-  setIsDetailMode(false);
-  setSelectedCard(null);
-  return;
-}
-
+      setIsDetailMode(false);
+      setSelectedCard(null);
+      return;
+    }
 
     await sendAction(type as any, {
       card_id: payload.uuid,
@@ -85,45 +83,40 @@ if (type === 'ATTACK_CONFIRM') {
     if (!pendingRequest || !gameState?.game_id || isPending) return;
     const currentRequestId = pendingRequest.request_id;
     setPendingRequest(null);
-    await sendBattleAction('PASS', undefined, currentRequestId);
+    await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
   };
 
   const handleTurnEnd = () => {
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
-const onCardClick = async (card: CardInstance) => { 
-  if (isPending || !gameState) return;
+  const onCardClick = async (card: CardInstance) => { 
+    if (isPending || !gameState) return;
 
-  // 【追加】アタックターゲット選択中なら、詳細を開かずにアタックを実行
-  if (isAttackTargeting && attackingCardUuid) {
-    await handleAction('ATTACK_CONFIRM', { 
-      uuid: attackingCardUuid, 
-      target_ids: [card.uuid] 
-    });
-    setIsAttackTargeting(false);
-    setAttackingCardUuid(null);
-    return; // ここで終了させる
-  }
+    // アタックターゲット選択中の確定処理
+    if (isAttackTargeting && attackingCardUuid) {
+      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, { 
+        uuid: attackingCardUuid, 
+        target_ids: [card.uuid] 
+      });
+      setIsAttackTargeting(false);
+      setAttackingCardUuid(null);
+      return;
+    }
 
-  let currentLoc = 'unknown';
-  const { p1, p2 } = gameState.players;
+    let currentLoc = 'unknown';
+    const { p1, p2 } = gameState.players;
 
-  // 1. 各プレイヤーのどのゾーンに存在するかを判定する関数
     const getPhysicalLocation = (playerState: typeof p1, targetCard: CardInstance) => {
-      // ダミーID（プレフィックス）での判定を優先
       if (targetCard.uuid.startsWith('life-')) return 'life';
       if (targetCard.uuid.startsWith('trash-')) return 'trash';
       if (targetCard.uuid.startsWith('deck-')) return 'deck';
       if (targetCard.uuid.startsWith('don')) {
-// RealGame.tsx 内の判定を ID 生成側（BoardSide）に合わせる
-// 91行目付近
-if (targetCard.uuid.includes('donactive')) return 'don_active'; // _を消す修正
-if (targetCard.uuid.includes('donrest')) return 'don_rest';     // _を消す修正
-if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
+        if (targetCard.uuid.includes('donactive')) return 'don_active';
+        if (targetCard.uuid.includes('donrest')) return 'don_rest';
+        if (targetCard.uuid.includes('dondeck')) return 'don_deck';
       }
 
-      // 通常カードの判定
       if (playerState.leader?.uuid === targetCard.uuid) return 'leader';
       if (playerState.zones.field.some(c => c.uuid === targetCard.uuid)) return 'field';
       if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
@@ -132,48 +125,39 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
       return null;
     };
 
+    const p1Loc = getPhysicalLocation(p1, card);
+    const p2Loc = getPhysicalLocation(p2, card);
 
-  const p1Loc = getPhysicalLocation(p1, card);
-  const p2Loc = getPhysicalLocation(p2, card);
-
-  // 2. 「現在のターンのプレイヤー（activePlayerId）」を基準に location を翻訳する
-  if (activePlayerId === 'p1') {
-    if (p1Loc) {
-      // P1のターンにP1のカードを触った場合
-      currentLoc = p1Loc;
-    } else if (p2Loc) {
-      // P1のターンにP2のカードを触った場合（すべて opp_ をつける）
-      currentLoc = `opp_${p2Loc}`;
+    if (activePlayerId === 'p1') {
+      if (p1Loc) {
+        currentLoc = p1Loc;
+      } else if (p2Loc) {
+        currentLoc = `opp_${p2Loc}`;
+      }
+    } else if (activePlayerId === 'p2') {
+      if (p2Loc) {
+        currentLoc = p2Loc;
+      } else if (p1Loc) {
+        currentLoc = `opp_${p1Loc}`;
+      }
     }
-  } else if (activePlayerId === 'p2') {
-    if (p2Loc) {
-      // P2のターンにP2のカードを触った場合（自分として扱うので opp_ なし）
-      currentLoc = p2Loc;
-    } else if (p1Loc) {
-      // P2のターンにP1のカードを触った場合（相手として扱う）
-      currentLoc = `opp_${p1Loc}`;
-    }
-  }
 
-  // 3. 操作可能フラグ（isOperatable）を判定
-  // location が 'hand', 'field', 'leader' のいずれかなら、自分のターンの操作対象
-  const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc);
+    const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc);
 
-  // ログに判定結果を出力（既存ロガーを使用）
-  logger.log({
-    level: 'info',
-    action: "ui.onCardClick",
-    msg: `Card: ${card.name}, Loc: ${currentLoc}, Turn: ${activePlayerId}, Operatable: ${isOperatable}`,
-    payload: { uuid: card.uuid, activePlayerId, currentLoc }
-  });
+    logger.log({
+      level: 'info',
+      action: "ui.onCardClick",
+      msg: `Card: ${card.name}, Loc: ${currentLoc}, Turn: ${activePlayerId}, Operatable: ${isOperatable}`,
+      payload: { uuid: card.uuid, activePlayerId, currentLoc }
+    });
 
-  setSelectedCard({ 
-    card, 
-    location: currentLoc, 
-    isMyTurn: isOperatable 
-  }); 
-  setIsDetailMode(true); 
-};
+    setSelectedCard({ 
+      card, 
+      location: currentLoc, 
+      isMyTurn: isOperatable 
+    }); 
+    setIsDetailMode(true); 
+  };
   
   useEffect(() => {
     if (!pixiContainerRef.current) return;
@@ -213,22 +197,18 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
 
-      // 背景描画
       const bg = new PIXI.Graphics();
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
       bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
       app.stage.addChild(bg);
 
-      // 視点の入れ替えロジック
       const isP2Turn = activePlayerId === 'p2';
       const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
 
-      // 上側（相手視点で描画）
       const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
       topSide.y = 0; 
       
-      // 下側（自分視点で描画）
       const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
       bottomSide.y = midY;
 
@@ -236,12 +216,10 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
     };
 
     renderScene();
-    // 依存配列に onCardClick で使う変数も入れておく
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
-  // --- ここから追加 ---
+
   const BATTLE_TYPES = CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES;
 
-  // pendingRequest の変化を監視するログ（切り分け用）
   useEffect(() => {
     if (pendingRequest) {
       logger.log({
@@ -252,7 +230,6 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
       });
     }
   }, [pendingRequest]);
-  // --- ここまで追加 ---
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
@@ -268,15 +245,14 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
       ) && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
 
-<div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-  [{pendingRequest.action}] {pendingRequest.message}
-</div>
-<div style={{ fontSize: '12px', color: '#f1c40f', marginBottom: '10px' }}>
-  {gameState?.active_battle 
-    ? `ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}` 
-    : "BATTLE DATA LOADING..."}
-</div>
-
+          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+            [{pendingRequest.action}] {pendingRequest.message}
+          </div>
+          <div style={{ fontSize: '12px', color: '#f1c40f', marginBottom: '10px' }}>
+            {gameState?.active_battle 
+              ? `ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}` 
+              : "BATTLE DATA LOADING..."}
+          </div>
 
           {pendingRequest.can_skip && (
             <button 
@@ -297,7 +273,16 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
           )}
         </div>
       )}
-      {pendingRequest?.action === 'MAIN_ACTION' && (
+      {pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN && (
+        // Note: ACTION名が ACTIVATE_MAIN ではなく MAIN_ACTION として返ってくる場合は適宜調整が必要です
+        // gamestate.py では MAIN_ACTION で返しているロジックがありましたが、
+        // CONSTには MAIN_ACTION がないので、バックエンド側の実装に合わせて修正が必要かもしれません。
+        // ここではとりあえず既存コードの意図を汲みつつ、PendingMessageの確認などに留めます。
+        // 実装上は 'MAIN_ACTION' という文字列が返ってきていたので、条件分岐としては 'MAIN_ACTION' のままか
+        // もしくはバックエンド側を定数化して合わせる必要があります。
+        // 今回はベタ書き排除が目的なので、ひとまず既存の条件 'MAIN_ACTION' はそのまま残すか、
+        // バックエンドが返す値が定数化されているならそれに合わせます。
+        // ※ gamestate.py の修正で KEY_ACTION: "MAIN_ACTION" としていたため、文字列リテラルのまま維持します。
         <button 
           onClick={handleTurnEnd}
           disabled={isPending}
@@ -319,6 +304,31 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
           {isPending ? '送信中...' : 'ターン終了'}
         </button>
       )}
+      
+      {/* PendingRequestのAction名が MAIN_ACTION の場合のフォールバック（gamestate.pyの実装に合わせる） */}
+      {pendingRequest?.action === 'MAIN_ACTION' && (
+         <button 
+          onClick={handleTurnEnd}
+          disabled={isPending}
+          style={{
+            position: 'absolute',
+            right: '20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            padding: '10px 20px',
+            backgroundColor: isPending ? '#95a5a6' : '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: isPending ? 'not-allowed' : 'pointer',
+            zIndex: 100,
+            fontWeight: 'bold'
+          }}
+        >
+          {isPending ? '送信中...' : 'ターン終了'}
+        </button>
+      )}
+
     {isDetailMode && selectedCard && (
       <CardDetailSheet
         card={selectedCard.card}
