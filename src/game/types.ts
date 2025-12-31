@@ -64,4 +64,9 @@ export interface GameState {
     p2: PlayerState;
   };
   pending_request?: PendingRequest | null;
+  active_battle?: {
+    attacker_uuid: string;
+    target_uuid: string;
+    counter_buff: number;
+  } | null;
 }

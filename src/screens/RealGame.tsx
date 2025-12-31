@@ -65,21 +65,7 @@ if (type === 'ATTACK_CONFIRM') {
   const result = await sendAction(type as any, {
     card_id: payload.uuid,
     target_ids: payload.target_ids,
-  });
-
-// src/screens/RealGame.tsx 70行目付近
-
-  logger.log({
-    level: 'info',
-    action: 'debug.attack_response',
-    msg: 'Response after ATTACK_CONFIRM',
-    payload: { 
-      // result を any 型として扱うことで TS2339 エラーを回避
-      pending: (result as any)?.pending_request,
-      turnInfo: (result as any)?.game_state?.turn_info 
-    }
-  });
-
+  }); 
 
   setIsDetailMode(false);
   setSelectedCard(null);
@@ -282,9 +268,16 @@ if (targetCard.uuid.includes('dondeck')) return 'don_deck';     // 追加
         pendingRequest.action === BATTLE_TYPES.SELECT_COUNTER
       ) && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-              [{pendingRequest.action}] {pendingRequest.message}
-            </div>
+
+<div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+  [{pendingRequest.action}] {pendingRequest.message}
+</div>
+<div style={{ fontSize: '12px', color: '#f1c40f', marginBottom: '10px' }}>
+  {gameState?.active_battle 
+    ? `ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}` 
+    : "BATTLE DATA LOADING..."}
+</div>
+
 
           {pendingRequest.can_skip && (
             <button 
