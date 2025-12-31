@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
@@ -24,6 +24,9 @@ export const RealGame = () => {
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
   
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
+  
+  const { COLORS } = LAYOUT_CONSTANTS;
+  const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
@@ -161,7 +164,7 @@ export const RealGame = () => {
     const app = new PIXI.Application({
       width: window.innerWidth,
       height: window.innerHeight,
-      backgroundColor: 0x1a1a1a,
+      backgroundColor: COLORS.APP_BG,
       antialias: true,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
@@ -209,7 +212,7 @@ export const RealGame = () => {
       app.stage.addChild(bg);
 
       const border = new PIXI.Graphics();
-      border.lineStyle(2, 0x000000, 0.3);
+      border.lineStyle(2, COLORS.BORDER_LINE, ALPHA.BORDER_LINE);
       border.moveTo(0, midY);
       border.lineTo(W, midY);
       app.stage.addChild(border);
@@ -246,7 +249,7 @@ export const RealGame = () => {
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
       {isAttackTargeting && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 110, background: 'rgba(231, 76, 60, 0.9)', padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
           攻撃対象を選択してください
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
@@ -255,12 +258,12 @@ export const RealGame = () => {
         pendingRequest.action === BATTLE_TYPES.SELECT_BLOCKER || 
         pendingRequest.action === BATTLE_TYPES.SELECT_COUNTER
       ) && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(0,0,0,0.8)', padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: '2px solid #f1c40f' }}>
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG, padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}` }}>
 
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
             [{pendingRequest.action}] {pendingRequest.message}
           </div>
-          <div style={{ fontSize: '12px', color: '#f1c40f', marginBottom: '10px' }}>
+          <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
             {gameState?.active_battle 
               ? `ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}` 
               : "BATTLE DATA LOADING..."}
@@ -272,7 +275,7 @@ export const RealGame = () => {
               disabled={isPending}
               style={{ 
                 padding: '8px 24px', 
-                backgroundColor: isPending ? '#95a5a6' : '#e74c3c', 
+                backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER, 
                 color: 'white', 
                 border: 'none', 
                 borderRadius: '4px', 
@@ -296,12 +299,12 @@ export const RealGame = () => {
             right: layoutCoords ? 'auto' : '20px',
             transform: 'translateY(-50%)',
             padding: '10px 20px',
-            backgroundColor: isPending ? '#95a5a6' : '#3498db',
+            backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
             color: 'white',
             border: 'none',
             borderRadius: '5px',
             cursor: isPending ? 'not-allowed' : 'pointer',
-            zIndex: 100,
+            zIndex: Z_INDEX.NOTIFICATION,
             fontWeight: 'bold'
           }}
         >

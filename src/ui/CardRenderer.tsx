@@ -1,8 +1,10 @@
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
+import { GAME_UI_CONFIG } from '../game/game.config'; // 背面テキスト参照用
 import { logger } from '../utils/logger';
 
-const { COLORS } = LAYOUT_CONSTANTS;
+const { COLORS, SIZES } = LAYOUT_CONSTANTS;
+const { SHAPE, UI_DETAILS, ALPHA, PHYSICS } = LAYOUT_PARAMS;
 
 export const createCardContainer = (
   card: any,
@@ -20,15 +22,15 @@ export const createCardContainer = (
   }
 
   const g = new PIXI.Graphics();
-  g.lineStyle(2, COLORS.ZONE_BORDER);
+  g.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
   g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
-  g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, 6);
+  g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
   g.endFill();
   container.addChild(g);
 
   const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
     const txt = new PIXI.Text(content, style);
-    const maxWidth = isRest ? ch * 1.1 : cw * 1.1;
+    const maxWidth = isRest ? ch * UI_DETAILS.CARD_TEXT_MAX_WIDTH_RATIO : cw * UI_DETAILS.CARD_TEXT_MAX_WIDTH_RATIO;
 
     if (txt.width > maxWidth) {
       let fullText = content;
@@ -58,32 +60,35 @@ export const createCardContainer = (
     const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
 
     if (card?.cost !== undefined && !isLeader && !isResource) {
-      const cx = -cw / 2 + 10;
-      const cy = -ch / 2 + 10;
-      const costBadge = new PIXI.Graphics().beginFill(0x2c3e50, 0.9).drawCircle(cx, cy, 9).endFill();
+      const cx = -cw / 2 + UI_DETAILS.CARD_BADGE_OFFSET;
+      const cy = -ch / 2 + UI_DETAILS.CARD_BADGE_OFFSET;
+      const costBadge = new PIXI.Graphics()
+        .beginFill(COLORS.BADGE_COST_BG, ALPHA.BADGE_BG)
+        .drawCircle(cx, cy, SHAPE.CORNER_RADIUS_BADGE)
+        .endFill();
       container.addChild(costBadge);
-      addText(`${card.cost}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, cx, cy, 'screen');
+      addText(`${card.cost}`, { fontSize: SIZES.FONT_COST, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
     if (card?.counter !== undefined && card.counter > 0) {
-      const xOffset = isOpponent ? (cw / 2 - 6) : (-cw / 2 + 6);
+      const xOffset = isOpponent ? (cw / 2 - UI_DETAILS.CARD_TEXT_PADDING_X) : (-cw / 2 + UI_DETAILS.CARD_TEXT_PADDING_X);
       const cty = 0; 
-      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, xOffset, cty, -Math.PI / 2);
+      addText(`+${card.counter}`, { fontSize: SIZES.FONT_COUNTER, fill: COLORS.TEXT_COUNTER, fontWeight: 'bold' }, xOffset, cty, -Math.PI / 2);
     }
 
     if (card?.power !== undefined && !isResource) {
       if (isRest) {
-        const posX = -cw / 2 - 6; 
+        const posX = -cw / 2 - UI_DETAILS.CARD_TEXT_PADDING_X; 
         const posY = 0;
-        addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, posX, posY, 'screen');
+        addText(`${card.power}`, { fontSize: SIZES.FONT_POWER, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, posX, posY, 'screen');
       } else {
-        const posY = -ch / 2 - 6;
-        addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY, 'screen');
+        const posY = -ch / 2 - UI_DETAILS.CARD_TEXT_PADDING_X;
+        addText(`${card.power}`, { fontSize: SIZES.FONT_POWER, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY, 'screen');
       }
     }
 
     const nameStyle = { 
-      fontSize: isResource ? 11 : 9, 
+      fontSize: isResource ? SIZES.FONT_NAME_RESOURCE : SIZES.FONT_NAME_NORMAL, 
       fontWeight: 'bold', 
       fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
     };
@@ -92,32 +97,38 @@ export const createCardContainer = (
       addText(cardName, nameStyle, 0, 0, 'screen');
     } else {
       if (isRest) {
-        const posX = cw / 2 + 12;
+        const posX = cw / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
         addText(cardName, nameStyle, posX, 0, 'screen'); 
       } else {
-        const posY = ch / 2 + 12;
+        const posY = ch / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
         addText(cardName, nameStyle, 0, posY, 'screen');
       }
     }
 
     if (card?.attached_don > 0) {
-      const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
-      const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
-      const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 9).endFill();
+      const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET);
+      const by = isOpponent ? (ch / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET) : (-ch / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET);
+      const donBadge = new PIXI.Graphics()
+        .beginFill(COLORS.BADGE_DON_BG, ALPHA.BADGE_BG)
+        .drawCircle(bx, by, SHAPE.CORNER_RADIUS_BADGE)
+        .endFill();
       container.addChild(donBadge);
-      addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by, 'screen');
+      addText(`+${card.attached_don}`, { fontSize: SIZES.FONT_DON, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, bx, by, 'screen');
     }
 
   } else {
-    addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0, 'screen');
+    addText(GAME_UI_CONFIG.TEXT.BACK_SIDE, { fontSize: SIZES.FONT_BACK, fontWeight: 'bold', fill: COLORS.TEXT_LIGHT, align: 'center' }, 0, 0, 'screen');
   }
 
   if (options.count !== undefined && options.count > 0) {
-    const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
-    const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
-    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 9).endFill();
+    const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_OFFSET);
+    const by = isOpponent ? (-ch / 2 + UI_DETAILS.CARD_BADGE_OFFSET) : (ch / 2 - UI_DETAILS.CARD_BADGE_OFFSET);
+    const badge = new PIXI.Graphics()
+        .beginFill(COLORS.BADGE_BG, ALPHA.BADGE_COUNT)
+        .drawCircle(bx, by, SHAPE.CORNER_RADIUS_BADGE)
+        .endFill();
     container.addChild(badge);
-    addText(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by, 'screen');
+    addText(options.count.toString(), { fontSize: SIZES.FONT_COUNT, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by, 'screen');
   }
 
   container.eventMode = 'static';
@@ -134,7 +145,7 @@ export const createCardContainer = (
     const dy = e.global.y - pointerDownPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist > 10) {
+    if (dist > PHYSICS.TAP_THRESHOLD) {
       return;
     }
 

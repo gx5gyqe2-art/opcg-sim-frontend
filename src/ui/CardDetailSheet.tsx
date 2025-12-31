@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 
 interface CardDetailSheetProps {
-  card: CardInstance & { cards?: CardInstance[] }; // cardsプロパティ（トラッシュの中身等）を許容
+  card: CardInstance & { cards?: CardInstance[] };
   location: string;
   isMyTurn: boolean; 
   onAction: (type: string, payload: any) => Promise<void>;
@@ -12,6 +13,9 @@ interface CardDetailSheetProps {
 }
 
 export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, onAction, onClose }) => {
+  const { COLORS } = LAYOUT_CONSTANTS;
+  const { UI_DETAILS, Z_INDEX, SHAPE, SHADOWS } = LAYOUT_PARAMS;
+
   useEffect(() => {
     logger.log({
       level: 'debug',
@@ -37,25 +41,25 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     const btns: React.ReactElement[] = [];
     if (isMyTurn && location === 'hand') {
       btns.push(
-        <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
+        <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle(COLORS.BTN_SUCCESS, COLORS.TEXT_LIGHT)}>
           登場させる
         </button>
       );
     }
     if (isMyTurn && (location === 'field' || location === 'leader')) {
       btns.push(
-        <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
+        <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle(COLORS.BTN_DANGER, COLORS.TEXT_LIGHT)}>
           攻撃する
         </button>
       );
       btns.push(
-        <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle("#f1c40f", "#333")}>
+        <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>
           ドン!!付与 (+1)
         </button>
       );
       if ('text' in card && card.text?.includes('起動メイン')) {
         btns.push(
-          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
+          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle(COLORS.BTN_PRIMARY, COLORS.TEXT_LIGHT)}>
             効果起動
           </button>
         );
@@ -64,7 +68,47 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     return btns;
   };
 
-  // --- トラッシュ等のリスト表示モード ---
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: COLORS.OVERLAY_MODAL_BG,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    zIndex: Z_INDEX.SHEET
+  };
+
+  const sheetStyle: React.CSSProperties = {
+    backgroundColor: 'white',
+    width: '100%',
+    maxWidth: UI_DETAILS.MODAL_MAX_WIDTH,
+    padding: '24px',
+    borderRadius: SHAPE.CORNER_RADIUS_MODAL,
+    boxShadow: SHADOWS.MODAL,
+    boxSizing: 'border-box'
+  };
+
+  const btnStyle = (bg: string, color: string | number): React.CSSProperties => ({
+    padding: '14px',
+    borderRadius: SHAPE.CORNER_RADIUS_BTN,
+    border: 'none',
+    backgroundColor: bg,
+    color: String(color),
+    fontWeight: 'bold',
+    fontSize: '1rem',
+    cursor: 'pointer',
+    width: '100%'
+  });
+
+  const badgeStyle = (bg: string): React.CSSProperties => ({
+    backgroundColor: bg,
+    color: 'white',
+    padding: '2px 8px',
+    borderRadius: SHAPE.CORNER_RADIUS_SHEET_BADGE,
+    fontSize: '0.7rem',
+    fontWeight: 'bold'
+  });
+
   if (card.cards && card.cards.length > 0) {
     return (
       <div style={overlayStyle} onClick={onClose}>
@@ -77,32 +121,28 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             {card.cards.map((c, idx) => (
               <div key={idx} style={{ 
                 border: '1px solid #ccc', borderRadius: '4px', padding: '4px', 
-                width: '80px', height: '110px', fontSize: '0.7rem', 
+                width: UI_DETAILS.THUMBNAIL_WIDTH, height: UI_DETAILS.THUMBNAIL_HEIGHT, fontSize: '0.7rem', 
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                 backgroundColor: '#fff'
               }}>
                 <div style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                
-                {/* 修正: String()で明示的に文字列化し、(c as any)で型エラーを回避 */}
-                <div style={{ textAlign: 'center', fontSize: '1rem', color: '#e74c3c' }}>
+                <div style={{ textAlign: 'center', fontSize: '1rem', color: COLORS.BTN_DANGER }}>
                   {'power' in c ? String((c as any).power) : '-'}
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#666' }}>
                   {'type' in c ? String((c as any).type) : ''}
                 </div>
-                
               </div>
             ))}
           </div>
           <div style={{ marginTop: '10px' }}>
-            <button onClick={onClose} style={btnStyle("#95a5a6", "white")}>閉じる</button>
+            <button onClick={onClose} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>閉じる</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // --- 通常の詳細表示モード ---
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
@@ -112,10 +152,10 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999' }}>×</button>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <span style={badgeStyle('#333')}>{location.toUpperCase()}</span>
-            {'attribute' in card && card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
+            <span style={badgeStyle(COLORS.BADGE_LOC)}>{location.toUpperCase()}</span>
+            {'attribute' in card && card.attribute && <span style={badgeStyle(COLORS.BADGE_ATTR)}>{card.attribute}</span>}
             {'traits' in card && card.traits && card.traits.map((trait: string, idx: number) => (
-              <span key={idx} style={badgeStyle('#34495e')}>{trait}</span>
+              <span key={idx} style={badgeStyle(COLORS.BADGE_TRAIT)}>{trait}</span>
             ))}
           </div>
           <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
@@ -132,50 +172,9 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {renderButtons()}
-          <button onClick={onClose} style={btnStyle("#95a5a6", "white")}>閉じる</button>
+          <button onClick={onClose} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>閉じる</button>
         </div>
       </div>
     </div>
   );
 };
-
-const badgeStyle = (bg: string): React.CSSProperties => ({
-  backgroundColor: bg,
-  color: 'white',
-  padding: '2px 8px',
-  borderRadius: '4px',
-  fontSize: '0.7rem',
-  fontWeight: 'bold'
-});
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0, left: 0, right: 0, bottom: 0,
-  backgroundColor: 'rgba(0,0,0,0.5)',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'flex-end',
-  zIndex: 2000
-};
-
-const sheetStyle: React.CSSProperties = {
-  backgroundColor: 'white',
-  width: '100%',
-  maxWidth: '500px',
-  padding: '24px',
-  borderRadius: '20px 20px 0 0',
-  boxShadow: '0 -4px 16px rgba(0,0,0,0.2)',
-  boxSizing: 'border-box'
-};
-
-const btnStyle = (bg: string, color: string): React.CSSProperties => ({
-  padding: '14px',
-  borderRadius: '12px',
-  border: 'none',
-  backgroundColor: bg,
-  color: color,
-  fontWeight: 'bold',
-  fontSize: '1rem',
-  cursor: 'pointer',
-  width: '100%'
-});

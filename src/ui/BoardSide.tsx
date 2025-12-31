@@ -2,7 +2,8 @@ import * as PIXI from 'pixi.js';
 import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
 import type { PlayerState, CardInstance, BoardCard } from '../game/types';
-import { logger } from '../utils/logger'; // loggerをインポート
+import { logger } from '../utils/logger';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 
 export const createBoardSide = (
   p: PlayerState, 
@@ -13,6 +14,8 @@ export const createBoardSide = (
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
+  const { COLORS } = LAYOUT_CONSTANTS;
+  const { PHYSICS, ALPHA } = LAYOUT_PARAMS;
 
   const getAdjustedY = (row: number) => {
     const offset = coords.getY(row);
@@ -28,8 +31,6 @@ export const createBoardSide = (
     isOpponent: isOpponent 
   });
 
-  // ★追加: デバッグ用ログ (フィールドのカード情報を確認)
-  // ブラウザのコンソール(F12)で、typeが何になっているか確認してください
   if (z.field && z.field.length > 0 && !isOpponent) {
      logger.log({
       level: 'info',
@@ -41,13 +42,10 @@ export const createBoardSide = (
     });
   }
 
-  // ★修正: ステージカードの抽出とフィールドカードの分離
   let stageCard = p.stage;
   let fieldCards = [...(z.field || [])]; 
 
   if (!stageCard) {
-    // 明示的なstageがない場合、フィールド内から type='STAGE' を探す
-    // ★修正: 大文字小文字を無視して判定
     const sIdx = fieldCards.findIndex(c => {
         const t = c.type?.toUpperCase();
         return t === 'STAGE' || t === 'ステージ';
@@ -55,12 +53,11 @@ export const createBoardSide = (
 
     if (sIdx >= 0) {
       stageCard = fieldCards[sIdx];
-      // フィールドリストからは除外（2重表示防止）
       fieldCards.splice(sIdx, 1);
     }
   }
 
-  // Row 1: フィールド (ステージを除いたカードを描画)
+  // Row 1: フィールド
   fieldCards.forEach((c: BoardCard, i: number) => {
     const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
     card.x = coords.getFieldX(i, W, coords.CW, fieldCards.length);
@@ -80,7 +77,7 @@ export const createBoardSide = (
     side.addChild(ldr);
   }
 
-  // ステージカードの描画
+  // ステージ
   if (stageCard) {
     const stg = createCardContainer(stageCard, coords.CW, coords.CH, getCardOpts(stageCard));
     stg.x = coords.getStageX(W);
@@ -177,7 +174,7 @@ export const createBoardSide = (
     const handAreaH = coords.CH * 2; 
     const maskTopOffset = coords.CH; 
     const mask = new PIXI.Graphics();
-    mask.beginFill(0xffffff);
+    mask.beginFill(COLORS.MASK_FILL);
     mask.drawRect(0, r4Y - maskTopOffset, W, handAreaH); 
     mask.endFill();
     side.addChild(mask);
@@ -196,7 +193,7 @@ export const createBoardSide = (
       innerHand.addChild(card);
       
       if (i === handList.length - 1) {
-        totalHandWidth = xPos + coords.CW + 20;
+        totalHandWidth = xPos + coords.CW + PHYSICS.HAND_DRAG_PADDING;
       }
     });
 
@@ -216,21 +213,21 @@ export const createBoardSide = (
         if (Math.abs(velocity) < 0.1) {
             const minX = W - totalHandWidth;
             if (innerHand.x > 0) {
-                innerHand.x += (0 - innerHand.x) * 0.2;
+                innerHand.x += (0 - innerHand.x) * PHYSICS.HAND_EASE;
                 if (Math.abs(innerHand.x) < 1) innerHand.x = 0;
             } else if (innerHand.x < minX) {
-                innerHand.x += (minX - innerHand.x) * 0.2;
+                innerHand.x += (minX - innerHand.x) * PHYSICS.HAND_EASE;
                 if (Math.abs(innerHand.x - minX) < 1) innerHand.x = minX;
             }
             return;
         }
 
         innerHand.x += velocity;
-        velocity *= 0.92;
+        velocity *= PHYSICS.HAND_FRICTION;
 
         const minX = W - totalHandWidth;
         if (innerHand.x > 0 || innerHand.x < minX) {
-            velocity *= 0.5;
+            velocity *= PHYSICS.HAND_BOUNCE;
         }
       };
       
