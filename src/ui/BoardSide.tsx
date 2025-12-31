@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
 import type { PlayerState, CardInstance, BoardCard } from '../game/types';
+import { logger } from '../utils/logger'; // loggerをインポート
 
 export const createBoardSide = (
   p: PlayerState, 
@@ -27,13 +28,31 @@ export const createBoardSide = (
     isOpponent: isOpponent 
   });
 
+  // ★追加: デバッグ用ログ (フィールドのカード情報を確認)
+  // ブラウザのコンソール(F12)で、typeが何になっているか確認してください
+  if (z.field && z.field.length > 0 && !isOpponent) {
+     logger.log({
+      level: 'info',
+      action: 'ui.debug_field_cards',
+      msg: `Field Check for ${p.player_id}`,
+      payload: { 
+        cards: z.field.map(c => ({ name: c.name, type: c.type, uuid: c.uuid }))
+      }
+    });
+  }
+
   // ★修正: ステージカードの抽出とフィールドカードの分離
   let stageCard = p.stage;
-  let fieldCards = [...(z.field || [])]; // 配列をコピーして加工可能にする
+  let fieldCards = [...(z.field || [])]; 
 
   if (!stageCard) {
     // 明示的なstageがない場合、フィールド内から type='STAGE' を探す
-    const sIdx = fieldCards.findIndex(c => c.type === 'STAGE' || c.type === 'ステージ');
+    // ★修正: 大文字小文字を無視して判定
+    const sIdx = fieldCards.findIndex(c => {
+        const t = c.type?.toUpperCase();
+        return t === 'STAGE' || t === 'ステージ';
+    });
+
     if (sIdx >= 0) {
       stageCard = fieldCards[sIdx];
       // フィールドリストからは除外（2重表示防止）
@@ -61,7 +80,7 @@ export const createBoardSide = (
     side.addChild(ldr);
   }
 
-  // ステージカードの描画 (存在する場合のみ)
+  // ステージカードの描画
   if (stageCard) {
     const stg = createCardContainer(stageCard, coords.CW, coords.CH, getCardOpts(stageCard));
     stg.x = coords.getStageX(W);
@@ -191,13 +210,10 @@ export const createBoardSide = (
       let velocity = 0;
       let containerStartX = 0;
 
-      // ★修正: 慣性ループ用のTicker
       const inertiaTicker = () => {
         if (isDragging) return;
         
-        // 速度が十分小さい場合は停止
         if (Math.abs(velocity) < 0.1) {
-            // 境界外にいる場合は戻すアニメーション（簡易的にlerp）
             const minX = W - totalHandWidth;
             if (innerHand.x > 0) {
                 innerHand.x += (0 - innerHand.x) * 0.2;
@@ -209,14 +225,12 @@ export const createBoardSide = (
             return;
         }
 
-        // 慣性移動
         innerHand.x += velocity;
-        velocity *= 0.92; // 減衰率
+        velocity *= 0.92;
 
-        // 境界チェック（バウンス効果）
         const minX = W - totalHandWidth;
         if (innerHand.x > 0 || innerHand.x < minX) {
-            velocity *= 0.5; // 端に達したら急減速
+            velocity *= 0.5;
         }
       };
       
@@ -252,7 +266,6 @@ export const createBoardSide = (
         let newX = containerStartX + dx;
 
         const minX = W - totalHandWidth;
-        // 端での抵抗感
         if (newX > 0) {
             newX = newX * 0.5;
         } else if (newX < minX) {
