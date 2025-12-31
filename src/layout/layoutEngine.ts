@@ -5,7 +5,7 @@ export interface LayoutCoords {
   CH: number;
   CW: number;
   V_GAP: number;
-  midY: number; // 画面中央のY座標を追加
+  midY: number; // 画面中央のY座標
   turnEndPos: { x: number; y: number };
   getLifeX: (width: number) => number;
   getLeaderX: (width: number) => number;
@@ -17,7 +17,7 @@ export interface LayoutCoords {
   getTrashX: (width: number) => number;
   getFieldX: (i: number, width: number, cardWidth: number, totalCards: number) => number;
   getHandX: (i: number, width: number) => number;
-  getY: (row: number) => number; // 引数をシンプル化
+  getY: (row: number) => number; 
 }
 
 export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
@@ -39,9 +39,6 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   const CW = CH / P.CARD.ASPECT_RATIO;
   const V_GAP = CH * P.SPACING.V_GAP_RATIO;
   
-  // コントロールUI（ボタン類）の開始位置ではなく、レイアウトの基準となるY
-  const Y_CTRL_START = SIZES.MARGIN_TOP + availHeight; // 未使用なら削除検討だが互換性のため維持
-
   const validateCoordinate = (val: number, label: string) => {
     if (isNaN(val)) {
       logger.warn('layout.calculation_anomaly', `NaN detected for ${label}`, { W, H });
@@ -51,7 +48,7 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   };
 
   return {
-    CH, CW, V_GAP, midY, Y_CTRL_START,
+    CH, CW, V_GAP, midY,
     turnEndPos: {
       x: validateCoordinate(W - P.SPACING.TURN_END_BTN_X_OFFSET, 'turnEndPos.x'),
       // ボタンも境界線(midY)に合わせて配置
@@ -71,14 +68,13 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
       const startX = (width - totalW) / 2 + P.FIELD.X_OFFSET; 
       return validateCoordinate(startX + i * (cardWidth + P.FIELD.GAP), `fieldX_${i}`);
     },
-    // 手札X座標: スクロール前提なので、単純に並べる（画面外に出てもOK）
+    // 手札X座標: スクロール前提なので、単純に並べる
     getHandX: (i, width) => {
       // P.HAND.X_START_RATIO を基準に開始
       const startX = width * P.HAND.X_START_RATIO;
       return validateCoordinate(startX + (i * CW * P.HAND.OVERLAP_RATIO), `handX_${i}`);
     },
     // Y座標計算: Row 1 (Field) を基準(0)として、下に向かって配置する相対座標を返す
-    // BoardSideでこれを「自分ならmidYから下へ」「相手ならmidYから上へ」展開する
     getY: (row) => {
       // Row 1: Field, Row 2: Leader/Life, Row 3: Don/Trash, Row 4: Hand
       // マージン + (行番号 - 1) * (カード高さ + ギャップ)
