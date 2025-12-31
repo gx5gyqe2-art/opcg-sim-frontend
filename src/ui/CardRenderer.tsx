@@ -29,7 +29,6 @@ export const createCardContainer = (
   container.addChild(g);
 
   // --- 3. テキスト描画ヘルパー ---
-  // rotationMode: 'screen'なら画面に対して水平(正位置)、'card'ならカード固定
   const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
     const txt = new PIXI.Text(content, style);
     const maxWidth = isRest ? ch * 1.1 : cw * 1.1;
@@ -46,13 +45,10 @@ export const createCardContainer = (
     txt.position.set(x, y);
     
     if (rotationMode === 'screen') {
-      // 画面に対して常に水平 (コンテナの回転をキャンセル)
       txt.rotation = -container.rotation;
     } else if (rotationMode === 'card') {
-      // カードに対して固定 (回転なし)
       txt.rotation = 0;
     } else {
-      // 指定角度 (カード相対)
       txt.rotation = rotationMode;
     }
     
@@ -64,34 +60,29 @@ export const createCardContainer = (
     const cardName = card?.name || "";
     const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName);
 
-    // ■ コスト (左上固定)
+    // ■ コスト (左上)
     if (card?.cost !== undefined) {
       const cx = -cw / 2 + 10;
       const cy = -ch / 2 + 10;
       const costBadge = new PIXI.Graphics().beginFill(0x2c3e50, 0.9).drawCircle(cx, cy, 9).endFill();
       container.addChild(costBadge);
-      // コストは正円バッジの中なので、画面に対して正位置で見せる
       addText(`${card.cost}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
-    // ■ カウンター
-    // ユーザー要望「カウンター値はOK」 -> カードの左辺に沿って配置
+    // ■ カウンター (左辺中央)
     if (card?.counter !== undefined && card.counter > 0) {
       const ctx = -cw / 2 + 6;
       const cty = 0; 
-      // カードに対して -90度（左向き）に固定
-      // 縦向き時: 垂直
-      // レスト時: 画面上部で水平に見える
       addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, -Math.PI / 2);
     }
 
-    // ■ パワー (正位置で表示)
+    // ■ パワー (上辺中央)
     if (card?.power !== undefined && !isResource) {
       if (isRest) {
-        // 【レスト時】カードの「左辺（画面の上側）」に配置
-        // Y軸を少しずらしてカウンターと重ならないようにする
+        // 【レスト時】カードの「左辺（画面の上側）」かつ「中央」に配置
+        // Y=0 にすることで、画面上での横位置(X)が中心になります
         const posX = -cw / 2 - 12; // カード左辺の外側 (画面上)
-        const posY = -ch / 4;      // 左辺の上寄り (画面右上)
+        const posY = 0;            // 左辺の中央 (名前と軸を合わせる)
         addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, posX, posY, 'screen');
       } else {
         // 【通常時】カードの上辺
@@ -100,7 +91,7 @@ export const createCardContainer = (
       }
     }
 
-    // ■ 名前 (正位置で表示)
+    // ■ 名前 (下辺中央)
     const nameStyle = { 
       fontSize: isResource ? 11 : 9, 
       fontWeight: 'bold', 
