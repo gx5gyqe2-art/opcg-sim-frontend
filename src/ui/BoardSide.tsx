@@ -16,11 +16,8 @@ export const createBoardSide = (
   const getAdjustedY = (row: number) => {
     const offset = coords.getY(row);
     if (!isOpponent) {
-      // 自分: 境界線(midY)から下へ
       return offset;
     } else {
-      // 相手: 境界線(midY)から上へ
-      // 修正: 余分な "- coords.CH" を削除して画面内に収める
       return coords.midY - offset;
     }
   };
@@ -120,7 +117,6 @@ export const createBoardSide = (
   // 手札処理
   const handList = z.hand || [];
 
-  // --- 相手の手札 (シンプル配置) ---
   if (isOpponent) {
     handList.forEach((c: CardInstance, i: number) => {
       const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
@@ -128,19 +124,18 @@ export const createBoardSide = (
       card.y = r4Y;
       side.addChild(card);
     });
-  } 
-  // --- 自分の手札 (スクロール対応) ---
-  else {
+  } else {
+    // 自分の手札（スクロール対応）
     const handContainer = new PIXI.Container();
     handContainer.y = r4Y;
     
     // マスク（表示領域）設定
-    // 修正: カードの中心(0)ではなく、上端(-CH/2)から描画エリアを確保
-    const handAreaH = coords.CH * 1.5; // 少し余裕を持たせる
+    // 修正: 上方向へ領域を拡張 (-10 -> -30) してパワー表示が見切れないようにする
+    const handAreaH = coords.CH * 1.5; 
+    const maskTopOffset = 30; // パワー表示用の余白
     const mask = new PIXI.Graphics();
     mask.beginFill(0xffffff);
-    // sideコンテナ基準での座標を指定
-    mask.drawRect(0, r4Y - coords.CH / 2 - 10, W, handAreaH); 
+    mask.drawRect(0, r4Y - coords.CH / 2 - maskTopOffset, W, handAreaH); 
     mask.endFill();
     side.addChild(mask);
     handContainer.mask = mask;
@@ -154,7 +149,7 @@ export const createBoardSide = (
       const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
       const xPos = coords.getHandX(i, W);
       card.x = xPos;
-      card.y = 0; // コンテナ内相対座標
+      card.y = 0;
       innerHand.addChild(card);
       
       if (i === handList.length - 1) {
@@ -162,7 +157,6 @@ export const createBoardSide = (
       }
     });
 
-    // スクロールロジック
     if (totalHandWidth > W) {
       handContainer.eventMode = 'static';
       handContainer.cursor = 'grab';
