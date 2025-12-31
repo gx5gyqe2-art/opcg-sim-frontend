@@ -1,12 +1,7 @@
 import type { GameState } from '../game/types';
 
-export type ActionType = 
-  | 'PLAY_CARD' 
-  | 'ATTACK' 
-  | 'ACTIVATE' 
-  | 'ATTACH_DON' 
-  | 'END_TURN' 
-  | 'RESOLVE_INPUT';
+// 定数ファイルの値を受け入れられるように string 型に変更
+export type ActionType = string;
 
 export interface PendingRequest {
   request_id: string;
@@ -33,7 +28,8 @@ export interface GameActionRequest {
 export interface BattleActionRequest {
   game_id: string;
   player_id: string;
-  action_type: 'COUNTER' | 'BLOCK' | 'PASS';
+  // ここも厳密なユニオン型から string に変更して CONST の値を受け入れる
+  action_type: string;
   card_uuid?: string;
   request_id: string;
 }
