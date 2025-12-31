@@ -16,9 +16,13 @@ export const createBoardSide = (
   const getAdjustedY = (row: number) => {
     const offset = coords.getY(row);
     if (!isOpponent) {
-      return offset;
+      // 自分: midY から下へ配置
+      // カードの中心(CH/2)分だけ下にずらして、カードの上辺がoffset位置に来るようにする
+      return offset + coords.CH / 2;
     } else {
-      return coords.midY - offset;
+      // 相手: midY から上へ配置
+      // midY - offset でカードの下辺位置を決め、そこから CH/2 上にずらして中心を合わせる
+      return coords.midY - offset - coords.CH / 2;
     }
   };
 
@@ -106,7 +110,7 @@ export const createBoardSide = (
   const donRestList = (p as any).don_rested || [];
   const donRestCount = donRestList.length;
   const donRest = createCardContainer(
-    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any, 
+    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any), count: donRestCount }
@@ -130,12 +134,12 @@ export const createBoardSide = (
     handContainer.y = r4Y;
     
     // マスク（表示領域）設定
-    // 修正: 上方向へ領域を拡張 (-10 -> -30) してパワー表示が見切れないようにする
-    const handAreaH = coords.CH * 1.5; 
-    const maskTopOffset = 30; // パワー表示用の余白
+    // カード中心から上下に余裕を持たせる
+    const handAreaH = coords.CH * 2; 
+    const maskTopOffset = coords.CH; 
     const mask = new PIXI.Graphics();
     mask.beginFill(0xffffff);
-    mask.drawRect(0, r4Y - coords.CH / 2 - maskTopOffset, W, handAreaH); 
+    mask.drawRect(0, r4Y - maskTopOffset, W, handAreaH); 
     mask.endFill();
     side.addChild(mask);
     handContainer.mask = mask;
