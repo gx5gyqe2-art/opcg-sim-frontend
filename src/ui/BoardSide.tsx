@@ -16,13 +16,12 @@ export const createBoardSide = (
   const getAdjustedY = (row: number) => {
     const offset = coords.getY(row);
     if (!isOpponent) {
-      // 自分: midY から下へ配置
-      // カードの中心(CH/2)分だけ下にずらして、カードの上辺がoffset位置に来るようにする
-      return offset + coords.CH / 2;
+      // 自分: 境界線(midY)から下へ
+      return offset;
     } else {
-      // 相手: midY から上へ配置
-      // midY - offset でカードの下辺位置を決め、そこから CH/2 上にずらして中心を合わせる
-      return coords.midY - offset - coords.CH / 2;
+      // 相手: 境界線(midY)から上へ
+      // 修正: 余分な "- coords.CH" を削除して画面内に収める
+      return coords.midY - offset;
     }
   };
 
@@ -110,7 +109,7 @@ export const createBoardSide = (
   const donRestList = (p as any).don_rested || [];
   const donRestCount = donRestList.length;
   const donRest = createCardContainer(
-    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true } as any, 
+    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any), count: donRestCount }
@@ -121,6 +120,7 @@ export const createBoardSide = (
   // 手札処理
   const handList = z.hand || [];
 
+  // --- 相手の手札 (シンプル配置) ---
   if (isOpponent) {
     handList.forEach((c: CardInstance, i: number) => {
       const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
@@ -128,18 +128,19 @@ export const createBoardSide = (
       card.y = r4Y;
       side.addChild(card);
     });
-  } else {
-    // 自分の手札（スクロール対応）
+  } 
+  // --- 自分の手札 (スクロール対応) ---
+  else {
     const handContainer = new PIXI.Container();
     handContainer.y = r4Y;
     
     // マスク（表示領域）設定
-    // カード中心から上下に余裕を持たせる
-    const handAreaH = coords.CH * 2; 
-    const maskTopOffset = coords.CH; 
+    // 修正: カードの中心(0)ではなく、上端(-CH/2)から描画エリアを確保
+    const handAreaH = coords.CH * 1.5; // 少し余裕を持たせる
     const mask = new PIXI.Graphics();
     mask.beginFill(0xffffff);
-    mask.drawRect(0, r4Y - maskTopOffset, W, handAreaH); 
+    // sideコンテナ基準での座標を指定
+    mask.drawRect(0, r4Y - coords.CH / 2 - 10, W, handAreaH); 
     mask.endFill();
     side.addChild(mask);
     handContainer.mask = mask;
@@ -153,7 +154,7 @@ export const createBoardSide = (
       const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
       const xPos = coords.getHandX(i, W);
       card.x = xPos;
-      card.y = 0;
+      card.y = 0; // コンテナ内相対座標
       innerHand.addChild(card);
       
       if (i === handList.length - 1) {
@@ -161,6 +162,7 @@ export const createBoardSide = (
       }
     });
 
+    // スクロールロジック
     if (totalHandWidth > W) {
       handContainer.eventMode = 'static';
       handContainer.cursor = 'grab';

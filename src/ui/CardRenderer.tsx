@@ -58,12 +58,10 @@ export const createCardContainer = (
   // --- 4. コンテンツ配置ロジック ---
   if (!isBack) {
     const cardName = card?.name || "";
-    // 修正: "Don!!" から始まる名前もリソースとして扱う
-    const isResource = ['Trash', 'Deck', 'Life', 'Stage'].includes(cardName) || cardName.startsWith('Don!!');
-    const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
+    const isResource = ['DON!!', 'Trash', 'Deck', 'Don!!', 'Life', 'Stage'].includes(cardName);
 
-    // ■ コスト (左上) - リーダーは表示しない
-    if (card?.cost !== undefined && !isLeader) {
+    // ■ コスト (左上)
+    if (card?.cost !== undefined) {
       const cx = -cw / 2 + 10;
       const cy = -ch / 2 + 10;
       const costBadge = new PIXI.Graphics().beginFill(0x2c3e50, 0.9).drawCircle(cx, cy, 9).endFill();
@@ -71,21 +69,24 @@ export const createCardContainer = (
       addText(`${card.cost}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
-    // ■ カウンター (自分:左辺 / 相手:右辺)
+    // ■ カウンター (左辺中央)
     if (card?.counter !== undefined && card.counter > 0) {
-      const xOffset = isOpponent ? (cw / 2 - 6) : (-cw / 2 + 6);
+      const ctx = -cw / 2 + 6;
       const cty = 0; 
-      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, xOffset, cty, -Math.PI / 2);
+      addText(`+${card.counter}`, { fontSize: 9, fill: 0xe67e22, fontWeight: 'bold' }, ctx, cty, -Math.PI / 2);
     }
 
     // ■ パワー (上辺中央)
     if (card?.power !== undefined && !isResource) {
       if (isRest) {
-        const posX = -cw / 2 - 6; 
-        const posY = 0;
+        // 【レスト時】カードの「左辺（画面の上側）」かつ「中央」に配置
+        // Y=0 にすることで、画面上での横位置(X)が中心になります
+        const posX = -cw / 2 - 12; // カード左辺の外側 (画面上)
+        const posY = 0;            // 左辺の中央 (名前と軸を合わせる)
         addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, posX, posY, 'screen');
       } else {
-        const posY = -ch / 2 - 6;
+        // 【通常時】カードの上辺
+        const posY = -ch / 2 - 12;
         addText(`${card.power}`, { fontSize: 11, fill: COLORS.TEXT_POWER, fontWeight: 'bold' }, 0, posY, 'screen');
       }
     }
@@ -98,14 +99,15 @@ export const createCardContainer = (
     };
 
     if (isResource) {
-      // リソースカードは中央に名前を表示
       addText(cardName, nameStyle, 0, 0, 'screen');
     } else {
       if (isRest) {
-        const posX = cw / 2 + 12;
+        // 【レスト時】カードの「右辺（画面の下側）」に配置
+        const posX = cw / 2 + 4; // カード右辺の外側 (画面下)
         addText(cardName, nameStyle, posX, 0, 'screen'); 
       } else {
-        const posY = ch / 2 + 12;
+        // 【通常時】カードの下辺
+        const posY = ch / 2 + 4;
         addText(cardName, nameStyle, 0, posY, 'screen');
       }
     }
@@ -114,12 +116,13 @@ export const createCardContainer = (
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + 8) : (cw / 2 - 8);
       const by = isOpponent ? (ch / 2 - 8) : (-ch / 2 + 8);
-      const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 9).endFill();
+      const donBadge = new PIXI.Graphics().beginFill(0x9370DB, 0.9).drawCircle(bx, by, 10).endFill();
       container.addChild(donBadge);
       addText(`+${card.attached_don}`, { fontSize: 10, fill: 0xFFFFFF, fontWeight: 'bold' }, bx, by, 'screen');
     }
 
   } else {
+    // 裏面
     addText("ONE\nPIECE", { fontSize: 8, fontWeight: 'bold', fill: 0xFFFFFF, align: 'center' }, 0, 0, 'screen');
   }
 
@@ -127,7 +130,7 @@ export const createCardContainer = (
   if (options.count && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + 10) : (cw / 2 - 10);
     const by = isOpponent ? (-ch / 2 + 10) : (ch / 2 - 10);
-    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 9).endFill();
+    const badge = new PIXI.Graphics().beginFill(COLORS.BADGE_BG, 0.8).drawCircle(bx, by, 12).endFill();
     container.addChild(badge);
     addText(options.count.toString(), { fontSize: 12, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by, 'screen');
   }
