@@ -17,6 +17,8 @@ export const RealGame = () => {
     card: CardInstance;
     location: string;
     isMyTurn: boolean;
+    // 追加: カードリスト（トラッシュ用）
+    cardList?: CardInstance[];
   } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
@@ -35,8 +37,7 @@ export const RealGame = () => {
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
-    // 定数を使用
-    if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK) {
+    if (type === 'ATTACK') {
       setAttackingCardUuid(payload.uuid || null);
       setIsAttackTargeting(true);
       setIsDetailMode(false);
@@ -44,7 +45,6 @@ export const RealGame = () => {
     }
 
     if (pendingRequest) {
-      // UIから渡されるタイプをバックエンドの期待する型に変換
       const battleTypes: Record<string, string> = {
         'COUNTER': CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER,
         'BLOCK': CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_BLOCKER
@@ -58,8 +58,7 @@ export const RealGame = () => {
       }
     }
     
-    // 定数を使用: ATTACK_CONFIRM
-    if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM) {
+    if (type === 'ATTACK_CONFIRM') {
       await sendAction(type as any, {
         card_id: payload.uuid,
         target_ids: payload.target_ids,
@@ -83,7 +82,7 @@ export const RealGame = () => {
     if (!pendingRequest || !gameState?.game_id || isPending) return;
     const currentRequestId = pendingRequest.request_id;
     setPendingRequest(null);
-    await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
+    await sendBattleAction('PASS', undefined, currentRequestId);
   };
 
   const handleTurnEnd = () => {
@@ -93,15 +92,14 @@ export const RealGame = () => {
   const onCardClick = async (card: CardInstance) => { 
     if (isPending || !gameState) return;
 
-    // アタックターゲット選択中の確定処理
     if (isAttackTargeting && attackingCardUuid) {
-      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, { 
+      await handleAction('ATTACK_CONFIRM', { 
         uuid: attackingCardUuid, 
         target_ids: [card.uuid] 
       });
       setIsAttackTargeting(false);
       setAttackingCardUuid(null);
-      return;
+      return; 
     }
 
     let currentLoc = 'unknown';
@@ -151,10 +149,21 @@ export const RealGame = () => {
       payload: { uuid: card.uuid, activePlayerId, currentLoc }
     });
 
+    // トラッシュクリック時の特別処理
+    let trashList: CardInstance[] | undefined = undefined;
+    if (card.uuid.startsWith('trash-')) {
+      const ownerId = card.uuid.split('-')[1]; // trash-p1 -> p1
+      const ownerState = gameState.players[ownerId as 'p1' | 'p2'];
+      if (ownerState) {
+        trashList = ownerState.zones.trash;
+      }
+    }
+
     setSelectedCard({ 
       card, 
       location: currentLoc, 
-      isMyTurn: isOperatable 
+      isMyTurn: isOperatable,
+      cardList: trashList // トラッシュの場合はリストを渡す
     }); 
     setIsDetailMode(true); 
   };
@@ -273,41 +282,8 @@ export const RealGame = () => {
           )}
         </div>
       )}
-      {pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN && (
-        // Note: ACTION名が ACTIVATE_MAIN ではなく MAIN_ACTION として返ってくる場合は適宜調整が必要です
-        // gamestate.py では MAIN_ACTION で返しているロジックがありましたが、
-        // CONSTには MAIN_ACTION がないので、バックエンド側の実装に合わせて修正が必要かもしれません。
-        // ここではとりあえず既存コードの意図を汲みつつ、PendingMessageの確認などに留めます。
-        // 実装上は 'MAIN_ACTION' という文字列が返ってきていたので、条件分岐としては 'MAIN_ACTION' のままか
-        // もしくはバックエンド側を定数化して合わせる必要があります。
-        // 今回はベタ書き排除が目的なので、ひとまず既存の条件 'MAIN_ACTION' はそのまま残すか、
-        // バックエンドが返す値が定数化されているならそれに合わせます。
-        // ※ gamestate.py の修正で KEY_ACTION: "MAIN_ACTION" としていたため、文字列リテラルのまま維持します。
-        <button 
-          onClick={handleTurnEnd}
-          disabled={isPending}
-          style={{
-            position: 'absolute',
-            right: '20px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            padding: '10px 20px',
-            backgroundColor: isPending ? '#95a5a6' : '#3498db',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: isPending ? 'not-allowed' : 'pointer',
-            zIndex: 100,
-            fontWeight: 'bold'
-          }}
-        >
-          {isPending ? '送信中...' : 'ターン終了'}
-        </button>
-      )}
-      
-      {/* PendingRequestのAction名が MAIN_ACTION の場合のフォールバック（gamestate.pyの実装に合わせる） */}
       {pendingRequest?.action === 'MAIN_ACTION' && (
-         <button 
+        <button 
           onClick={handleTurnEnd}
           disabled={isPending}
           style={{
@@ -339,6 +315,7 @@ export const RealGame = () => {
           setIsDetailMode(false);
           setSelectedCard(null);
         }}
+        cardList={selectedCard.cardList} // 追加
       />
     )}
     </div>

@@ -9,17 +9,19 @@ interface CardDetailSheetProps {
   isMyTurn: boolean; 
   onAction: (type: string, payload: any) => Promise<void>;
   onClose: () => void;
+  // 追加: カードリスト（トラッシュ一覧などを表示する場合）
+  cardList?: CardInstance[];
 }
 
-export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, onAction, onClose }) => {
+export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, onAction, onClose, cardList }) => {
   useEffect(() => {
     logger.log({
       level: 'debug',
       action: "debug.sheet_mount",
       msg: `Detail sheet mounted for: ${card.name}`,
-      payload: { uuid: card.uuid, location }
+      payload: { uuid: card.uuid, location, listSize: cardList?.length }
     });
-  }, [card.name, card.uuid, location]);
+  }, [card.name, card.uuid, location, cardList]);
 
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
@@ -30,15 +32,15 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       msg: `Execute clicked: ${type}`,
       payload: { type, uuid: card.uuid }
     });
-    // payloadにcard情報を乗せる既存の形式を維持
     await onAction(type, { uuid: card.uuid, extra });
-
   };
 
   const renderButtons = () => {
+    // リスト表示モードの場合はボタンを表示しない（必要なら個別のカードに対するアクションを実装）
+    if (cardList && cardList.length > 0) return null;
+
     const btns: React.ReactElement[] = [];
 
-    // 手札からのプレイ：自分のターン中かつ場所が手札の時のみ
     if (isMyTurn && location === 'hand') {
       btns.push(
         <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle("#2ecc71", "white")}>
@@ -47,7 +49,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       );
     }
 
-    // 盤面のカードへのアクション：自分のターン中かつ場所が自分のフィールド/リーダーの時のみ
     if (isMyTurn && (location === 'field' || location === 'leader')) {
       btns.push(
         <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle("#e74c3c", "white")}>
@@ -60,7 +61,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
         </button>
       );
 
-      // 型ガードを用いて text を安全に参照（HiddenCardなどは text を持たない可能性があるため）
       if ('text' in card && card.text?.includes('起動メイン')) {
         btns.push(
           <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle("#3498db", "white")}>
@@ -73,31 +73,62 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     return btns;
   };
 
+  // トラッシュ一覧などのレンダリング
+  const renderCardList = () => {
+    if (!cardList) return null;
+    return (
+      <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+        {cardList.length === 0 && <div style={{color: '#777', textAlign: 'center'}}>カードがありません</div>}
+        {cardList.map((c, idx) => (
+          <div key={`${c.uuid}-${idx}`} style={{ 
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+            padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px', border: '1px solid #eee' 
+          }}>
+            <div style={{ fontWeight: 'bold' }}>{c.name}</div>
+            <div style={{ fontSize: '0.8rem', color: '#666' }}>
+              {'power' in c ? `P:${(c as any).power}` : ''} {'cost' in c ? `C:${(c as any).cost}` : ''}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
         <div style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{card.name || 'Unknown Card'}</h2>
+            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>
+              {cardList ? `${card.name} (${cardList.length})` : (card.name || 'Unknown Card')}
+            </h2>
             <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999' }}>×</button>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <span style={badgeStyle('#333')}>{location.toUpperCase()}</span>
-            {'attribute' in card && card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
-            {'traits' in card && card.traits && card.traits.map((trait: string, idx: number) => (
-              <span key={idx} style={badgeStyle('#34495e')}>{trait}</span>
-            ))}
-          </div>
-          <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-            {'text' in card ? card.text : ''}
-          </p>
-          <div style={{ marginTop: '15px', fontWeight: 'bold', display: 'flex', gap: '20px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
-            {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}</span>}
-            {'cost' in card && <span>COST: {(card as BoardCard).cost}</span>}
-            {'counter' in card && (card as BoardCard).counter !== undefined && (card as BoardCard).counter! > 0 && (
-              <span>COUNTER: +{(card as BoardCard).counter}</span>
-            )}
-          </div>
+          
+          {/* リストがある場合はリストを表示、そうでなければ詳細を表示 */}
+          {cardList ? (
+            renderCardList()
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <span style={badgeStyle('#333')}>{location.toUpperCase()}</span>
+                {'attribute' in card && card.attribute && <span style={badgeStyle('#c0392b')}>{card.attribute}</span>}
+                {'traits' in card && card.traits && card.traits.map((trait: string, idx: number) => (
+                  <span key={idx} style={badgeStyle('#34495e')}>{trait}</span>
+                ))}
+              </div>
+              <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                {'text' in card ? card.text : ''}
+              </p>
+              <div style={{ marginTop: '15px', fontWeight: 'bold', display: 'flex', gap: '20px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}</span>}
+                {'cost' in card && <span>COST: {(card as BoardCard).cost}</span>}
+                {'counter' in card && (card as BoardCard).counter !== undefined && (card as BoardCard).counter! > 0 && (
+                  <span>COUNTER: +{(card as BoardCard).counter}</span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -109,7 +140,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   );
 };
 
-// --- スタイル定義（バックアップの内容を完全維持） ---
 const badgeStyle = (bg: string): React.CSSProperties => ({
   backgroundColor: bg,
   color: 'white',
@@ -133,6 +163,9 @@ const sheetStyle: React.CSSProperties = {
   backgroundColor: 'white',
   width: '100%',
   maxWidth: '500px',
+  maxHeight: '80vh', // 追加：リストが長い場合に備えて
+  display: 'flex', // 追加
+  flexDirection: 'column', // 追加
   padding: '24px',
   borderRadius: '20px 20px 0 0',
   boxShadow: '0 -4px 16px rgba(0,0,0,0.2)',
