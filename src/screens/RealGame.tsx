@@ -61,8 +61,7 @@ const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | u
 // src/screens/RealGame.tsx 60行目付近
 
 if (type === 'ATTACK_CONFIRM') {
-  // 修正：戻り値を result 変数で受け取る
-  const result = await sendAction(type as any, {
+  await sendAction(type as any, {
     card_id: payload.uuid,
     target_ids: payload.target_ids,
   }); 
