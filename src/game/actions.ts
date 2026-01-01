@@ -19,18 +19,24 @@ export const useGameAction = (
     apiClient.checkHealth().catch(e => setErrorToast(`サーバー接続エラー: ${e.message}`));
   }, []);
 
+// src/game/actions.ts
+
   const startGame = useCallback(async () => {
     setIsPending(true);
     try {
-      const { game_id, state } = await apiClient.createGame("imu.json", "nami.json");
+      const { game_id, state, pending_request } = await apiClient.createGame("imu.json", "nami.json");
       setGameId(game_id);
       setGameState(state);
+      if (pending_request) {
+        setPendingRequest(pending_request);
+      }
     } catch (e: any) {
       setErrorToast(`ゲーム開始エラー: ${e.message}`);
     } finally {
       setIsPending(false);
     }
-  }, [setGameState]);
+  }, [setGameState, setPendingRequest]);
+
 
   const sendAction = useCallback(async (
     type: ActionType, 

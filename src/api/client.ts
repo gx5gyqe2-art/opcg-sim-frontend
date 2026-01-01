@@ -42,7 +42,7 @@ export const apiClient = {
   async createGame(
     p1Deck = DEFAULT_GAME_SETTINGS.P1_DECK,
     p2Deck = DEFAULT_GAME_SETTINGS.P2_DECK
-  ): Promise<{ game_id: string; state: GameState }> {
+  ): Promise<{ game_id: string; state: GameState; pending_request?: any }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
       body: JSON.stringify({
@@ -54,9 +54,13 @@ export const apiClient = {
     });
 
     const data = await res.json();
-    const oldSid = sessionManager.getSessionId();
     
-    // 定数を使って game_id を取得
+    if (!res.ok) {
+      logger.error('api.create_game', 'Failed to create game', { response: data });
+      throw new Error("Failed to create game");
+    }
+
+    const oldSid = sessionManager.getSessionId();
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
     const gameId = data[GAME_ID_KEY] || (data[CONST.API_ROOT_KEYS.GAME_STATE] as any)?.[GAME_ID_KEY];
     
@@ -71,17 +75,19 @@ export const apiClient = {
         });
       }
     }
-
+    
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
-    const newState = data[stateKey] || data.game_state;
+    const newState = data[stateKey];
+    const pendingKey = CONST.API_ROOT_KEYS.PENDING_REQUEST as keyof typeof data;
+    const pendingRequest = data[pendingKey];
 
-    if (!newState) {
-      logger.error('api.create_game', 'Invalid Response Schema', data);
-      throw new Error("Invalid Response Schema");
-    }
-
-    return { game_id: gameId, state: newState };
+    return { 
+      game_id: gameId, 
+      state: newState, 
+      pending_request: pendingRequest 
+    };
   },
+
 
   async sendAction(gameId: string, request: GameActionRequest): Promise<GameActionResult> {
     const actionBody = {
