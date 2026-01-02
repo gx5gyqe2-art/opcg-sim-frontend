@@ -16,7 +16,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
 }) => {
   const [selected, setSelected] = useState<string[]>([]);
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { SHAPE, SHADOWS, UI_DETAILS } = LAYOUT_PARAMS;
+  const { SHAPE, SHADOWS } = LAYOUT_PARAMS; // 修正: UI_DETAILS を削除
 
   const handleToggle = (uuid: string) => {
     setSelected(prev => {
@@ -100,7 +100,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
               <div style={{ 
                 marginTop: 'auto', 
                 fontWeight: 'bold', 
-                color: COLORS.TEXT_POWER,
+                color: '#' + COLORS.TEXT_POWER.toString(16), // 修正: 数値をカラーコード文字列に変換
                 textAlign: 'center' 
               }}>
                 {'power' in card ? (card as any).power : ''}
