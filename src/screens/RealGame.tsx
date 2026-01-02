@@ -5,11 +5,13 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
+import { CardSelectModal } from '../ui/CardSelectModal'; // ▼ インポート追加
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
 export const RealGame = () => {
+  // ... (既存の useRef, useState はそのまま) ...
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -37,7 +39,21 @@ export const RealGame = () => {
     pendingRequest
   );
 
+  // ▼ 追加: 選択結果を送信するハンドラ
+  const handleSelectionResolve = async (selectedUuids: string[]) => {
+    if (!gameState?.game_id || !pendingRequest) return;
+    
+    // RESOLVE_EFFECT_SELECTION アクションを送信
+    await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
+      extra: { selected_uuids: selectedUuids }
+    });
+  };
+
+  // ... (handleAction, handlePass, handleTurnEnd, onCardClick などは既存のまま) ...
+  // ※ handleAction の中身は変更不要ですが、参照用に維持してください
+
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
+    // ... (既存の実装) ...
     if (!gameState?.game_id || isPending) return;
 
     if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK) {
@@ -92,6 +108,7 @@ export const RealGame = () => {
   };
 
   const onCardClick = async (card: CardInstance) => { 
+    // ... (既存の実装) ...
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
@@ -158,6 +175,7 @@ export const RealGame = () => {
     setIsDetailMode(true); 
   };
   
+  // ... (useEffect for PIXI setup - 変更なし) ...
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -191,6 +209,7 @@ export const RealGame = () => {
     };
   }, []);
 
+  // ... (useEffect for Rendering - 変更なし) ...
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -244,8 +263,13 @@ export const RealGame = () => {
     }
   }, [pendingRequest]);
 
+  // ▼ モーダル表示判定
+  const showSearchModal = pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT;
+  const constraints = pendingRequest?.constraints || {};
+
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      {/* ... (既存のUI要素) ... */}
       {isAttackTargeting && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
           攻撃対象を選択してください
@@ -253,8 +277,8 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* 修正: pendingRequestがあればアクションタイプに関わらず常に表示する */}
-      {pendingRequest && !isAttackTargeting && (
+      {/* 既存の PendingRequest 表示ロジック（バトル用など） */}
+      {pendingRequest && !isAttackTargeting && !showSearchModal && (
         <div style={{ 
             position: 'absolute', 
             top: '20px', 
@@ -270,11 +294,9 @@ export const RealGame = () => {
         }}>
 
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-            {/* アクションとメッセージを常に表示 */}
             [{pendingRequest.action}] {pendingRequest.message}
           </div>
           
-          {/* 修正: バトル情報がある場合のみ攻撃詳細を表示 ("LOADING"は表示しない) */}
           {gameState?.active_battle && (
             <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
               {`ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}`}
@@ -300,6 +322,8 @@ export const RealGame = () => {
           )}
         </div>
       )}
+
+      {/* ターン終了ボタン */}
       {(pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
         <button 
           onClick={handleTurnEnd}
@@ -336,6 +360,19 @@ export const RealGame = () => {
         }}
       />
     )}
+
+    {/* ▼ 新規: サーチ/選択モーダル */}
+    {showSearchModal && pendingRequest?.candidates && (
+      <CardSelectModal
+        candidates={pendingRequest.candidates}
+        message={pendingRequest.message}
+        minSelect={constraints.min ?? 1}
+        maxSelect={constraints.max ?? 1}
+        onConfirm={handleSelectionResolve}
+        onCancel={pendingRequest.can_skip ? handlePass : undefined}
+      />
+    )}
+
     </div>
   );
 };

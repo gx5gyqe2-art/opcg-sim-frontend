@@ -2,7 +2,7 @@ import type {
   PendingRequest as ApiPendingRequest, 
 } from '../api/types';
 
-interface BaseCard {
+export interface BaseCard {
   uuid: string;
   card_id: string;
   owner_id: string;
@@ -10,7 +10,7 @@ interface BaseCard {
   text?: string;
   attribute?: string;
   traits?: string[];
-  type?: string; // ★追加: ステージ判定などに使用
+  type?: string;
 }
 
 export interface LeaderCard extends BaseCard {
@@ -36,13 +36,14 @@ export interface HiddenCard extends Partial<BaseCard> {
 
 export type CardInstance = LeaderCard | BoardCard | HiddenCard;
 
+// API定義をそのまま継承
 export interface PendingRequest extends ApiPendingRequest {}
 
 export interface PlayerState {
   player_id: string;
   name: string;
   leader: LeaderCard;
-  stage?: BoardCard | null; // ★追加
+  stage?: BoardCard | null;
   zones: {
     field: BoardCard[];
     hand: CardInstance[];

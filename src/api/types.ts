@@ -1,15 +1,27 @@
 import type { GameState } from '../game/types';
+import type { CardInstance } from '../game/types';
 
 // 定数ファイルの値を受け入れられるように string 型に変更
 export type ActionType = string;
 
 export interface PendingRequest {
-  request_id: string;
+  request_id: string; // 注: 現状バックエンドからは送られていませんが、フロントで使用箇所があるため維持
   action: string;
   message: string;
   player_id: string;
   selectable_uuids: string[];
   can_skip: boolean;
+  
+  // ▼ 追加: UI制御用の詳細フィールド
+  candidates?: CardInstance[]; // 選択候補（デッキ内カードなど）
+  constraints?: {
+    min?: number;
+    max?: number;
+    source_label?: string; // "デッキの上から" など
+    render_mode?: string;
+    [key: string]: any;
+  };
+  options?: { label: string; value: any; [key: string]: any }[];
 }
 
 export interface GameActionRequest {
@@ -22,6 +34,10 @@ export interface GameActionRequest {
   extra?: {
     count?: number;
     ability_idx?: number;
+    // ▼ 追加: 選択結果汎用フィールド
+    selected_uuids?: string[]; 
+    option_value?: any;
+    [key: string]: any;
   };
 }
 
