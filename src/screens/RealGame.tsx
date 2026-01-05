@@ -5,13 +5,12 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
-import { CardSelectModal } from '../ui/CardSelectModal'; // ▼ インポート追加
+import { CardSelectModal } from '../ui/CardSelectModal';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
 export const RealGame = () => {
-  // ... (既存の useRef, useState はそのまま) ...
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -32,28 +31,22 @@ export const RealGame = () => {
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
-  const { startGame, sendAction, sendBattleAction, isPending } = useGameAction(
+  const { startGame, sendAction, sendBattleAction, isPending, errorToast, setErrorToast } = useGameAction(
     activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1"),
     setGameState,
     setPendingRequest,
     pendingRequest
   );
 
-  // ▼ 追加: 選択結果を送信するハンドラ
   const handleSelectionResolve = async (selectedUuids: string[]) => {
     if (!gameState?.game_id || !pendingRequest) return;
     
-    // RESOLVE_EFFECT_SELECTION アクションを送信
     await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
       extra: { selected_uuids: selectedUuids }
     });
   };
 
-  // ... (handleAction, handlePass, handleTurnEnd, onCardClick などは既存のまま) ...
-  // ※ handleAction の中身は変更不要ですが、参照用に維持してください
-
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
-    // ... (既存の実装) ...
     if (!gameState?.game_id || isPending) return;
 
     if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK) {
@@ -108,7 +101,6 @@ export const RealGame = () => {
   };
 
   const onCardClick = async (card: CardInstance) => { 
-    // ... (既存の実装) ...
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
@@ -175,7 +167,6 @@ export const RealGame = () => {
     setIsDetailMode(true); 
   };
   
-  // ... (useEffect for PIXI setup - 変更なし) ...
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -209,7 +200,6 @@ export const RealGame = () => {
     };
   }, []);
 
-  // ... (useEffect for Rendering - 変更なし) ...
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -263,13 +253,47 @@ export const RealGame = () => {
     }
   }, [pendingRequest]);
 
-  // ▼ モーダル表示判定
   const showSearchModal = pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT;
   const constraints = pendingRequest?.constraints || {};
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      {/* ... (既存のUI要素) ... */}
+      
+      {errorToast && (
+        <div style={{
+          position: 'absolute',
+          top: '80px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: Z_INDEX.OVERLAY + 10,
+          backgroundColor: '#e74c3c',
+          color: 'white',
+          padding: '10px 20px',
+          borderRadius: '5px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontWeight: 'bold',
+          border: '1px solid white'
+        }}>
+          <span>⚠️ {errorToast}</span>
+          <button 
+            onClick={() => setErrorToast(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              fontSize: '16px',
+              cursor: 'pointer',
+              marginLeft: '10px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {isAttackTargeting && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
           攻撃対象を選択してください
@@ -277,7 +301,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* 既存の PendingRequest 表示ロジック（バトル用など） */}
       {pendingRequest && !isAttackTargeting && !showSearchModal && (
         <div style={{ 
             position: 'absolute', 
@@ -323,7 +346,6 @@ export const RealGame = () => {
         </div>
       )}
 
-      {/* ターン終了ボタン */}
       {(pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
         <button 
           onClick={handleTurnEnd}
@@ -361,7 +383,6 @@ export const RealGame = () => {
       />
     )}
 
-    {/* ▼ 新規: サーチ/選択モーダル */}
     {showSearchModal && pendingRequest?.candidates && (
       <CardSelectModal
         candidates={pendingRequest.candidates}

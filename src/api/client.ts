@@ -55,9 +55,11 @@ export const apiClient = {
 
     const data = await res.json();
     
-    if (!res.ok) {
-      logger.error('api.create_game', 'Failed to create game', { response: data });
-      throw new Error("Failed to create game");
+    const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
+    if (!res.ok || data[SUCCESS_KEY] === false) {
+      const msg = data.error?.message || 'Failed to create game';
+      logger.error('api.create_game', msg, { response: data });
+      throw new Error(msg);
     }
 
     const oldSid = sessionManager.getSessionId();
@@ -109,7 +111,6 @@ export const apiClient = {
     const result = await response.json();
     const oldSid = sessionManager.getSessionId();
     
-    // 定数を使って game_id を取得
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
     const newGameId = result[GAME_ID_KEY] || result[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
 
@@ -125,9 +126,11 @@ export const apiClient = {
       }
     }
 
-    if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
-      logger.error('api.send_action', 'Action failed', { request: actionBody, response: result });
-      throw new Error("Action failed");
+    const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
+    if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
+      const msg = result.error?.message || "Action failed";
+      logger.error('api.send_action', msg, { request: actionBody, response: result });
+      throw new Error(msg);
     }
 
     return {
@@ -146,9 +149,11 @@ export const apiClient = {
 
     const result = await response.json();
     
-    if (!response.ok || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
-      logger.error('api.send_battle_action', 'Battle action failed', { request, response: result });
-      throw new Error(result.error?.message || "Battle action failed");
+    const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
+    if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
+      const msg = result.error?.message || "Battle action failed";
+      logger.error('api.send_battle_action', msg, { request, response: result });
+      throw new Error(msg);
     }
 
     return {
