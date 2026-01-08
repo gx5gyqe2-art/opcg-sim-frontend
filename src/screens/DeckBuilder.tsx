@@ -13,8 +13,8 @@ interface CardData {
   counter?: number;
   attributes?: string[];
   text?: string;
-  trigger?: string;
   traits?: string[];
+  trigger_text?: string;
 }
 
 interface DeckData {
@@ -77,13 +77,13 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
   );
 };
 
-// --- 共通: カード詳細・枚数編集画面 (ナビゲーション付き) ---
+// --- 共通: カード詳細画面 ---
 const CardDetailScreen = ({
   card,
   currentCount,
   onCountChange,
   onClose,
-  onNavigate // 追加: 前後移動用コールバック
+  onNavigate
 }: {
   card: CardData,
   currentCount: number,
@@ -96,13 +96,9 @@ const CardDetailScreen = ({
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       
-      {/* ナビゲーションエリア */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px', width: '100%', maxWidth: '400px', justifyContent: 'center' }}>
-        
         {onNavigate && (
-          <button onClick={() => onNavigate(-1)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '40px', cursor: 'pointer' }}>
-            ‹
-          </button>
+          <button onClick={() => onNavigate(-1)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '40px', cursor: 'pointer', padding: '10px' }}>‹</button>
         )}
 
         <div style={{ width: '240px', position: 'relative' }}>
@@ -118,9 +114,7 @@ const CardDetailScreen = ({
         </div>
 
         {onNavigate && (
-          <button onClick={() => onNavigate(1)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '40px', cursor: 'pointer' }}>
-            ›
-          </button>
+          <button onClick={() => onNavigate(1)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '40px', cursor: 'pointer', padding: '10px' }}>›</button>
         )}
       </div>
 
@@ -217,8 +211,6 @@ const DeckEditorView = ({
   onBack: () => void,
   onOpenCatalog: (mode: 'leader' | 'main') => void
 }) => {
-  
-  // デッキ内カードの詳細表示用ステート
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
 
   const groupedCards = useMemo(() => {
@@ -235,13 +227,11 @@ const DeckEditorView = ({
       if (card) list.push({ card, count });
     });
     
-    // コスト順ソート
     list.sort((a, b) => (a.card.cost || 0) - (b.card.cost || 0));
 
     return { leaderCard, list };
   }, [deck.card_uuids, deck.leader_id, allCards]);
 
-  // 枚数変更ハンドラ (DetailScreenから呼ばれる)
   const handleCountChange = (card: CardData, diff: number) => {
     const newUuids = [...deck.card_uuids];
     if (diff > 0) {
@@ -253,7 +243,6 @@ const DeckEditorView = ({
     onUpdateDeck({ ...deck, card_uuids: newUuids });
   };
 
-  // 前後移動
   const handleNavigate = (direction: -1 | 1) => {
     if (!viewingCard) return;
     const currentIndex = groupedCards.list.findIndex(item => item.card.uuid === viewingCard.uuid);
@@ -301,13 +290,12 @@ const DeckEditorView = ({
               key={item.card.uuid}
               card={item.card}
               count={item.count} 
-              onClick={() => setViewingCard(item.card)} // 詳細を開く
+              onClick={() => setViewingCard(item.card)} 
             />
           ))}
         </div>
       </div>
 
-      {/* 詳細モーダル (DeckEditor用) */}
       {viewingCard && (
         <CardDetailScreen
           card={viewingCard}
@@ -322,12 +310,12 @@ const DeckEditorView = ({
 };
 
 
-// --- 4. カタログ画面 (検索・ソート・フィルタ強化版) ---
+// --- 4. カタログ画面 (全フィルタ実装版) ---
 const CardCatalogScreen = ({
   allCards,
   mode,
-  currentDeck, // 枚数確認・更新用
-  onUpdateDeck, // 枚数更新用
+  currentDeck, 
+  onUpdateDeck,
   onClose
 }: {
   allCards: CardData[],
@@ -336,26 +324,50 @@ const CardCatalogScreen = ({
   onUpdateDeck: (d: DeckData) => void,
   onClose: () => void
 }) => {
+  // フィルタ用ステート
   const [filterColor, setFilterColor] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL');
+  const [filterAttribute, setFilterAttribute] = useState('ALL');
+  const [filterTrait, setFilterTrait] = useState('ALL');
+  const [filterCounter, setFilterCounter] = useState('ALL');
+  const [filterCost, setFilterCost] = useState('ALL');
+  const [filterPower, setFilterPower] = useState('ALL');
+  const [filterTrigger, setFilterTrigger] = useState('ALL');
+  const [filterSet, setFilterSet] = useState('ALL'); // 【追加】収録セット
   const [searchText, setSearchText] = useState('');
   const [sortType, setSortType] = useState<'COST' | 'POWER' | 'ID'>('COST');
-  const [displayLimit, setDisplayLimit] = useState(50);
   
-  // カタログ内での詳細表示用
+  const [displayLimit, setDisplayLimit] = useState(50);
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
 
-  // フィルタ & ソートロジック
+  const traitList = useMemo(() => {
+    const traits = new Set<string>();
+    allCards.forEach(c => c.traits?.forEach(t => traits.add(t)));
+    return Array.from(traits).sort();
+  }, [allCards]);
+
+  // 【追加】セットリスト生成 (OP01, ST01などを抽出)
+  const setList = useMemo(() => {
+    const sets = new Set<string>();
+    allCards.forEach(c => {
+      if (c.uuid) {
+        // ハイフン区切りの最初の部分をセットIDとみなす
+        const parts = c.uuid.split('-');
+        if (parts.length > 1) {
+          sets.add(parts[0]);
+        }
+      }
+    });
+    return Array.from(sets).sort();
+  }, [allCards]);
+
   const filtered = useMemo(() => {
     let res = allCards;
 
-    // モードフィルタ
-    if (mode === 'leader') {
-      res = res.filter(c => c.type === 'LEADER');
-    } else {
-      res = res.filter(c => c.type !== 'LEADER');
-    }
+    if (mode === 'leader') res = res.filter(c => c.type === 'LEADER');
+    else res = res.filter(c => c.type !== 'LEADER');
 
-    // 色フィルタ
+    // 1. 色
     if (filterColor !== 'ALL') {
         const target = filterColor.toLowerCase();
         const colorMap: Record<string, string> = { 'red': '赤', 'green': '緑', 'blue': '青', 'purple': '紫', 'black': '黒', 'yellow': '黄' };
@@ -369,14 +381,55 @@ const CardCatalogScreen = ({
         });
     }
 
-    // テキスト検索
+    // 2. 種類
+    if (filterType !== 'ALL') res = res.filter(c => c.type === filterType);
+
+    // 3. 属性
+    if (filterAttribute !== 'ALL') res = res.filter(c => c.attributes?.includes(filterAttribute));
+
+    // 4. 特徴
+    if (filterTrait !== 'ALL') res = res.filter(c => c.traits?.some(t => t.includes(filterTrait)));
+
+    // 5. カウンター
+    if (filterCounter !== 'ALL') {
+      if (filterCounter === 'NONE') res = res.filter(c => !c.counter);
+      else res = res.filter(c => c.counter === parseInt(filterCounter));
+    }
+
+    // 6. コスト
+    if (filterCost !== 'ALL') {
+      const val = parseInt(filterCost);
+      if (val >= 10) res = res.filter(c => (c.cost || 0) >= 10);
+      else res = res.filter(c => c.cost === val);
+    }
+
+    // 7. パワー
+    if (filterPower !== 'ALL') {
+      const val = parseInt(filterPower);
+      if (val >= 10000) res = res.filter(c => (c.power || 0) >= 10000);
+      else res = res.filter(c => c.power === val);
+    }
+
+    // 8. トリガー
+    if (filterTrigger !== 'ALL') {
+      if (filterTrigger === 'HAS') res = res.filter(c => !!c.trigger_text);
+      if (filterTrigger === 'NONE') res = res.filter(c => !c.trigger_text);
+    }
+
+    // 9. 収録セット 【追加】
+    if (filterSet !== 'ALL') {
+        res = res.filter(c => c.uuid.startsWith(filterSet));
+    }
+
+    // 10. テキスト検索
     if (searchText) {
       const lower = searchText.toLowerCase();
       res = res.filter(c => 
         (c.name && c.name.toLowerCase().includes(lower)) ||
         (c.text && c.text.toLowerCase().includes(lower)) ||
         (c.attributes && c.attributes.some(a => a.toLowerCase().includes(lower))) ||
-        (c.type && c.type.toLowerCase().includes(lower))
+        (c.type && c.type.toLowerCase().includes(lower)) ||
+        (c.traits && c.traits.some(t => t.toLowerCase().includes(lower)))
       );
     }
 
@@ -388,34 +441,30 @@ const CardCatalogScreen = ({
     });
 
     return res;
-  }, [allCards, filterColor, mode, searchText, sortType]);
+  }, [allCards, filterColor, filterType, filterAttribute, filterTrait, filterCounter, filterCost, filterPower, filterTrigger, filterSet, mode, searchText, sortType]);
 
   useEffect(() => {
     setDisplayLimit(50);
-  }, [filterColor, mode, searchText, sortType]);
+  }, [filterColor, filterType, filterAttribute, filterTrait, filterCounter, filterCost, filterPower, filterTrigger, filterSet, mode, searchText, sortType]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     if (scrollHeight - scrollTop <= clientHeight + 200) {
-      if (displayLimit < filtered.length) {
-        setDisplayLimit(prev => prev + 50);
-      }
+      if (displayLimit < filtered.length) setDisplayLimit(prev => prev + 50);
     }
   };
 
   const displayCards = filtered.slice(0, displayLimit);
 
-  // カタログ内でのカード選択時
   const handleSelect = (card: CardData) => {
     if (mode === 'leader') {
       onUpdateDeck({ ...currentDeck, leader_id: card.uuid });
-      onClose(); // リーダーは選んだら閉じる
+      onClose();
     } else {
-      setViewingCard(card); // メインデッキは詳細を開く
+      setViewingCard(card);
     }
   };
 
-  // 詳細画面での枚数変更
   const handleCountChange = (card: CardData, diff: number) => {
     const newUuids = [...currentDeck.card_uuids];
     if (diff > 0) {
@@ -427,7 +476,6 @@ const CardCatalogScreen = ({
     onUpdateDeck({ ...currentDeck, card_uuids: newUuids });
   };
 
-  // 詳細画面での前後移動
   const handleNavigate = (direction: -1 | 1) => {
     if (!viewingCard) return;
     const currentIndex = filtered.findIndex(c => c.uuid === viewingCard.uuid);
@@ -438,27 +486,27 @@ const CardCatalogScreen = ({
     }
   };
 
+  const selectStyle = { padding: '5px', borderRadius: '4px', flexShrink: 0, maxWidth: '120px' };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
       
-      {/* フィルタ・検索バー */}
+      {/* フィルタエリア */}
       <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button onClick={onClose} style={{ padding: '5px 15px' }}>完了</button>
-          <div style={{ fontWeight: 'bold', color: '#aaa', fontSize: '12px', flex: 1 }}>
-            {mode === 'leader' ? 'リーダー選択' : 'カード追加'} ({filtered.length}枚)
-          </div>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '5px' }}>
           <input 
-            placeholder="検索 (名前, テキスト)" 
+            placeholder="キーワード検索..." 
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            style={{ flex: 2, padding: '5px', borderRadius: '4px', border: 'none' }}
+            style={{ flex: 1, padding: '5px', borderRadius: '4px', border: 'none' }}
           />
-          <select value={filterColor} onChange={e => setFilterColor(e.target.value)} style={{ flex: 1, padding: '5px', borderRadius: '4px' }}>
-            <option value="ALL">全色</option>
+          <span style={{ fontSize: '12px', color: '#aaa' }}>{filtered.length}枚</span>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', paddingBottom: '2px' }}>
+          <select value={filterColor} onChange={e => setFilterColor(e.target.value)} style={selectStyle}>
+            <option value="ALL">色:全て</option>
             <option value="Red">赤</option>
             <option value="Green">緑</option>
             <option value="Blue">青</option>
@@ -466,7 +514,62 @@ const CardCatalogScreen = ({
             <option value="Black">黒</option>
             <option value="Yellow">黄</option>
           </select>
-          <select value={sortType} onChange={e => setSortType(e.target.value as any)} style={{ flex: 1, padding: '5px', borderRadius: '4px' }}>
+
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selectStyle}>
+            <option value="ALL">種類:全て</option>
+            <option value="CHARACTER">キャラ</option>
+            <option value="EVENT">イベント</option>
+            <option value="STAGE">ステージ</option>
+          </select>
+
+          {/* 【追加】収録セットフィルタ */}
+          <select value={filterSet} onChange={e => setFilterSet(e.target.value)} style={selectStyle}>
+            <option value="ALL">セット:全て</option>
+            {setList.map(s => (
+                <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          <select value={filterAttribute} onChange={e => setFilterAttribute(e.target.value)} style={selectStyle}>
+            <option value="ALL">属性:全て</option>
+            <option value="打">打</option>
+            <option value="斬">斬</option>
+            <option value="特">特</option>
+            <option value="射">射</option>
+            <option value="知">知</option>
+          </select>
+
+          <select value={filterCost} onChange={e => setFilterCost(e.target.value)} style={selectStyle}>
+            <option value="ALL">コスト:全て</option>
+            {[...Array(10)].map((_, i) => <option key={i} value={i+1}>{i+1}</option>)}
+            <option value="10">10+</option>
+          </select>
+
+          <select value={filterPower} onChange={e => setFilterPower(e.target.value)} style={selectStyle}>
+            <option value="ALL">パワー:全て</option>
+            {[...Array(10)].map((_, i) => <option key={i} value={i*1000}>{i*1000}</option>)}
+            <option value="10000">10000+</option>
+          </select>
+
+          <select value={filterCounter} onChange={e => setFilterCounter(e.target.value)} style={selectStyle}>
+            <option value="ALL">カウンター:全て</option>
+            <option value="NONE">なし</option>
+            <option value="1000">+1000</option>
+            <option value="2000">+2000</option>
+          </select>
+
+          <select value={filterTrigger} onChange={e => setFilterTrigger(e.target.value)} style={selectStyle}>
+            <option value="ALL">トリガー:全て</option>
+            <option value="HAS">あり</option>
+            <option value="NONE">なし</option>
+          </select>
+
+          <select value={filterTrait} onChange={e => setFilterTrait(e.target.value)} style={{...selectStyle, maxWidth: '150px'}}>
+            <option value="ALL">特徴:全て</option>
+            {traitList.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+
+          <select value={sortType} onChange={e => setSortType(e.target.value as any)} style={selectStyle}>
             <option value="COST">コスト順</option>
             <option value="POWER">パワー順</option>
             <option value="ID">ID順</option>
@@ -481,13 +584,12 @@ const CardCatalogScreen = ({
         {displayCards.length === 0 && <div style={{ color: '#888', gridColumn: '1/-1', textAlign: 'center', marginTop: '20px' }}>条件に合うカードがありません</div>}
         
         {displayCards.map(c => {
-          // デッキに入っている枚数を計算
           const countInDeck = currentDeck.card_uuids.filter(id => id === c.uuid).length;
           return (
             <CardImageStub 
               key={c.uuid} 
               card={c} 
-              count={countInDeck > 0 ? countInDeck : undefined} // デッキに入ってれば枚数表示
+              count={countInDeck > 0 ? countInDeck : undefined} 
               onClick={() => handleSelect(c)} 
             />
           );
@@ -498,7 +600,6 @@ const CardCatalogScreen = ({
         )}
       </div>
 
-      {/* 詳細モーダル (Catalog用) */}
       {viewingCard && mode === 'main' && (
         <CardDetailScreen
           card={viewingCard}
@@ -575,7 +676,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
-  // Render
   if (mode === 'list') {
     return <DeckListView decks={decks} onSelectDeck={handleSelectDeck} onCreateNew={handleCreateNew} onBack={onBack} />;
   }
