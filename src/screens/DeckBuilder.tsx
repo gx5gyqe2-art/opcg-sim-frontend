@@ -23,7 +23,7 @@ interface DeckData {
   don_uuids: string[];
 }
 
-// --- 画像表示対応コンポーネント ---
+// --- 画像表示対応コンポーネント (最適化版) ---
 const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
   const [imgError, setImgError] = useState(false);
   const imageUrl = card.uuid ? `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png` : null;
@@ -34,7 +34,7 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
       style={{
         width: '80px',
         height: '112px',
-        background: '#444', // 背景色を少し暗く
+        background: '#444',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -46,23 +46,21 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
         border: '1px solid #666',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
-        overflow: 'hidden' // 画像がはみ出ないように
+        overflow: 'hidden'
       }}
     >
-      {/* 画像表示 */}
       {imageUrl && !imgError ? (
         <img 
           src={imageUrl} 
           alt={card.name}
+          loading="lazy" // 画面外の読み込みを遅延させる
           onError={() => setImgError(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (
-        /* 画像がない/エラーの場合はテキスト表示 */
         <span style={{ padding: '5px' }}>{card.name || "No DATA"}</span>
       )}
       
-      {/* 枚数バッジ (画像の上に重ねる) */}
       {count !== undefined && (
         <div style={{
           position: 'absolute',
@@ -114,7 +112,6 @@ const DeckListView = ({
         {decks.map((deck, idx) => (
             <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer' }}>
                 <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa', overflow: 'hidden' }}>
-                    {/* ここも画像があれば表示したいが、デッキデータにはリーダーIDしかないので簡易表示のまま */}
                     {deck.leader_id || "L"}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -239,7 +236,6 @@ const CardDetailScreen = ({
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       
-      {/* カード画像 (拡大) */}
       <div style={{ width: '240px', maxWidth: '80vw', marginBottom: '30px', display: 'flex', justifyContent: 'center' }}>
         <img 
           src={imageUrl} 
@@ -247,7 +243,6 @@ const CardDetailScreen = ({
           style={{ width: '100%', borderRadius: '10px', border: '2px solid #fff' }}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
-            // エラー時の代替表示
             e.currentTarget.parentElement!.innerHTML = `<div style="width:240px;height:336px;background:#444;color:white;display:flex;align-items:center;justify-content:center;border:2px solid #fff;border-radius:10px;">${card.name}</div>`;
           }}
         />
@@ -283,7 +278,7 @@ const CardDetailScreen = ({
 };
 
 
-// --- 4. カタログ画面 ---
+// --- 4. カタログ画面 (無限スクロール実装) ---
 const CardCatalogScreen = ({
   allCards,
   mode,
@@ -296,6 +291,7 @@ const CardCatalogScreen = ({
   onClose: () => void
 }) => {
   const [filterColor, setFilterColor] = useState('ALL');
+  const [displayLimit, setDisplayLimit] = useState(50); // 初期表示枚数
   
   const filtered = useMemo(() => {
     let res = allCards;
@@ -321,9 +317,24 @@ const CardCatalogScreen = ({
             });
         });
     }
-
     return res;
   }, [allCards, filterColor, mode]);
+
+  useEffect(() => {
+    setDisplayLimit(50); // フィルタ変更時にリセット
+  }, [filterColor, mode]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    // 下端から200px以内に近づいたら追加読み込み
+    if (scrollHeight - scrollTop <= clientHeight + 200) {
+      if (displayLimit < filtered.length) {
+        setDisplayLimit(prev => prev + 50);
+      }
+    }
+  };
+
+  const displayCards = filtered.slice(0, displayLimit);
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
@@ -341,16 +352,28 @@ const CardCatalogScreen = ({
           <option value="Black">黒</option>
           <option value="Yellow">黄</option>
         </select>
+        <span style={{ fontSize: '12px', color: '#aaa' }}>{filtered.length}枚</span>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px' }}>
-        {filtered.length === 0 && <div style={{ color: '#888', gridColumn: '1/-1', textAlign: 'center', marginTop: '20px' }}>条件に合うカードがありません</div>}
-        {filtered.map(c => (
+
+      <div 
+        onScroll={handleScroll} 
+        style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}
+      >
+        {displayCards.length === 0 && <div style={{ color: '#888', gridColumn: '1/-1', textAlign: 'center', marginTop: '20px' }}>条件に合うカードがありません</div>}
+        
+        {displayCards.map(c => (
           <CardImageStub 
             key={c.uuid} 
-            card={c} // cardオブジェクトをそのまま渡す
+            card={c} 
             onClick={() => onSelect(c)} 
           />
         ))}
+        
+        {displayLimit < filtered.length && (
+          <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#666' }}>
+            Reading more...
+          </div>
+        )}
       </div>
     </div>
   );
