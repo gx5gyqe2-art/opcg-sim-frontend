@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { logger } from '../utils/logger';
+import { API_CONFIG } from '../api/api.config'; // 追加: 設定ファイルのインポート
 
 // カード情報の簡易的な型定義
 interface CardData {
@@ -49,22 +50,24 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
 
   const fetchCards = async () => {
     try {
-      // 開発中のローカルバックエンドを指定
-      const res = await fetch('http://localhost:8000/api/cards');
+      // 修正: API_CONFIGのBASE_URLを使用
+      const url = `${API_CONFIG.BASE_URL}/api/cards`;
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.cards)) {
         setAllCards(data.cards);
+      } else {
+        throw new Error(data.error || 'Unknown error');
       }
     } catch (e) {
       logger.log({ level: 'error', action: 'deck.fetch_cards', msg: String(e) });
-      alert("カード情報の取得に失敗しました。バックエンドが起動しているか確認してください。");
+      alert("カード情報の取得に失敗しました。");
     }
   };
 
   const applyFilter = () => {
     let res = allCards;
     if (filterColor !== 'ALL') {
-      // 色が含まれているかチェック (データ構造に合わせて調整)
       res = res.filter(c => c.color && c.color.includes(filterColor));
     }
     setFilteredCards(res);
@@ -75,7 +78,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
       setDeck(prev => ({ ...prev, leader_id: card.uuid }));
     } else {
       if (deck.card_uuids.length >= 50) return;
-      // ここに同名カード4枚制限などを追加可能
       setDeck(prev => ({ ...prev, card_uuids: [...prev.card_uuids, card.uuid] }));
     }
   };
@@ -89,21 +91,22 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
   };
 
   const saveDeck = async () => {
-    // 簡易バリデーション
     if (!deck.leader_id) {
         alert("リーダーカードを選択してください。");
         return;
     }
 
     try {
-        const res = await fetch('http://localhost:8000/api/deck', {
+        // 修正: API_CONFIGのBASE_URLを使用
+        const url = `${API_CONFIG.BASE_URL}/api/deck`;
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(deck)
         });
         const json = await res.json();
         if (json.success) {
-            alert(`デッキ「${deck.name}」を保存しました！ (ID: ${json.deck_id})`);
+            alert(`デッキ「${deck.name}」を保存しました！`);
             logger.log({ level: 'info', action: 'deck.save_success', msg: `Deck saved: ${deck.name}` });
         } else {
             alert('保存失敗: ' + json.error);
@@ -119,7 +122,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
       
       {/* --- 左エリア: カードリスト --- */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #444' }}>
-        {/* フィルターバー */}
         <div style={{ padding: '10px', background: '#333', display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button onClick={onBack} style={{ padding: '5px 15px', cursor: 'pointer' }}>← 戻る</button>
             <select 
@@ -138,7 +140,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
             <span>Hit: {filteredCards.length}</span>
         </div>
 
-        {/* カード一覧 (スクロール) */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'flex-start' }}>
             {filteredCards.map((c) => (
                 <div 
@@ -162,7 +163,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
                     }}
                     title={`${c.name}\nCost: ${c.cost ?? '-'}\nPower: ${c.power ?? '-'}`}
                 >
-                    {/* カードタイプの帯 */}
                     <div style={{ 
                         position: 'absolute', top: 0, left: 0, right: 0, height: '4px', 
                         background: c.type === 'LEADER' ? '#e74c3c' : (c.type === 'EVENT' ? '#f39c12' : '#3498db') 
