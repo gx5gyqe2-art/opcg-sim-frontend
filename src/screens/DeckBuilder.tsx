@@ -23,51 +23,71 @@ interface DeckData {
   don_uuids: string[];
 }
 
-// 共通スタイル: カード（ダミー画像）
-const CardImageStub = ({ text, count, onClick }: { text: string, count?: number, onClick?: () => void }) => (
-  <div 
-    onClick={onClick}
-    style={{
-      width: '80px',
-      height: '112px',
-      background: '#888',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: '#fff',
-      fontSize: '10px',
-      textAlign: 'center',
-      position: 'relative',
-      borderRadius: '4px',
-      border: '1px solid #aaa',
-      cursor: onClick ? 'pointer' : 'default',
-      boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
-    }}
-  >
-    <span style={{ padding: '5px' }}>{text || "No DATA"}</span>
-    
-    {count !== undefined && (
-      <div style={{
-        position: 'absolute',
-        top: '-5px',
-        right: '-5px',
-        background: '#e74c3c',
-        color: 'white',
-        borderRadius: '50%',
-        width: '20px',
-        height: '20px',
+// --- 画像表示対応コンポーネント ---
+const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
+  const [imgError, setImgError] = useState(false);
+  const imageUrl = card.uuid ? `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png` : null;
+
+  return (
+    <div 
+      onClick={onClick}
+      style={{
+        width: '80px',
+        height: '112px',
+        background: '#444', // 背景色を少し暗く
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        border: '1px solid white'
-      }}>
-        {count}
-      </div>
-    )}
-  </div>
-);
+        color: '#fff',
+        fontSize: '10px',
+        textAlign: 'center',
+        position: 'relative',
+        borderRadius: '4px',
+        border: '1px solid #666',
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+        overflow: 'hidden' // 画像がはみ出ないように
+      }}
+    >
+      {/* 画像表示 */}
+      {imageUrl && !imgError ? (
+        <img 
+          src={imageUrl} 
+          alt={card.name}
+          onError={() => setImgError(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        /* 画像がない/エラーの場合はテキスト表示 */
+        <span style={{ padding: '5px' }}>{card.name || "No DATA"}</span>
+      )}
+      
+      {/* 枚数バッジ (画像の上に重ねる) */}
+      {count !== undefined && (
+        <div style={{
+          position: 'absolute',
+          top: '2px',
+          right: '2px',
+          background: '#e74c3c',
+          color: 'white',
+          borderRadius: '50%',
+          width: '20px',
+          height: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '11px',
+          fontWeight: 'bold',
+          border: '1px solid white',
+          zIndex: 2,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.5)'
+        }}>
+          {count}
+        </div>
+      )}
+    </div>
+  );
+};
 
 
 // --- 1. デッキ一覧画面 ---
@@ -93,7 +113,8 @@ const DeckListView = ({
         {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>デッキがありません</div>}
         {decks.map((deck, idx) => (
             <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer' }}>
-                <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa' }}>
+                <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa', overflow: 'hidden' }}>
+                    {/* ここも画像があれば表示したいが、デッキデータにはリーダーIDしかないので簡易表示のまま */}
                     {deck.leader_id || "L"}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -165,8 +186,8 @@ const DeckEditorView = ({
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>LEADER</div>
           <CardImageStub 
-            text={groupedCards.leaderCard?.name || "Select Leader"} 
-            onClick={() => onOpenCatalog('leader')} // リーダー選択モードで開く
+            card={groupedCards.leaderCard || { name: "Select Leader" }}
+            onClick={() => onOpenCatalog('leader')} 
           />
         </div>
       </div>
@@ -175,7 +196,7 @@ const DeckEditorView = ({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', justifyItems: 'center' }}>
           
           <div 
-            onClick={() => onOpenCatalog('main')} // メインデッキ選択モードで開く
+            onClick={() => onOpenCatalog('main')} 
             style={{
               width: '80px', height: '112px',
               border: '2px dashed #666', borderRadius: '4px',
@@ -189,7 +210,7 @@ const DeckEditorView = ({
           {groupedCards.list.map((item) => (
             <CardImageStub 
               key={item.card.uuid}
-              text={item.card.name} 
+              card={item.card}
               count={item.count} 
               onClick={() => onOpenDetail(item.card)} 
             />
@@ -213,14 +234,23 @@ const CardDetailScreen = ({
   onCountChange: (diff: number) => void,
   onClose: () => void
 }) => {
+  const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png`;
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       
-      <div style={{ width: '240px', height: '336px', background: '#444', border: '2px solid #fff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px', color: 'white', flexDirection: 'column' }}>
-        <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{card.name}</div>
-        <div style={{ marginTop: '10px', color: '#aaa' }}>{card.uuid}</div>
-        <div style={{ marginTop: '5px' }}>Power: {card.power || '-'}</div>
-        <div style={{ marginTop: '5px' }}>Cost: {card.cost || '-'}</div>
+      {/* カード画像 (拡大) */}
+      <div style={{ width: '240px', maxWidth: '80vw', marginBottom: '30px', display: 'flex', justifyContent: 'center' }}>
+        <img 
+          src={imageUrl} 
+          alt={card.name} 
+          style={{ width: '100%', borderRadius: '10px', border: '2px solid #fff' }}
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+            // エラー時の代替表示
+            e.currentTarget.parentElement!.innerHTML = `<div style="width:240px;height:336px;background:#444;color:white;display:flex;align-items:center;justify-content:center;border:2px solid #fff;border-radius:10px;">${card.name}</div>`;
+          }}
+        />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' }}>
@@ -261,7 +291,7 @@ const CardCatalogScreen = ({
   onClose
 }: {
   allCards: CardData[],
-  mode: 'leader' | 'main', // モードを受け取る
+  mode: 'leader' | 'main', 
   onSelect: (card: CardData) => void,
   onClose: () => void
 }) => {
@@ -270,18 +300,14 @@ const CardCatalogScreen = ({
   const filtered = useMemo(() => {
     let res = allCards;
 
-    // 【修正】リーダー表示制御
     if (mode === 'leader') {
       res = res.filter(c => c.type === 'LEADER');
     } else {
       res = res.filter(c => c.type !== 'LEADER');
     }
 
-    // 【修正】色の絞り込み（英語・日本語どちらでもヒットするように修正）
     if (filterColor !== 'ALL') {
         const target = filterColor.toLowerCase();
-        // 英語名(red) または 日本語名(赤) のどちらかに一致すればOKとする簡易ロジック
-        // 本来は辞書マッピングすべきだが、データ不整合に強くなるよう緩く判定
         const colorMap: Record<string, string> = {
             'red': '赤', 'green': '緑', 'blue': '青', 'purple': '紫', 'black': '黒', 'yellow': '黄'
         };
@@ -289,7 +315,6 @@ const CardCatalogScreen = ({
 
         res = res.filter(c => {
             if (!c.color || c.color.length === 0) return false;
-            // データ内の色が配列であることを考慮し、各色が条件を含むか判定
             return c.color.some(cColor => {
                 const cLower = String(cColor).toLowerCase();
                 return cLower.includes(target) || cLower.includes(jpColor);
@@ -322,7 +347,7 @@ const CardCatalogScreen = ({
         {filtered.map(c => (
           <CardImageStub 
             key={c.uuid} 
-            text={c.name} 
+            card={c} // cardオブジェクトをそのまま渡す
             onClick={() => onSelect(c)} 
           />
         ))}
@@ -335,7 +360,7 @@ const CardCatalogScreen = ({
 // --- 親コンポーネント (Main) ---
 export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
   const [mode, setMode] = useState<'list' | 'edit' | 'detail' | 'catalog'>('list');
-  const [catalogMode, setCatalogMode] = useState<'leader' | 'main'>('main'); // カタログのモードを追加
+  const [catalogMode, setCatalogMode] = useState<'leader' | 'main'>('main');
 
   const [allCards, setAllCards] = useState<CardData[]>([]);
   const [decks, setDecks] = useState<DeckData[]>([]);
@@ -379,12 +404,10 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
   const handleCatalogSelect = (card: CardData) => {
     if (!currentDeck) return;
 
-    // 【修正】リーダー選択モードなら即セットしてエディタに戻る
     if (catalogMode === 'leader') {
       setCurrentDeck({ ...currentDeck, leader_id: card.uuid });
       setMode('edit');
     } else {
-      // メインデッキなら詳細画面へ（枚数選択）
       setTargetCard(card);
       setMode('detail');
     }
@@ -413,7 +436,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
   const handleChangeCount = (card: CardData, diff: number) => {
     if (!currentDeck) return;
     
-    // リーダーはカタログでしか変更しないため、ここでの分岐は念のため残すが基本的に使われない
     if (card.type === 'LEADER') {
       if (diff > 0) setCurrentDeck({ ...currentDeck, leader_id: card.uuid });
       else if (currentDeck.leader_id === card.uuid) setCurrentDeck({ ...currentDeck, leader_id: null });
@@ -447,7 +469,7 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
           setTargetCard(card);
           setMode('detail');
         }}
-        onOpenCatalog={handleOpenCatalog} // モード引数付きの関数を渡す
+        onOpenCatalog={handleOpenCatalog} 
       />
     );
   }
@@ -468,9 +490,9 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
     return (
       <CardCatalogScreen
         allCards={allCards}
-        mode={catalogMode} // モードを渡す
+        mode={catalogMode} 
         onClose={() => setMode('edit')}
-        onSelect={handleCatalogSelect} // 専用のハンドラを使用
+        onSelect={handleCatalogSelect} 
       />
     );
   }
