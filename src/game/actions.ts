@@ -19,12 +19,12 @@ export const useGameAction = (
     apiClient.checkHealth().catch(e => setErrorToast(`サーバー接続エラー: ${e.message}`));
   }, []);
 
-// src/game/actions.ts
-
-  const startGame = useCallback(async () => {
+  // 【変更】引数でデッキIDを受け取るように修正
+  const startGame = useCallback(async (p1Deck: string, p2Deck: string) => {
     setIsPending(true);
     try {
-      const { game_id, state, pending_request } = await apiClient.createGame("imu.json", "nami.json");
+      // APIに選択されたデッキIDを渡す
+      const { game_id, state, pending_request } = await apiClient.createGame(p1Deck, p2Deck);
       setGameId(game_id);
       setGameState(state);
       if (pending_request) {

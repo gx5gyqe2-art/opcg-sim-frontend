@@ -10,7 +10,8 @@ import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
-export const RealGame = () => {
+// 【変更】Propsを受け取るように修正
+export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -185,7 +186,8 @@ export const RealGame = () => {
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
-    startGame();
+    // 【変更】Propsのデッキ情報を渡してゲーム開始
+    startGame(p1Deck, p2Deck);
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
