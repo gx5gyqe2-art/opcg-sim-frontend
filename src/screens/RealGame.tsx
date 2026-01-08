@@ -6,11 +6,11 @@ import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
+import { DebugReporter } from '../ui/DebugReporter'; // 【追加】バグレポート用
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
-// 【変更】Propsを受け取るように修正
 export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -131,6 +131,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
       if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
       if (playerState.zones.trash.some(c => c.uuid === targetCard.uuid)) return 'trash';
       if (playerState.zones.life.some(c => c.uuid === targetCard.uuid)) return 'life';
+      if (playerState.stage?.uuid === targetCard.uuid) return 'field'; // ステージもフィールド扱い
       return null;
     };
 
@@ -257,7 +258,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   const showSearchModal = pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT;
   const constraints = pendingRequest?.constraints || {};
 
-  // アクティブドンの枚数を計算 (詳細シートに渡すため)
+  // アクティブドンの枚数を計算
   const activeDonCount = gameState && activePlayerId 
     ? (gameState.players[activePlayerId] as any).don_active.length 
     : 0;
@@ -265,7 +266,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
       
-      {/* 【追加】TOPへ戻るボタン */}
+      {/* TOPへ戻るボタン */}
       <button 
         onClick={onBack}
         style={{
@@ -303,7 +304,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         </div>
       )}
 
-      {/* 【修正】メインアクションの時はメッセージを表示しない */}
+      {/* メインアクションの時はメッセージを表示しない */}
       {pendingRequest && !isAttackTargeting && !showSearchModal && pendingRequest.action !== 'MAIN_ACTION' && (
         <div style={{ 
             position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', 
@@ -357,7 +358,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         card={selectedCard.card}
         location={selectedCard.location}
         isMyTurn={selectedCard.isMyTurn}
-        activeDonCount={activeDonCount} // 【追加】アクティブドン枚数を渡す
+        activeDonCount={activeDonCount} // ドン付与計算用に渡す
         onAction={handleAction}
         onClose={() => {
           setIsDetailMode(false);
@@ -376,6 +377,16 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         onCancel={pendingRequest.can_skip ? handlePass : undefined}
       />
     )}
+
+    {/* バグ報告用ボタン */}
+    <DebugReporter 
+      data={{ 
+        gameState, 
+        pendingRequest,
+        activePlayerId,
+        attackingCardUuid
+      }} 
+    />
 
     </div>
   );
