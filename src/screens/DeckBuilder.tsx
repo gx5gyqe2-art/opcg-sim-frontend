@@ -111,9 +111,41 @@ const DeckListView = ({
         {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>デッキがありません</div>}
         {decks.map((deck, idx) => (
             <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer' }}>
-                <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa', overflow: 'hidden' }}>
-                    {deck.leader_id || "L"}
+                
+                {/* ▼▼▼ リーダー画像表示エリア (修正) ▼▼▼ */}
+                <div style={{ 
+                    width: '50px', 
+                    height: '70px', 
+                    background: '#222', 
+                    border: '1px solid #555', 
+                    borderRadius: '4px', 
+                    marginRight: '15px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    fontSize: '10px', 
+                    color: '#aaa', 
+                    overflow: 'hidden',
+                    flexShrink: 0 // 縮小防止
+                }}>
+                    {deck.leader_id ? (
+                      <img 
+                        src={`${API_CONFIG.IMAGE_BASE_URL}/${deck.leader_id}.png`}
+                        alt="leader"
+                        loading="lazy"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          // 画像がない場合はIDを表示する形に戻す
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.parentElement!.innerText = deck.leader_id || "Err";
+                        }}
+                      />
+                    ) : (
+                      "No Leader"
+                    )}
                 </div>
+                {/* ▲▲▲ 修正ここまで ▲▲▲ */}
+
                 <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{deck.name}</div>
                     <div style={{ fontSize: '12px', color: '#888' }}>{deck.card_uuids.length}枚</div>
@@ -125,7 +157,6 @@ const DeckListView = ({
     </div>
   );
 };
-
 
 // --- 2. デッキ編集画面 ---
 const DeckEditorView = ({
