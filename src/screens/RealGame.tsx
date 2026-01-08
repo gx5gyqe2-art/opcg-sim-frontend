@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
 // 【変更】Propsを受け取るように修正
-export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string }) => {
+export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -186,7 +186,6 @@ export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string })
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
-    // 【変更】Propsのデッキ情報を渡してゲーム開始
     startGame(p1Deck, p2Deck);
 
     const handleResize = () => {
@@ -258,41 +257,42 @@ export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string })
   const showSearchModal = pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT;
   const constraints = pendingRequest?.constraints || {};
 
+  // アクティブドンの枚数を計算 (詳細シートに渡すため)
+  const activeDonCount = gameState && activePlayerId 
+    ? (gameState.players[activePlayerId] as any).don_active.length 
+    : 0;
+
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
       
+      {/* 【追加】TOPへ戻るボタン */}
+      <button 
+        onClick={onBack}
+        style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          zIndex: Z_INDEX.OVERLAY + 20,
+          background: 'rgba(0, 0, 0, 0.6)',
+          color: 'white',
+          border: '1px solid #555',
+          borderRadius: '4px',
+          padding: '5px 10px',
+          cursor: 'pointer'
+        }}
+      >
+        TOPへ
+      </button>
+
       {errorToast && (
         <div style={{
-          position: 'absolute',
-          top: '80px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: Z_INDEX.OVERLAY + 10,
-          backgroundColor: '#e74c3c',
-          color: 'white',
-          padding: '10px 20px',
-          borderRadius: '5px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontWeight: 'bold',
-          border: '1px solid white'
+          position: 'absolute', top: '80px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: Z_INDEX.OVERLAY + 10, backgroundColor: '#e74c3c', color: 'white',
+          padding: '10px 20px', borderRadius: '5px', boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+          display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', border: '1px solid white'
         }}>
           <span>⚠️ {errorToast}</span>
-          <button 
-            onClick={() => setErrorToast(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'white',
-              fontSize: '16px',
-              cursor: 'pointer',
-              marginLeft: '10px'
-            }}
-          >
-            ×
-          </button>
+          <button onClick={() => setErrorToast(null)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '16px', cursor: 'pointer', marginLeft: '10px' }}>×</button>
         </div>
       )}
 
@@ -303,43 +303,28 @@ export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string })
         </div>
       )}
 
-      {pendingRequest && !isAttackTargeting && !showSearchModal && (
+      {/* 【修正】メインアクションの時はメッセージを表示しない */}
+      {pendingRequest && !isAttackTargeting && !showSearchModal && pendingRequest.action !== 'MAIN_ACTION' && (
         <div style={{ 
-            position: 'absolute', 
-            top: '20px', 
-            left: '50%', 
-            transform: 'translateX(-50%)', 
-            zIndex: Z_INDEX.NOTIFICATION, 
-            background: COLORS.OVERLAY_INFO_BG, 
-            padding: '15px', 
-            borderRadius: '8px', 
-            color: 'white', 
-            textAlign: 'center', 
+            position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', 
+            zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG, 
+            padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', 
             border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}` 
         }}>
-
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
             [{pendingRequest.action}] {pendingRequest.message}
           </div>
-          
           {gameState?.active_battle && (
             <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
               {`ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}`}
             </div>
           )}
-
           {pendingRequest.can_skip && (
             <button 
-              onClick={handlePass}
-              disabled={isPending}
+              onClick={handlePass} disabled={isPending}
               style={{ 
-                padding: '8px 24px', 
-                backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER, 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '4px', 
-                cursor: isPending ? 'not-allowed' : 'pointer', 
-                fontWeight: 'bold' 
+                padding: '8px 24px', backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER, 
+                color: 'white', border: 'none', borderRadius: '4px', cursor: isPending ? 'not-allowed' : 'pointer', fontWeight: 'bold' 
               }}
             >
               {isPending ? '送信中...' : 'パス'}
@@ -350,8 +335,7 @@ export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string })
 
       {(pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
         <button 
-          onClick={handleTurnEnd}
-          disabled={isPending}
+          onClick={handleTurnEnd} disabled={isPending}
           style={{
             position: 'absolute',
             left: layoutCoords ? `${layoutCoords.x}px` : 'auto',
@@ -360,12 +344,8 @@ export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string })
             transform: 'translateY(-50%)',
             padding: '10px 20px',
             backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: isPending ? 'not-allowed' : 'pointer',
-            zIndex: Z_INDEX.NOTIFICATION,
-            fontWeight: 'bold'
+            color: 'white', border: 'none', borderRadius: '5px',
+            cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold'
           }}
         >
           {isPending ? '送信中...' : 'ターン終了'}
@@ -377,6 +357,7 @@ export const RealGame = ({ p1Deck, p2Deck }: { p1Deck: string, p2Deck: string })
         card={selectedCard.card}
         location={selectedCard.location}
         isMyTurn={selectedCard.isMyTurn}
+        activeDonCount={activeDonCount} // 【追加】アクティブドン枚数を渡す
         onAction={handleAction}
         onClose={() => {
           setIsDetailMode(false);

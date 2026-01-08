@@ -1,21 +1,26 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
-import { API_CONFIG } from '../api/api.config'; // 追加
+import { API_CONFIG } from '../api/api.config';
 import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 
 interface CardDetailSheetProps {
   card: CardInstance & { cards?: CardInstance[] };
   location: string;
-  isMyTurn: boolean; 
+  isMyTurn: boolean;
+  activeDonCount?: number; // 【追加】アクティブドン枚数
   onAction: (type: string, payload: any) => Promise<void>;
   onClose: () => void;
 }
 
-export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, onAction, onClose }) => {
+export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, activeDonCount = 0, onAction, onClose }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
   const { UI_DETAILS, Z_INDEX, SHAPE, SHADOWS } = LAYOUT_PARAMS;
+
+  // ドン付与モード用ステート
+  const [donMode, setDonMode] = useState(false);
+  const [donAmount, setDonAmount] = useState(1);
 
   useEffect(() => {
     logger.log({
@@ -38,7 +43,43 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     await onAction(type, { uuid: card.uuid, extra });
   };
 
+  // ドン付与一括実行ロジック
+  const handleAttachDonBatch = async () => {
+    // 指定回数分ループして送信
+    for (let i = 0; i < donAmount; i++) {
+        await onAction(ACTIONS.ATTACH_DON, { uuid: card.uuid });
+    }
+    setDonMode(false);
+    onClose();
+  };
+
   const renderButtons = () => {
+    // ドン付与モード中は専用UIを表示
+    if (donMode) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: '#f0f0f0', padding: '10px', borderRadius: '8px' }}>
+          <div style={{ fontWeight: 'bold' }}>ドン!!を付与する枚数</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <button 
+              onClick={() => setDonAmount(Math.max(1, donAmount - 1))}
+              style={btnStyle(COLORS.BTN_SECONDARY, 'white')}
+            >-</button>
+            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{donAmount}</div>
+            <button 
+              onClick={() => setDonAmount(Math.min(activeDonCount, donAmount + 1))}
+              disabled={donAmount >= activeDonCount}
+              style={btnStyle(donAmount >= activeDonCount ? COLORS.BTN_DISABLED : COLORS.BTN_SECONDARY, 'white')}
+            >+</button>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666' }}>可能: {activeDonCount}枚</div>
+          <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+            <button onClick={() => setDonMode(false)} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>キャンセル</button>
+            <button onClick={handleAttachDonBatch} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>決定</button>
+          </div>
+        </div>
+      );
+    }
+
     const btns: React.ReactElement[] = [];
     if (isMyTurn && location === 'hand') {
       btns.push(
@@ -53,11 +94,16 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
           攻撃する
         </button>
       );
-      btns.push(
-        <button key="don" onClick={() => handleExecute(ACTIONS.ATTACH_DON)} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>
-          ドン!!付与 (+1)
-        </button>
-      );
+      
+      // ドン付与ボタン: アクティブドンがある場合のみ押せるようにし、押すとモード切替
+      if (activeDonCount > 0) {
+        btns.push(
+          <button key="don" onClick={() => { setDonAmount(1); setDonMode(true); }} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>
+            ドン!!付与
+          </button>
+        );
+      }
+
       if ('text' in card && card.text?.includes('起動メイン')) {
         btns.push(
           <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle(COLORS.BTN_PRIMARY, COLORS.TEXT_LIGHT)}>
@@ -110,10 +156,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     fontWeight: 'bold'
   });
 
-  // 画像URL生成
   const mainImageUrl = ('card_id' in card) ? `${API_CONFIG.IMAGE_BASE_URL}/${(card as any).card_id}.png` : null;
 
-  // --- カード一覧表示 (トラッシュなど) ---
   if (card.cards && card.cards.length > 0) {
     return (
       <div style={overlayStyle} onClick={onClose}>
@@ -156,7 +200,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     );
   }
 
-  // --- 詳細表示 ---
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
@@ -205,7 +248,9 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {renderButtons()}
-          <button onClick={onClose} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>閉じる</button>
+          {!donMode && (
+            <button onClick={onClose} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>閉じる</button>
+          )}
         </div>
       </div>
     </div>

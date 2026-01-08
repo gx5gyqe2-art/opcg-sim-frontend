@@ -89,7 +89,12 @@ export default function App() {
         {mode === 'game' && (
           <RealGame 
             p1Deck={selectedDecks.p1} 
-            p2Deck={selectedDecks.p2} 
+            p2Deck={selectedDecks.p2}
+            onBack={() => {
+              if (confirm("ゲームを終了してタイトルに戻りますか？")) {
+                setMode('start');
+              }
+            }}
           />
         )}
 
