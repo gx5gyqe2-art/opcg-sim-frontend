@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { API_CONFIG } from '../api/api.config';
-import './GameUI.css'; // CSS読み込み
+import './GameUI.css'; // 共通アニメーション等はここから利用
 
-interface DeckOption { id: string; name: string; }
-interface GameStartProps { onStart: (p1: string, p2: string) => void; onDeckBuilder: () => void; }
+interface DeckOption {
+  id: string;
+  name: string;
+}
+
+interface GameStartProps {
+  onStart: (p1: string, p2: string) => void;
+  onDeckBuilder: () => void;
+}
 
 const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
@@ -15,100 +22,216 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       try {
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
-        const defaults = [{ id: 'imu.json', name: 'Imu (Default)' }, { id: 'nami.json', name: 'Nami (Default)' }];
+        
+        const defaults = [
+          { id: 'imu.json', name: 'Imu (Default)' },
+          { id: 'nami.json', name: 'Nami (Default)' }
+        ];
+
         let loadedDecks: DeckOption[] = [];
         if (data.success && Array.isArray(data.decks)) {
-          loadedDecks = data.decks.map((d: any) => ({ id: `db:${d.id}`, name: d.name }));
+          loadedDecks = data.decks.map((d: any) => ({
+            id: `db:${d.id}`,
+            name: d.name
+          }));
         }
+        
         setDeckOptions([...defaults, ...loadedDecks]);
-      } catch {
-        setDeckOptions([{ id: 'imu.json', name: 'Imu (Default)' }, { id: 'nami.json', name: 'Nami (Default)' }]);
+      } catch (e) {
+        console.error("Failed to load decks", e);
+        setDeckOptions([
+          { id: 'imu.json', name: 'Imu (Default)' },
+          { id: 'nami.json', name: 'Nami (Default)' }
+        ]);
       }
     };
     fetchDecks();
   }, []);
 
-  // --- サイバー・スタイル定義 ---
-  // --- グランド・バトル風スタイル ---
+  // --- グランド・バトル風スタイル定義 ---
   const styles = {
     container: {
-      minHeight: '100vh', width: '100vw',
-      background: 'radial-gradient(circle at center, #5e2c2c 0%, #1a0b0b 100%)',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      color: '#f0e6d2', fontFamily: '"Times New Roman", serif'
+      minHeight: '100vh',
+      width: '100vw',
+      // 暗めの木目調・海賊船の船内をイメージした背景
+      background: 'radial-gradient(circle at center, #3e2723 0%, #1a0b0b 100%)',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#f0e6d2', // 羊皮紙のようなオフホワイト
+      fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif',
+      position: 'relative' as const,
+      overflow: 'hidden'
     },
-    // タイトルはゴールドのグラデーション
+    // 背景の装飾（古地図のようなグリッド）
+    bgOverlay: {
+      position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0,
+      backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 20px)',
+      pointerEvents: 'none' as const,
+      zIndex: 0
+    },
     title: {
-      fontSize: 'clamp(40px, 8vw, 80px)', fontWeight: '900', marginBottom: '40px',
-      background: 'linear-gradient(to bottom, #ffd700, #b8860b)',
-      WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-      filter: 'drop-shadow(0 2px 0px black)', letterSpacing: '5px'
+      fontSize: 'clamp(40px, 8vw, 80px)',
+      fontWeight: '900',
+      marginBottom: '50px',
+      // ゴールドのグラデーション文字
+      background: 'linear-gradient(to bottom, #ffd700, #b8860b, #8b4513)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.8))',
+      letterSpacing: '6px',
+      zIndex: 1,
+      textTransform: 'uppercase' as const
     },
-    // パネルは羊皮紙風
     panel: {
-      background: '#f4e4bc', border: '4px solid #8b4513',
-      boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-      padding: '40px', borderRadius: '8px',
-      width: '90%', maxWidth: '500px', color: '#3e2723'
+      // 羊皮紙風のパネル
+      background: '#f4e4bc',
+      border: '6px solid #5d4037', // 太い木の枠
+      boxShadow: '0 10px 40px rgba(0,0,0,0.7), inset 0 0 30px rgba(139, 69, 19, 0.2)',
+      borderRadius: '8px',
+      padding: '40px',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: '30px',
+      width: '90%',
+      maxWidth: '600px',
+      zIndex: 1,
+      position: 'relative' as const,
+      color: '#3e2723' // 濃い茶色の文字
     },
-
-    selectLabel: {
-      display: 'block', marginBottom: '8px', fontSize: '14px', color: '#00ffff', letterSpacing: '2px'
+    // パネルの四隅に鋲（びょう）を打つ装飾
+    rivet: (top: boolean, left: boolean) => ({
+      position: 'absolute' as const,
+      width: '12px', height: '12px',
+      borderRadius: '50%',
+      background: 'linear-gradient(135deg, #ffd700, #8b4513)',
+      boxShadow: '1px 1px 2px rgba(0,0,0,0.5)',
+      top: top ? '10px' : 'auto',
+      bottom: !top ? '10px' : 'auto',
+      left: left ? '10px' : 'auto',
+      right: !left ? '10px' : 'auto'
+    }),
+    
+    selectGroup: {
+      display: 'flex', flexDirection: 'column' as const, gap: '8px'
+    },
+    label: {
+      fontSize: '16px', fontWeight: 'bold', color: '#5d4037',
+      textTransform: 'uppercase' as const, letterSpacing: '1px'
     },
     select: {
-      width: '100%', padding: '12px', background: '#111', color: '#fff',
-      border: '1px solid #333', borderRadius: '0', fontSize: '16px', fontFamily: 'inherit',
-      outline: 'none', cursor: 'pointer'
+      width: '100%', padding: '12px',
+      background: '#fff8e1', // 明るい羊皮紙色
+      color: '#3e2723',
+      border: '2px solid #8b4513',
+      borderRadius: '4px',
+      fontSize: '18px',
+      fontFamily: 'inherit',
+      fontWeight: 'bold',
+      outline: 'none',
+      cursor: 'pointer',
+      boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.1)'
     },
     vs: {
-      textAlign: 'center' as const, fontSize: '30px', fontWeight: 'bold',
-      color: '#ff00ff', textShadow: '0 0 10px #ff00ff', margin: '-10px 0'
+      textAlign: 'center' as const,
+      fontSize: '36px',
+      fontWeight: 'bold',
+      color: '#8b0000', // 深紅
+      textShadow: '0 2px 0 rgba(0,0,0,0.2)',
+      margin: '-10px 0',
+      fontStyle: 'italic'
     },
-    mainBtn: {
-      background: 'linear-gradient(90deg, #ff00ff, #00ffff)', border: 'none',
-      padding: '20px 60px', fontSize: '24px', fontWeight: 'bold', color: '#000',
-      clipPath: 'polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%)',
-      cursor: 'pointer', letterSpacing: '4px', marginTop: '20px', zIndex: 1
+    
+    actions: {
+      display: 'flex', gap: '20px', marginTop: '30px', zIndex: 1, alignItems: 'center'
     },
     subBtn: {
-      background: 'transparent', border: '2px solid #00ffff', color: '#00ffff',
-      padding: '10px 30px', fontSize: '16px', cursor: 'pointer',
-      marginTop: '20px', marginRight: '20px', letterSpacing: '2px', zIndex: 1
+      background: 'transparent',
+      border: '2px solid #d4af37',
+      color: '#d4af37',
+      padding: '12px 30px',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      textShadow: '0 1px 2px black'
+    },
+    mainBtn: {
+      // 赤い布や宝石をイメージしたボタン
+      background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)',
+      border: '2px solid #ffeba7',
+      padding: '18px 60px',
+      fontSize: '24px',
+      fontWeight: 'bold',
+      color: '#fff',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      boxShadow: '0 5px 15px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
+      textShadow: '0 2px 0 #3e2723',
+      fontFamily: 'inherit',
+      letterSpacing: '2px'
     }
   };
 
   return (
     <div style={styles.container}>
-      <div style={styles.gridOverlay}></div>
+      <div style={styles.bgOverlay}></div>
       
       <div style={styles.title}>OPCG SIM</div>
 
       <div style={styles.panel}>
-        {/* 装飾用コーナー */}
-        <div style={{ position: 'absolute', top: -1, left: -1, width: 20, height: 20, borderTop: '2px solid #00ffff', borderLeft: '2px solid #00ffff' }}></div>
-        <div style={{ position: 'absolute', bottom: -1, right: -1, width: 20, height: 20, borderBottom: '2px solid #00ffff', borderRight: '2px solid #00ffff' }}></div>
+        {/* 四隅の鋲 */}
+        <div style={styles.rivet(true, true)}></div>
+        <div style={styles.rivet(true, false)}></div>
+        <div style={styles.rivet(false, true)}></div>
+        <div style={styles.rivet(false, false)}></div>
 
-        <div>
-          <label style={styles.selectLabel}>PLAYER 1 // SYSTEM.DECK</label>
-          <select value={p1Deck} onChange={(e) => setP1Deck(e.target.value)} style={{...styles.select, borderLeft: '4px solid #00ffff'}}>
-            {deckOptions.map(opt => <option key={`p1-${opt.id}`} value={opt.id}>{opt.name}</option>)}
+        <div style={styles.selectGroup}>
+          <label style={styles.label}>Player 1 (Host)</label>
+          <select 
+            value={p1Deck}
+            onChange={(e) => setP1Deck(e.target.value)}
+            style={styles.select}
+          >
+            {deckOptions.map(opt => (
+              <option key={`p1-${opt.id}`} value={opt.id}>{opt.name}</option>
+            ))}
           </select>
         </div>
 
-        <div style={styles.vs}>/// VS ///</div>
+        <div style={styles.vs}>VS</div>
 
-        <div>
-          <label style={{...styles.selectLabel, color: '#ff00ff'}}>PLAYER 2 // TARGET.DECK</label>
-          <select value={p2Deck} onChange={(e) => setP2Deck(e.target.value)} style={{...styles.select, borderLeft: '4px solid #ff00ff'}}>
-            {deckOptions.map(opt => <option key={`p2-${opt.id}`} value={opt.id}>{opt.name}</option>)}
+        <div style={styles.selectGroup}>
+          <label style={styles.label}>Player 2 (Opponent)</label>
+          <select 
+            value={p2Deck}
+            onChange={(e) => setP2Deck(e.target.value)}
+            style={styles.select}
+          >
+            {deckOptions.map(opt => (
+              <option key={`p2-${opt.id}`} value={opt.id}>{opt.name}</option>
+            ))}
           </select>
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <button onClick={onDeckBuilder} style={styles.subBtn} className="hover-scale">DECK BUILD</button>
-        <button onClick={() => onStart(p1Deck, p2Deck)} style={styles.mainBtn} className="hover-scale">
-          INITIALIZE
+      <div style={styles.actions}>
+        <button 
+          onClick={onDeckBuilder}
+          style={styles.subBtn}
+          className="hover-scale"
+        >
+          デッキ作成
+        </button>
+
+        <button 
+          onClick={() => onStart(p1Deck, p2Deck)}
+          style={styles.mainBtn}
+          className="hover-scale"
+        >
+          決闘開始
         </button>
       </div>
     </div>
