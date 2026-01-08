@@ -134,6 +134,7 @@ const FilterModal = ({
 
   const ColorBtn = ({ colorKey, label, colorCode }: { colorKey: string, label: string, colorCode: string }) => (
     <div 
+      title={label} // 修正箇所: 未使用だった label を title 属性として使用
       onClick={() => setFilters({ ...filters, color: filters.color === colorKey ? 'ALL' : colorKey })}
       style={{
         width: '40px', height: '40px', borderRadius: '50%',
@@ -340,7 +341,6 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
 // --- 4. カタログ画面 (FilterModal対応版) ---
 const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void }) => {
-  // フィルタ状態を一元管理
   const [filters, setFilters] = useState({
     color: 'ALL',
     type: 'ALL',
