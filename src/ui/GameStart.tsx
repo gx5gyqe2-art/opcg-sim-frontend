@@ -29,32 +29,29 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   }, []);
 
   // --- サイバー・スタイル定義 ---
+  // --- グランド・バトル風スタイル ---
   const styles = {
     container: {
       minHeight: '100vh', width: '100vw',
-      background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
-      backgroundSize: '400% 400%',
-      animation: 'bg-pan 15s ease infinite',
-      display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center',
-      color: '#fff', fontFamily: '"Courier New", monospace', position: 'relative' as const, overflow: 'hidden'
+      background: 'radial-gradient(circle at center, #5e2c2c 0%, #1a0b0b 100%)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      color: '#f0e6d2', fontFamily: '"Times New Roman", serif'
     },
-    gridOverlay: {
-      position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0,
-      backgroundImage: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 255, 255, 0.05) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(255, 0, 0, 0.02), rgba(255, 0, 0, 0.06))',
-      backgroundSize: '100% 2px, 3px 100%', pointerEvents: 'none' as const, zIndex: 0
-    },
+    // タイトルはゴールドのグラデーション
     title: {
-      fontSize: 'clamp(40px, 8vw, 80px)', fontWeight: 'bold', marginBottom: '60px',
-      textShadow: '2px 2px 0px #ff00ff, -2px -2px 0px #00ffff', letterSpacing: '8px',
-      zIndex: 1, textTransform: 'uppercase' as const
+      fontSize: 'clamp(40px, 8vw, 80px)', fontWeight: '900', marginBottom: '40px',
+      background: 'linear-gradient(to bottom, #ffd700, #b8860b)',
+      WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+      filter: 'drop-shadow(0 2px 0px black)', letterSpacing: '5px'
     },
+    // パネルは羊皮紙風
     panel: {
-      background: 'rgba(0, 0, 0, 0.6)', border: '1px solid #00ffff',
-      boxShadow: '0 0 15px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(0, 255, 255, 0.1)',
-      padding: '40px', borderRadius: '4px', backdropFilter: 'blur(5px)',
-      display: 'flex', flexDirection: 'column' as const, gap: '30px',
-      width: '90%', maxWidth: '600px', zIndex: 1, position: 'relative' as const
+      background: '#f4e4bc', border: '4px solid #8b4513',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+      padding: '40px', borderRadius: '8px',
+      width: '90%', maxWidth: '500px', color: '#3e2723'
     },
+
     selectLabel: {
       display: 'block', marginBottom: '8px', fontSize: '14px', color: '#00ffff', letterSpacing: '2px'
     },
