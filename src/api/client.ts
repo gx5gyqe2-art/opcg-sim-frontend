@@ -39,9 +39,10 @@ export const apiClient = {
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   },
 
+  // ▼▼▼ 修正箇所: 引数に : string を追加 ▼▼▼
   async createGame(
-    p1Deck = DEFAULT_GAME_SETTINGS.P1_DECK,
-    p2Deck = DEFAULT_GAME_SETTINGS.P2_DECK
+    p1Deck: string = DEFAULT_GAME_SETTINGS.P1_DECK,
+    p2Deck: string = DEFAULT_GAME_SETTINGS.P2_DECK
   ): Promise<{ game_id: string; state: GameState; pending_request?: any }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
@@ -52,6 +53,7 @@ export const apiClient = {
         p2_name: CONST.PLAYER_KEYS.P2
       }),
     });
+  // ▲▲▲ 修正ここまで ▲▲▲
 
     const data = await res.json();
     
