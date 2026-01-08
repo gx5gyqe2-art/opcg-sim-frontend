@@ -15,8 +15,6 @@ export const createBoardSide = (
   const side = new PIXI.Container();
   const z = p.zones;
   const { COLORS } = LAYOUT_CONSTANTS;
-  // 修正前: const { PHYSICS, ALPHA } = LAYOUT_PARAMS;
-  // 修正後: ALPHA を削除
   const { PHYSICS } = LAYOUT_PARAMS;
 
   const getAdjustedY = (row: number) => {
@@ -32,8 +30,6 @@ export const createBoardSide = (
     onClick: () => onCardClick(c as CardInstance),
     isOpponent: isOpponent 
   });
-
-  // ... (以下、変更なし) ...
 
   if (z.field && z.field.length > 0 && !isOpponent) {
      logger.log({
@@ -110,13 +106,16 @@ export const createBoardSide = (
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   side.addChild(deck);
 
-  // トラッシュ
+  // トラッシュ (トップカードの画像を表示するように修正)
   const trashCount = z.trash?.length || 0;
+  const topTrashCard = z.trash && z.trash.length > 0 ? z.trash[z.trash.length - 1] : null; // 一番上のカードを取得
+
   const trash = createCardContainer(
     { 
       uuid: `trash-${p.player_id}`, 
       name: 'Trash', 
-      cards: z.trash
+      cards: z.trash,
+      card_id: topTrashCard ? topTrashCard.card_id : undefined // ここでカードIDを渡す
     } as any, 
     coords.CW, 
     coords.CH, 

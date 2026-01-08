@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
+import { API_CONFIG } from '../api/api.config'; // 追加
 
 interface CardSelectModalProps {
   candidates: CardInstance[];
@@ -16,7 +17,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
 }) => {
   const [selected, setSelected] = useState<string[]>([]);
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { SHAPE, SHADOWS } = LAYOUT_PARAMS; // 修正: UI_DETAILS を削除
+  const { SHAPE, SHADOWS } = LAYOUT_PARAMS;
 
   const handleToggle = (uuid: string) => {
     setSelected(prev => {
@@ -24,10 +25,10 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
         return prev.filter(id => id !== uuid);
       }
       if (maxSelect === 1) {
-        return [uuid]; // 単数選択なら入れ替え
+        return [uuid];
       }
       if (prev.length >= maxSelect) {
-        return prev; // 上限到達
+        return prev;
       }
       return [...prev, uuid];
     });
@@ -35,7 +36,6 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
 
   const isValid = selected.length >= minSelect && selected.length <= maxSelect;
 
-  // スタイル定義
   const overlayStyle: React.CSSProperties = {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: COLORS.OVERLAY_MODAL_BG,
@@ -56,23 +56,12 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
 
   const gridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-    gap: '12px',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', // 画像に合わせてサイズ調整
+    gap: '10px',
     overflowY: 'auto',
     flex: 1,
     padding: '10px'
   };
-
-  const cardStyle = (isSelected: boolean): React.CSSProperties => ({
-    border: isSelected ? `3px solid ${COLORS.BTN_PRIMARY}` : '1px solid #ccc',
-    borderRadius: SHAPE.CORNER_RADIUS_CARD,
-    padding: '8px',
-    cursor: 'pointer',
-    backgroundColor: isSelected ? '#e3f2fd' : 'white',
-    position: 'relative',
-    height: '140px',
-    display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
-  });
 
   return (
     <div style={overlayStyle}>
@@ -85,37 +74,49 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
         </div>
 
         <div style={gridStyle}>
-          {candidates.map(card => (
-            <div 
-              key={card.uuid} 
-              onClick={() => handleToggle(card.uuid)}
-              style={cardStyle(selected.includes(card.uuid))}
-            >
-              <div style={{ fontWeight: 'bold', fontSize: '0.8rem', overflow: 'hidden', height: '3em' }}>
-                {card.name}
+          {candidates.map(card => {
+            const isSelected = selected.includes(card.uuid);
+            const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.card_id}.png`;
+
+            return (
+              <div 
+                key={card.uuid} 
+                onClick={() => handleToggle(card.uuid)}
+                style={{
+                  border: isSelected ? `3px solid ${COLORS.BTN_PRIMARY}` : '1px solid #ccc',
+                  borderRadius: SHAPE.CORNER_RADIUS_CARD,
+                  cursor: 'pointer',
+                  backgroundColor: '#444', // 画像読み込み前用の背景
+                  position: 'relative',
+                  aspectRatio: '0.714', // カード比率
+                  overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+              >
+                <img 
+                  src={imageUrl} 
+                  alt={card.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => {
+                    // 読み込み失敗時はテキストを表示
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement!.innerHTML = `<span style="color:white;font-size:0.7rem;padding:2px;text-align:center;">${card.name}</span>`;
+                  }}
+                />
+                
+                {/* 選択中のチェックマーク */}
+                {isSelected && (
+                  <div style={{
+                    position: 'absolute', top: '4px', right: '4px',
+                    backgroundColor: COLORS.BTN_PRIMARY, color: 'white',
+                    borderRadius: '50%', width: '24px', height: '24px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px', zIndex: 10, border: '2px solid white'
+                  }}>✓</div>
+                )}
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#555' }}>
-                {card.type}
-              </div>
-              <div style={{ 
-                marginTop: 'auto', 
-                fontWeight: 'bold', 
-                color: '#' + COLORS.TEXT_POWER.toString(16), // 修正: 数値をカラーコード文字列に変換
-                textAlign: 'center' 
-              }}>
-                {'power' in card ? (card as any).power : ''}
-              </div>
-              {selected.includes(card.uuid) && (
-                <div style={{
-                  position: 'absolute', top: '4px', right: '4px',
-                  backgroundColor: COLORS.BTN_PRIMARY, color: 'white',
-                  borderRadius: '50%', width: '20px', height: '20px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '12px'
-                }}>✓</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
@@ -123,12 +124,8 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
             <button 
               onClick={onCancel}
               style={{
-                padding: '10px 20px',
-                borderRadius: '4px',
-                border: 'none',
-                backgroundColor: COLORS.BTN_SECONDARY,
-                color: 'white',
-                cursor: 'pointer'
+                padding: '10px 20px', borderRadius: '4px', border: 'none',
+                backgroundColor: COLORS.BTN_SECONDARY, color: 'white', cursor: 'pointer'
               }}
             >
               キャンセル
@@ -138,12 +135,9 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
             onClick={() => isValid && onConfirm(selected)}
             disabled={!isValid}
             style={{
-              padding: '10px 20px',
-              borderRadius: '4px',
-              border: 'none',
+              padding: '10px 20px', borderRadius: '4px', border: 'none',
               backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
-              color: 'white',
-              cursor: isValid ? 'pointer' : 'not-allowed',
+              color: 'white', cursor: isValid ? 'pointer' : 'not-allowed',
               fontWeight: 'bold'
             }}
           >
