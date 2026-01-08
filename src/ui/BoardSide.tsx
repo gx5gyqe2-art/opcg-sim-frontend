@@ -88,7 +88,8 @@ export const createBoardSide = (
   // ライフ
   const lifeCount = z.life?.length || 0;
   const life = createCardContainer(
-    { uuid: `life-${p.player_id}`, name: 'Life' } as any, 
+    // 【修正】card_id: 'BACK' を追加
+    { uuid: `life-${p.player_id}`, name: 'Life', card_id: 'BACK' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `life-${p.player_id}`, name: 'Life' } as any), count: lifeCount }
@@ -98,7 +99,8 @@ export const createBoardSide = (
 
   // デッキ
   const deck = createCardContainer(
-    { uuid: `deck-${p.player_id}`, name: 'Deck' } as any, 
+    // 【修正】card_id: 'BACK' を追加
+    { uuid: `deck-${p.player_id}`, name: 'Deck', card_id: 'BACK' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `deck-${p.player_id}`, name: 'Deck' } as any) }
@@ -106,16 +108,15 @@ export const createBoardSide = (
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   side.addChild(deck);
 
-  // トラッシュ (トップカードの画像を表示するように修正)
+  // トラッシュ (前回修正済み: トップカードIDを使用)
   const trashCount = z.trash?.length || 0;
-  const topTrashCard = z.trash && z.trash.length > 0 ? z.trash[z.trash.length - 1] : null; // 一番上のカードを取得
-
+  const topTrashCard = z.trash && z.trash.length > 0 ? z.trash[z.trash.length - 1] : null;
   const trash = createCardContainer(
     { 
       uuid: `trash-${p.player_id}`, 
       name: 'Trash', 
       cards: z.trash,
-      card_id: topTrashCard ? topTrashCard.card_id : undefined // ここでカードIDを渡す
+      card_id: topTrashCard ? topTrashCard.card_id : undefined 
     } as any, 
     coords.CW, 
     coords.CH, 
@@ -127,7 +128,8 @@ export const createBoardSide = (
   // ドン!!デッキ
   const donDeckCount = (p as any).don_deck_count ?? 0;
   const donDeck = createCardContainer(
-    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, 
+    // 【修正】card_id: 'BACK' を追加
+    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck', card_id: 'BACK' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any), count: donDeckCount }
@@ -139,7 +141,8 @@ export const createBoardSide = (
   const donActiveList = (p as any).don_active || [];
   const donActiveCount = donActiveList.length;
   const donActive = createCardContainer(
-    { uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any, 
+    // 【修正】card_id: 'DON' を追加
+    { uuid: `donactive-${p.player_id}`, name: 'Don!! Active', card_id: 'DON' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any), count: donActiveCount }
@@ -151,7 +154,8 @@ export const createBoardSide = (
   const donRestList = (p as any).don_rested || [];
   const donRestCount = donRestList.length;
   const donRest = createCardContainer(
-    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true } as any, 
+    // 【修正】card_id: 'DON' を追加
+    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true, card_id: 'DON' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any), count: donRestCount }
@@ -164,16 +168,20 @@ export const createBoardSide = (
 
   if (isOpponent) {
     handList.forEach((c: CardInstance, i: number) => {
-      const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
+      const card = createCardContainer(
+        // 【修正】相手の手札は裏面なので card_id: 'BACK' を付与（実際のIDは隠蔽されているはずだが念のため）
+        { ...c, card_id: 'BACK' }, 
+        coords.CW, coords.CH, getCardOpts(c)
+      );
       card.x = coords.getHandX(i, W);
       card.y = r4Y;
       side.addChild(card);
     });
   } else {
+    // ... (自分手札のロジックは変更なし) ...
     const handContainer = new PIXI.Container();
     handContainer.y = r4Y;
     
-    // マスク領域
     const handAreaH = coords.CH * 2; 
     const maskTopOffset = coords.CH; 
     const mask = new PIXI.Graphics();

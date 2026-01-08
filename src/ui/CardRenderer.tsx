@@ -17,7 +17,6 @@ export const createCardContainer = (
   const isOpponent = options.isOpponent ?? false;
   const isRest = card?.is_rest === true;
   const isBack = card?.is_face_up === false;
-  // 【追加】枚数が0かどうか判定 (countがundefinedの場合は通常カードなので0扱いしない)
   const isEmpty = options.count !== undefined && options.count <= 0;
 
   if (isRest) {
@@ -26,15 +25,13 @@ export const createCardContainer = (
 
   // --- ベースの描画 ---
   if (isEmpty) {
-    // 【追加】0枚の場合は枠線のみ描画
     const g = new PIXI.Graphics();
-    g.lineStyle(2, 0x666666, 0.5); // 薄いグレーの枠線
-    g.beginFill(0x000000, 0.2);    // 半透明の黒背景
+    g.lineStyle(2, 0x666666, 0.5);
+    g.beginFill(0x000000, 0.2);
     g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
     g.endFill();
     container.addChild(g);
     
-    // EMPTYテキスト
     const txt = new PIXI.Text("EMPTY", { fontSize: 14, fill: 0x666666 });
     txt.anchor.set(0.5);
     container.addChild(txt);
@@ -63,7 +60,7 @@ export const createCardContainer = (
     container.addChild(border);
 
   } else {
-    // 色塗りモード
+    // 色塗りモード (画像がない、または裏面)
     const g = new PIXI.Graphics();
     g.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
@@ -72,7 +69,6 @@ export const createCardContainer = (
     container.addChild(g);
   }
 
-  // 0枚ならここで終了（バッジなどは描画しない）
   if (isEmpty) return container;
 
   // テキスト追加ヘルパー
@@ -137,6 +133,30 @@ export const createCardContainer = (
       }
     }
 
+    // 【復活】リソースカードのテキスト表示 (画像がない場合や、識別用)
+    if (isResource) {
+      const nameStyle = { 
+        fontSize: SIZES.FONT_NAME_RESOURCE, 
+        fontWeight: 'bold', 
+        fill: COLORS.TEXT_RESOURCE,
+        stroke: '#000000',
+        strokeThickness: 3
+      };
+      addText(cardName, nameStyle, 0, 0, 'screen');
+    } else {
+      // 通常カードの名前表示 (画像モードなら不要かもしれないが、念のため残す設定も可。今回は画像があるなら省略する)
+      if (!card.card_id) { 
+        const nameStyle = { fontSize: SIZES.FONT_NAME_NORMAL, fontWeight: 'bold', fill: COLORS.TEXT_DEFAULT };
+        if (isRest) {
+          const posX = cw / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
+          addText(cardName, nameStyle, posX, 0, 'screen'); 
+        } else {
+          const posY = ch / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
+          addText(cardName, nameStyle, 0, posY, 'screen');
+        }
+      }
+    }
+
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET);
       const by = isOpponent ? (ch / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET) : (-ch / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET);
@@ -150,11 +170,9 @@ export const createCardContainer = (
     }
 
   } else {
-    // 裏面テキスト
     addText(GAME_UI_CONFIG.TEXT.BACK_SIDE, { fontSize: SIZES.FONT_BACK, fontWeight: 'bold', fill: COLORS.TEXT_LIGHT, align: 'center' }, 0, 0, 'screen');
   }
 
-  // --- 重なり枚数バッジ ---
   if (options.count !== undefined && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_OFFSET);
     const by = isOpponent ? (-ch / 2 + UI_DETAILS.CARD_BADGE_OFFSET) : (ch / 2 - UI_DETAILS.CARD_BADGE_OFFSET);
