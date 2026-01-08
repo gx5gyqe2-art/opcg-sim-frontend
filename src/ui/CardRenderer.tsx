@@ -2,10 +2,11 @@ import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
 import { logger } from '../utils/logger';
-import { API_CONFIG } from '../api/api.config'; // 追加
+import { API_CONFIG } from '../api/api.config';
 
 const { COLORS, SIZES } = LAYOUT_CONSTANTS;
-const { SHAPE, UI_DETAILS, ALPHA, PHYSICS } = LAYOUT_PARAMS;
+// 修正: ALPHA を削除しました
+const { SHAPE, UI_DETAILS, PHYSICS } = LAYOUT_PARAMS;
 
 export const createCardContainer = (
   card: any,
@@ -24,16 +25,13 @@ export const createCardContainer = (
 
   // --- ベースの描画 (背景色または画像) ---
   if (!isBack && card?.card_id) {
-    // ▼▼▼ 画像表示モード ▼▼▼
     const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.card_id}.png`;
     
-    // 画像スプライトを作成
     const sprite = PIXI.Sprite.from(imageUrl);
     sprite.width = cw;
     sprite.height = ch;
     sprite.anchor.set(0.5);
     
-    // 角丸マスクを作成
     const mask = new PIXI.Graphics();
     mask.beginFill(0xFFFFFF);
     mask.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
@@ -41,16 +39,14 @@ export const createCardContainer = (
     sprite.mask = mask;
     
     container.addChild(sprite);
-    container.addChild(mask); // マスクもコンテナに追加が必要
+    container.addChild(mask);
 
-    // 枠線だけ上から描画
     const border = new PIXI.Graphics();
     border.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
     border.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
     container.addChild(border);
 
   } else {
-    // ▼▼▼ 従来通りの色塗りモード (裏面など) ▼▼▼
     const g = new PIXI.Graphics();
     g.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
@@ -62,11 +58,10 @@ export const createCardContainer = (
   // テキスト追加ヘルパー
   const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
     const txt = new PIXI.Text(content, style);
-    // 画像の上だと文字が見えにくいので、縁取り(ストローク)を追加して視認性を上げる
     if (!isBack) {
       style.stroke = '#000000';
       style.strokeThickness = 3;
-      txt.style = style; // スタイル再適用
+      txt.style = style;
     }
 
     const maxWidth = isRest ? ch * UI_DETAILS.CARD_TEXT_MAX_WIDTH_RATIO : cw * UI_DETAILS.CARD_TEXT_MAX_WIDTH_RATIO;
@@ -90,20 +85,17 @@ export const createCardContainer = (
     container.addChild(txt);
   };
 
-  // --- 情報バッジの描画 (画像の上に重ねる) ---
+  // --- 情報バッジの描画 ---
   if (!isBack) {
     const cardName = card?.name || "";
     const isResource = ['Trash', 'Deck', 'Life'].includes(cardName) || cardName.startsWith('Don!!');
     const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
 
-    // 画像があれば中央の大きなテキスト(カード名やパワー)は非表示にしてスッキリさせる
-    // ただし、パワーやカウンターなどの「数値」は見えたほうがプレイしやすいので残す
-    
     if (card?.cost !== undefined && !isLeader && !isResource) {
       const cx = -cw / 2 + UI_DETAILS.CARD_BADGE_OFFSET;
       const cy = -ch / 2 + UI_DETAILS.CARD_BADGE_OFFSET;
       const costBadge = new PIXI.Graphics()
-        .beginFill(COLORS.BADGE_COST_BG, 1) // 不透明度を上げて視認性確保
+        .beginFill(COLORS.BADGE_COST_BG, 1)
         .lineStyle(1, 0xFFFFFF)
         .drawCircle(cx, cy, SHAPE.CORNER_RADIUS_BADGE)
         .endFill();
@@ -117,7 +109,6 @@ export const createCardContainer = (
     }
 
     if (card?.power !== undefined && !isResource) {
-      // パワーは重要なので画像の上でも目立つように表示
       const pStyle = { fontSize: SIZES.FONT_POWER, fill: COLORS.TEXT_POWER, fontWeight: 'bold', stroke: 'black', strokeThickness: 4 };
       if (isRest) {
         addText(`${card.power}`, pStyle, -cw / 2 - UI_DETAILS.CARD_TEXT_PADDING_X, 0, 'screen');
@@ -126,7 +117,6 @@ export const createCardContainer = (
       }
     }
 
-    // ドン!!付与数
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET);
       const by = isOpponent ? (ch / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET) : (-ch / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET);
@@ -140,7 +130,6 @@ export const createCardContainer = (
     }
 
   } else {
-    // 裏面テキスト
     addText(GAME_UI_CONFIG.TEXT.BACK_SIDE, { fontSize: SIZES.FONT_BACK, fontWeight: 'bold', fill: COLORS.TEXT_LIGHT, align: 'center' }, 0, 0, 'screen');
   }
 
