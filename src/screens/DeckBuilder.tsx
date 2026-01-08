@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { logger } from '../utils/logger';
 import { API_CONFIG } from '../api/api.config';
 
@@ -16,289 +16,432 @@ interface CardData {
 }
 
 interface DeckData {
-  id?: string; // 保存済みデッキにはIDがある
+  id?: string;
   name: string;
   leader_id: string | null;
   card_uuids: string[];
   don_uuids: string[];
 }
 
-// --- 1画面目: デッキ一覧 ---
+// 共通スタイル: カード（ダミー画像）
+const CardImageStub = ({ text, count, onClick }: { text: string, count?: number, onClick?: () => void }) => (
+  <div 
+    onClick={onClick}
+    style={{
+      width: '80px', // カードサイズ比率調整
+      height: '112px',
+      background: '#888',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#fff',
+      fontSize: '10px',
+      textAlign: 'center',
+      position: 'relative',
+      borderRadius: '4px',
+      border: '1px solid #aaa',
+      cursor: onClick ? 'pointer' : 'default',
+      boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+    }}
+  >
+    <span style={{ padding: '5px' }}>{text || "No DATA"}</span>
+    
+    {/* 右上の枚数バッジ */}
+    {count !== undefined && (
+      <div style={{
+        position: 'absolute',
+        top: '-5px',
+        right: '-5px',
+        background: '#e74c3c',
+        color: 'white',
+        borderRadius: '50%',
+        width: '20px',
+        height: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        border: '1px solid white'
+      }}>
+        {count}
+      </div>
+    )}
+  </div>
+);
+
+
+// --- 1. デッキ一覧画面 ---
 const DeckListView = ({ 
+  decks, 
   onSelectDeck, 
   onCreateNew, 
   onBack 
 }: { 
+  decks: DeckData[],
   onSelectDeck: (deck: DeckData) => void, 
   onCreateNew: () => void,
   onBack: () => void 
 }) => {
-  const [decks, setDecks] = useState<DeckData[]>([]);
-
-  useEffect(() => {
-    // デッキ一覧を取得
-    const fetchDecks = async () => {
-      try {
-        const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.decks)) {
-          setDecks(data.decks);
-        }
-      } catch (e) {
-        logger.log({ level: 'error', action: 'deck_list.fetch', msg: String(e) });
-      }
-    };
-    fetchDecks();
-  }, []);
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee', fontFamily: 'sans-serif' }}>
-      {/* ヘッダー */}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
       <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>
-          ← TOPへ
-        </button>
+        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>← TOP</button>
         <h2 style={{ margin: 0, fontSize: '18px' }}>デッキ一覧</h2>
-        <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>
-          ＋ 新規作成
-        </button>
+        <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px' }}>＋ 新規</button>
       </div>
-
-      {/* リストエリア (縦スクロール) */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
-        {decks.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>保存されたデッキはありません</div>
-        ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {decks.map((deck, idx) => (
-                    <div 
-                        key={deck.id || idx} 
-                        onClick={() => onSelectDeck(deck)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            background: '#333',
-                            border: '1px solid #444',
-                            borderRadius: '8px',
-                            padding: '10px',
-                            cursor: 'pointer',
-                            transition: 'background 0.2s',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#444'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = '#333'}
-                    >
-                        {/* 左端: リーダー (アイコン風表示) */}
-                        <div style={{ 
-                            width: '50px', 
-                            height: '70px', 
-                            background: '#222', 
-                            border: '1px solid #555', 
-                            borderRadius: '4px',
-                            marginRight: '15px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '10px',
-                            textAlign: 'center',
-                            overflow: 'hidden',
-                            color: '#aaa',
-                            flexShrink: 0
-                        }}>
-                            {deck.leader_id ? deck.leader_id : "No Leader"}
-                        </div>
-
-                        {/* 右側: デッキ情報 */}
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>{deck.name}</div>
-                            <div style={{ fontSize: '12px', color: '#888' }}>
-                                Leader: {deck.leader_id || "-"} / Cards: {deck.card_uuids?.length || 0}枚
-                            </div>
-                        </div>
-
-                        <div style={{ fontSize: '20px', color: '#555', paddingRight: '10px' }}>›</div>
-                    </div>
-                ))}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>デッキがありません</div>}
+        {decks.map((deck, idx) => (
+            <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer' }}>
+                <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa' }}>
+                    {deck.leader_id || "L"}
+                </div>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{deck.name}</div>
+                    <div style={{ fontSize: '12px', color: '#888' }}>{deck.card_uuids.length}枚</div>
+                </div>
+                <div style={{ fontSize: '20px', color: '#555' }}>›</div>
             </div>
-        )}
+        ))}
       </div>
     </div>
   );
 };
 
 
-// --- 2画面目: デッキ編集 (以前のDeckBuilderの中身) ---
-const DeckEditor = ({ 
-  initialDeck, 
-  onBack 
-}: { 
-  initialDeck: DeckData, 
-  onBack: () => void 
+// --- 2. デッキ編集画面 ---
+const DeckEditorView = ({
+  deck,
+  allCards,
+  onUpdateDeck,
+  onSave,
+  onBack,
+  onOpenDetail,
+  onOpenCatalog
+}: {
+  deck: DeckData,
+  allCards: CardData[],
+  onUpdateDeck: (d: DeckData) => void,
+  onSave: () => void,
+  onBack: () => void,
+  onOpenDetail: (card: CardData) => void,
+  onOpenCatalog: () => void
 }) => {
-  const [allCards, setAllCards] = useState<CardData[]>([]);
-  const [filteredCards, setFilteredCards] = useState<CardData[]>([]);
-  const [deck, setDeck] = useState<DeckData>(initialDeck);
-  const [filterColor, setFilterColor] = useState<string>('ALL');
+  
+  // デッキ内のカードIDを集計して {card, count} のリストにする
+  const groupedCards = useMemo(() => {
+    const map = new Map<string, number>();
+    deck.card_uuids.forEach(uuid => {
+      map.set(uuid, (map.get(uuid) || 0) + 1);
+    });
+    
+    // リーダーカード
+    const leaderCard = allCards.find(c => c.uuid === deck.leader_id);
 
-  useEffect(() => {
-    fetchCards();
-  }, []);
+    // メインデッキ
+    const list: { card: CardData, count: number }[] = [];
+    map.forEach((count, uuid) => {
+      const card = allCards.find(c => c.uuid === uuid);
+      if (card) list.push({ card, count });
+    });
+    
+    // コスト順などにソート (任意)
+    list.sort((a, b) => (a.card.cost || 0) - (b.card.cost || 0));
 
-  useEffect(() => {
-    applyFilter();
+    return { leaderCard, list };
+  }, [deck.card_uuids, deck.leader_id, allCards]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
+      {/* ヘッダー */}
+      <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: '10px', alignItems: 'center' }}>
+        <button onClick={onBack} style={{ padding: '5px 10px', cursor: 'pointer' }}>←</button>
+        <input 
+          value={deck.name} 
+          onChange={e => onUpdateDeck({...deck, name: e.target.value})}
+          style={{ background: '#222', color: 'white', border: '1px solid #555', padding: '5px', borderRadius: '4px' }}
+        />
+        <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{deck.card_uuids.length}/50</div>
+        <button onClick={onSave} style={{ padding: '5px 15px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>保存</button>
+      </div>
+
+      {/* リーダーエリア (要望により"一部無視"とのことだが枠だけ配置) */}
+      <div style={{ padding: '10px', background: '#2a2a2a', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>LEADER (Tap to Change)</div>
+          <CardImageStub 
+            text={groupedCards.leaderCard?.name || "Select Leader"} 
+            onClick={onOpenCatalog} // カタログを開く（リーダー選択用として）
+          />
+        </div>
+      </div>
+
+      {/* カードリストエリア (グリッド表示) */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', justifyItems: 'center' }}>
+          
+          {/* カード追加ボタン */}
+          <div 
+            onClick={onOpenCatalog}
+            style={{
+              width: '80px', height: '112px',
+              border: '2px dashed #666', borderRadius: '4px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#888', cursor: 'pointer', fontSize: '24px'
+            }}
+          >
+            ＋
+          </div>
+
+          {groupedCards.list.map((item) => (
+            <CardImageStub 
+              key={item.card.uuid}
+              text={item.card.name} 
+              count={item.count} 
+              onClick={() => onOpenDetail(item.card)} 
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- 3. カード詳細・枚数編集画面 ---
+const CardDetailScreen = ({
+  card,
+  currentCount,
+  onCountChange,
+  onClose
+}: {
+  card: CardData,
+  currentCount: number,
+  onCountChange: (diff: number) => void,
+  onClose: () => void
+}) => {
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      
+      {/* カード画像 (拡大) */}
+      <div style={{ width: '240px', height: '336px', background: '#444', border: '2px solid #fff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px', color: 'white', flexDirection: 'column' }}>
+        <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{card.name}</div>
+        <div style={{ marginTop: '10px', color: '#aaa' }}>{card.uuid}</div>
+        <div style={{ marginTop: '5px' }}>Power: {card.power || '-'}</div>
+        <div style={{ marginTop: '5px' }}>Cost: {card.cost || '-'}</div>
+      </div>
+
+      {/* 枚数操作フォーム */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' }}>
+        <button 
+          onClick={() => onCountChange(-1)}
+          disabled={currentCount <= 0}
+          style={{ width: '60px', height: '60px', borderRadius: '50%', border: 'none', background: currentCount > 0 ? '#e74c3c' : '#555', color: 'white', fontSize: '24px', cursor: 'pointer' }}
+        >
+          －
+        </button>
+        
+        <div style={{ fontSize: '48px', fontWeight: 'bold', color: 'white', width: '80px', textAlign: 'center' }}>
+          {currentCount}
+        </div>
+        
+        <button 
+          onClick={() => onCountChange(1)}
+          disabled={currentCount >= 4} // 通常4枚制限
+          style={{ width: '60px', height: '60px', borderRadius: '50%', border: 'none', background: currentCount < 4 ? '#3498db' : '#555', color: 'white', fontSize: '24px', cursor: 'pointer' }}
+        >
+          ＋
+        </button>
+      </div>
+
+      <button onClick={onClose} style={{ padding: '15px 40px', fontSize: '18px', background: 'transparent', border: '1px solid #fff', color: 'white', borderRadius: '30px', cursor: 'pointer' }}>
+        閉じる
+      </button>
+    </div>
+  );
+};
+
+
+// --- 4. カタログ画面 (カード追加用) ---
+const CardCatalogScreen = ({
+  allCards,
+  onSelect,
+  onClose
+}: {
+  allCards: CardData[],
+  onSelect: (card: CardData) => void,
+  onClose: () => void
+}) => {
+  const [filterColor, setFilterColor] = useState('ALL');
+  
+  const filtered = useMemo(() => {
+    if (filterColor === 'ALL') return allCards;
+    return allCards.filter(c => c.color && c.color.includes(filterColor));
   }, [allCards, filterColor]);
 
-  const fetchCards = async () => {
-    try {
-      const url = `${API_CONFIG.BASE_URL}/api/cards`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.success && Array.isArray(data.cards)) {
-        setAllCards(data.cards);
-      }
-    } catch (e) {
-      logger.log({ level: 'error', action: 'deck.fetch_cards', msg: String(e) });
-    }
-  };
-
-  const applyFilter = () => {
-    let res = allCards;
-    if (filterColor !== 'ALL') {
-      res = res.filter(c => c.color && c.color.includes(filterColor));
-    }
-    setFilteredCards(res);
-  };
-
-  const addToDeck = (card: CardData) => {
-    if (card.type === 'LEADER') {
-      setDeck(prev => ({ ...prev, leader_id: card.uuid }));
-    } else {
-      if (deck.card_uuids.length >= 50) return;
-      setDeck(prev => ({ ...prev, card_uuids: [...prev.card_uuids, card.uuid] }));
-    }
-  };
-
-  const removeFromDeck = (index: number) => {
-    setDeck(prev => {
-      const newIds = [...prev.card_uuids];
-      newIds.splice(index, 1);
-      return { ...prev, card_uuids: newIds };
-    });
-  };
-
-  const saveDeck = async () => {
-    if (!deck.leader_id) {
-        alert("リーダーカードを選択してください。");
-        return;
-    }
-    try {
-        const url = `${API_CONFIG.BASE_URL}/api/deck`;
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(deck)
-        });
-        const json = await res.json();
-        if (json.success) {
-            alert(`デッキ「${deck.name}」を保存しました！`);
-        } else {
-            alert('保存失敗: ' + json.error);
-        }
-    } catch(e) {
-        alert("保存中にエラーが発生しました。");
-    }
-  };
-
   return (
-    <div style={{ display: 'flex', height: '100vh', color: '#eee', background: '#222', fontFamily: 'sans-serif' }}>
-      {/* 左エリア: カードリスト */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #444' }}>
-        <div style={{ padding: '10px', background: '#333', display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button onClick={onBack} style={{ padding: '5px 15px', cursor: 'pointer' }}>← 一覧へ</button>
-            <select onChange={e => setFilterColor(e.target.value)} style={{ padding: '5px' }} value={filterColor}>
-                <option value="ALL">全色</option>
-                <option value="Red">赤</option>
-                <option value="Green">緑</option>
-                <option value="Blue">青</option>
-                <option value="Purple">紫</option>
-                <option value="Black">黒</option>
-                <option value="Yellow">黄</option>
-            </select>
-            <span>Hit: {filteredCards.length}</span>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'flex-start' }}>
-            {filteredCards.map((c) => (
-                <div key={c.uuid} onClick={() => addToDeck(c)} style={{ width: '90px', height: '126px', background: '#444', border: '1px solid #666', borderRadius: '4px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '11px', textAlign: 'center', padding: '2px', position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: c.type === 'LEADER' ? '#e74c3c' : (c.type === 'EVENT' ? '#f39c12' : '#3498db') }} />
-                    <strong style={{ display: 'block', marginBottom: '4px' }}>{c.name}</strong>
-                    <div style={{ fontSize: '9px', color: '#aaa' }}>{c.uuid}</div>
-                    {c.cost !== undefined && <div style={{ marginTop: '2px', background: '#222', padding: '0 4px', borderRadius: '4px' }}>C: {c.cost}</div>}
-                </div>
-            ))}
-        </div>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', gap: '10px' }}>
+        <button onClick={onClose} style={{ padding: '5px 15px' }}>キャンセル</button>
+        <select value={filterColor} onChange={e => setFilterColor(e.target.value)} style={{ padding: '5px', flex: 1 }}>
+          <option value="ALL">全色</option>
+          <option value="Red">赤</option>
+          <option value="Green">緑</option>
+          <option value="Blue">青</option>
+          <option value="Purple">紫</option>
+          <option value="Black">黒</option>
+          <option value="Yellow">黄</option>
+        </select>
       </div>
-
-      {/* 右エリア: デッキ編集 */}
-      <div style={{ width: '300px', padding: '10px', background: '#2a2a2a', display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #555', paddingBottom: '5px' }}>デッキ編集</h3>
-        <input value={deck.name} onChange={e => setDeck(prev => ({...prev, name: e.target.value}))} placeholder="デッキ名" style={{ marginBottom: '15px', padding: '8px', width: '100%' }} />
-        <div style={{ marginBottom: '15px', padding: '10px', background: '#333', border: '1px solid #555' }}>
-            <div style={{ fontSize: '12px', color: '#aaa' }}>Leader</div>
-            <div style={{ fontWeight: 'bold' }}>{deck.leader_id || "(未選択)"}</div>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #444', background: '#222', marginBottom: '10px' }}>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {deck.card_uuids.map((id, idx) => (
-                    <li key={idx} style={{ padding: '6px 10px', borderBottom: '1px solid #333', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>{idx + 1}. {id}</span>
-                        <button onClick={() => removeFromDeck(idx)} style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer' }}>×</button>
-                    </li>
-                ))}
-            </ul>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span>枚数:</span>
-            <span style={{ color: deck.card_uuids.length === 50 ? '#2ecc71' : '#e74c3c', fontWeight: 'bold' }}>{deck.card_uuids.length} / 50</span>
-        </div>
-        <button onClick={saveDeck} style={{ padding: '12px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>保存する</button>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px' }}>
+        {filtered.map(c => (
+          <CardImageStub 
+            key={c.uuid} 
+            text={c.name} 
+            onClick={() => onSelect(c)} 
+          />
+        ))}
       </div>
     </div>
   );
 };
 
-// --- 親コンポーネント: 状態遷移管理 ---
+
+// --- 親コンポーネント (Main) ---
 export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
-  const [mode, setMode] = useState<'list' | 'edit'>('list');
-  const [selectedDeck, setSelectedDeck] = useState<DeckData | null>(null);
+  // State
+  const [mode, setMode] = useState<'list' | 'edit' | 'detail' | 'catalog'>('list');
+  const [allCards, setAllCards] = useState<CardData[]>([]);
+  const [decks, setDecks] = useState<DeckData[]>([]);
+  
+  const [currentDeck, setCurrentDeck] = useState<DeckData | null>(null);
+  const [targetCard, setTargetCard] = useState<CardData | null>(null);
+
+  // Load Data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // カードマスタ取得
+        const cRes = await fetch(`${API_CONFIG.BASE_URL}/api/cards`);
+        const cData = await cRes.json();
+        if (cData.success) setAllCards(cData.cards);
+
+        // デッキ一覧取得
+        const dRes = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
+        const dData = await dRes.json();
+        if (dData.success) setDecks(dData.decks);
+      } catch (e) {
+        logger.error('deck_builder.init', String(e));
+      }
+    };
+    fetchData();
+  }, [mode]); // modeが変わるたびにリフレッシュ（簡易実装）
+
+  // Actions
+  const handleSelectDeck = (deck: DeckData) => {
+    setCurrentDeck(deck);
+    setMode('edit');
+  };
 
   const handleCreateNew = () => {
-    setSelectedDeck({
-      name: 'New Deck',
-      leader_id: null,
-      card_uuids: [],
-      don_uuids: []
-    });
+    setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] });
     setMode('edit');
   };
 
-  const handleSelectDeck = (deck: DeckData) => {
-    setSelectedDeck(deck);
-    setMode('edit');
+  const handleSaveDeck = async () => {
+    if (!currentDeck) return;
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentDeck)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('保存しました');
+        // 保存後IDを反映
+        setCurrentDeck(prev => prev ? ({...prev, id: data.deck_id}) : null);
+      } else {
+        alert('Error: ' + data.error);
+      }
+    } catch (e) {
+      alert('通信エラー');
+    }
   };
 
+  const handleChangeCount = (card: CardData, diff: number) => {
+    if (!currentDeck) return;
+    
+    // リーダーの場合
+    if (card.type === 'LEADER') {
+      if (diff > 0) setCurrentDeck({ ...currentDeck, leader_id: card.uuid });
+      else if (currentDeck.leader_id === card.uuid) setCurrentDeck({ ...currentDeck, leader_id: null });
+      return;
+    }
+
+    // 通常カード
+    const newUuids = [...currentDeck.card_uuids];
+    if (diff > 0) {
+      if (newUuids.length < 50) newUuids.push(card.uuid);
+    } else {
+      const idx = newUuids.indexOf(card.uuid);
+      if (idx !== -1) newUuids.splice(idx, 1);
+    }
+    setCurrentDeck({ ...currentDeck, card_uuids: newUuids });
+  };
+
+  // Render
   if (mode === 'list') {
+    return <DeckListView decks={decks} onSelectDeck={handleSelectDeck} onCreateNew={handleCreateNew} onBack={onBack} />;
+  }
+
+  if (mode === 'edit' && currentDeck) {
     return (
-      <DeckListView 
-        onSelectDeck={handleSelectDeck} 
-        onCreateNew={handleCreateNew} 
-        onBack={onBack} 
-      />
-    );
-  } else {
-    return (
-      <DeckEditor 
-        initialDeck={selectedDeck!} 
-        onBack={() => setMode('list')} 
+      <DeckEditorView
+        deck={currentDeck}
+        allCards={allCards}
+        onUpdateDeck={setCurrentDeck}
+        onSave={handleSaveDeck}
+        onBack={() => setMode('list')}
+        onOpenDetail={(card) => {
+          setTargetCard(card);
+          setMode('detail');
+        }}
+        onOpenCatalog={() => setMode('catalog')}
       />
     );
   }
+
+  if (mode === 'detail' && targetCard && currentDeck) {
+    const count = currentDeck.card_uuids.filter(id => id === targetCard.uuid).length;
+    return (
+      <CardDetailScreen
+        card={targetCard}
+        currentCount={count}
+        onCountChange={(diff) => handleChangeCount(targetCard, diff)}
+        onClose={() => setMode('edit')}
+      />
+    );
+  }
+
+  if (mode === 'catalog' && currentDeck) {
+    return (
+      <CardCatalogScreen
+        allCards={allCards}
+        onClose={() => setMode('edit')}
+        onSelect={(card) => {
+          // カタログで選んだら、そのカードの詳細画面へ直接飛ぶ（枚数を決めるため）
+          // または直接1枚追加してエディタに戻るか。今回は詳細画面へ飛ばすフローにする
+          setTargetCard(card);
+          setMode('detail');
+          
+          // 初回追加の場合は +1 しておくなどのUXも考えられるが、
+          // シンプルに詳細画面で「0」からスタートさせる
+        }}
+      />
+    );
+  }
+
+  return <div>Loading...</div>;
 };
