@@ -88,8 +88,7 @@ export const createBoardSide = (
   // ライフ
   const lifeCount = z.life?.length || 0;
   const life = createCardContainer(
-    // 【修正】card_id: 'BACK' を追加
-    { uuid: `life-${p.player_id}`, name: 'Life', card_id: 'BACK' } as any, 
+    { uuid: `life-${p.player_id}`, name: 'Life' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `life-${p.player_id}`, name: 'Life' } as any), count: lifeCount }
@@ -99,8 +98,7 @@ export const createBoardSide = (
 
   // デッキ
   const deck = createCardContainer(
-    // 【修正】card_id: 'BACK' を追加
-    { uuid: `deck-${p.player_id}`, name: 'Deck', card_id: 'BACK' } as any, 
+    { uuid: `deck-${p.player_id}`, name: 'Deck' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `deck-${p.player_id}`, name: 'Deck' } as any) }
@@ -108,15 +106,16 @@ export const createBoardSide = (
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   side.addChild(deck);
 
-  // トラッシュ (前回修正済み: トップカードIDを使用)
+  // トラッシュ
   const trashCount = z.trash?.length || 0;
   const topTrashCard = z.trash && z.trash.length > 0 ? z.trash[z.trash.length - 1] : null;
+
   const trash = createCardContainer(
     { 
       uuid: `trash-${p.player_id}`, 
       name: 'Trash', 
       cards: z.trash,
-      card_id: topTrashCard ? topTrashCard.card_id : undefined 
+      card_id: topTrashCard ? topTrashCard.card_id : undefined
     } as any, 
     coords.CW, 
     coords.CH, 
@@ -128,8 +127,7 @@ export const createBoardSide = (
   // ドン!!デッキ
   const donDeckCount = (p as any).don_deck_count ?? 0;
   const donDeck = createCardContainer(
-    // 【修正】card_id: 'BACK' を追加
-    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck', card_id: 'BACK' } as any, 
+    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any), count: donDeckCount }
@@ -137,12 +135,15 @@ export const createBoardSide = (
   donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
   side.addChild(donDeck);
 
-  // アクティブドン
+  // アクティブドン (修正: card_id="DON" を指定)
   const donActiveList = (p as any).don_active || [];
   const donActiveCount = donActiveList.length;
   const donActive = createCardContainer(
-    // 【修正】card_id: 'DON' を追加
-    { uuid: `donactive-${p.player_id}`, name: 'Don!! Active', card_id: 'DON' } as any, 
+    { 
+      uuid: `donactive-${p.player_id}`, 
+      name: 'Don!! Active',
+      card_id: 'DON' // 画像ファイル DON.png を参照させるため
+    } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any), count: donActiveCount }
@@ -150,12 +151,16 @@ export const createBoardSide = (
   donActive.x = coords.getDonActiveX(W); donActive.y = r3Y;
   side.addChild(donActive);
 
-  // レストドン
+  // レストドン (修正: card_id="DON" を指定)
   const donRestList = (p as any).don_rested || [];
   const donRestCount = donRestList.length;
   const donRest = createCardContainer(
-    // 【修正】card_id: 'DON' を追加
-    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true, card_id: 'DON' } as any, 
+    { 
+      uuid: `donrest-${p.player_id}`, 
+      name: 'Don!! Rest', 
+      is_rest: true,
+      card_id: 'DON' // 画像ファイル DON.png を参照させるため
+    } as any, 
     coords.CW, 
     coords.CH, 
     { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any), count: donRestCount }
@@ -168,20 +173,16 @@ export const createBoardSide = (
 
   if (isOpponent) {
     handList.forEach((c: CardInstance, i: number) => {
-      const card = createCardContainer(
-        // 【修正】相手の手札は裏面なので card_id: 'BACK' を付与（実際のIDは隠蔽されているはずだが念のため）
-        { ...c, card_id: 'BACK' }, 
-        coords.CW, coords.CH, getCardOpts(c)
-      );
+      const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
       card.x = coords.getHandX(i, W);
       card.y = r4Y;
       side.addChild(card);
     });
   } else {
-    // ... (自分手札のロジックは変更なし) ...
     const handContainer = new PIXI.Container();
     handContainer.y = r4Y;
     
+    // マスク領域
     const handAreaH = coords.CH * 2; 
     const maskTopOffset = coords.CH; 
     const mask = new PIXI.Graphics();
@@ -220,7 +221,6 @@ export const createBoardSide = (
 
       const inertiaTicker = () => {
         if (isDragging) return;
-        
         if (Math.abs(velocity) < 0.1) {
             const minX = W - totalHandWidth;
             if (innerHand.x > 0) {
@@ -232,10 +232,8 @@ export const createBoardSide = (
             }
             return;
         }
-
         innerHand.x += velocity;
         velocity *= PHYSICS.HAND_FRICTION;
-
         const minX = W - totalHandWidth;
         if (innerHand.x > 0 || innerHand.x < minX) {
             velocity *= PHYSICS.HAND_BOUNCE;
@@ -267,19 +265,12 @@ export const createBoardSide = (
         if (!isDragging) return;
         const currentX = e.global.x;
         const dx = currentX - startX;
-        
         velocity = currentX - lastX;
         lastX = currentX;
-
         let newX = containerStartX + dx;
-
         const minX = W - totalHandWidth;
-        if (newX > 0) {
-            newX = newX * 0.5;
-        } else if (newX < minX) {
-            newX = minX + (newX - minX) * 0.5;
-        }
-
+        if (newX > 0) newX = newX * 0.5;
+        else if (newX < minX) newX = minX + (newX - minX) * 0.5;
         innerHand.x = newX;
       });
     }

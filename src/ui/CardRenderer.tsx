@@ -23,8 +23,29 @@ export const createCardContainer = (
     container.rotation = Math.PI / 2;
   }
 
-  // --- ベースの描画 ---
+  // --- 画像URLの決定 ---
+  let imageUrl = null;
+  const cardName = card?.name || "";
+
+  if (!isEmpty) {
+    if (cardName === 'Don!! Deck') {
+      // ドンデッキ裏面
+      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/DON_back.png`;
+    } else if (cardName === 'Deck' || cardName === 'Life') {
+      // デッキ・ライフ裏面
+      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/OPCG_back.png`;
+    } else if (isBack) {
+      // その他の裏面カード（手札など）
+      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/OPCG_back.png`;
+    } else if (card?.card_id) {
+      // 表面: IDがある場合 (DONを含む)
+      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.card_id}.png`;
+    }
+  }
+
+  // --- 描画処理 ---
   if (isEmpty) {
+    // 0枚時は枠のみ
     const g = new PIXI.Graphics();
     g.lineStyle(2, 0x666666, 0.5);
     g.beginFill(0x000000, 0.2);
@@ -36,10 +57,8 @@ export const createCardContainer = (
     txt.anchor.set(0.5);
     container.addChild(txt);
 
-  } else if (!isBack && card?.card_id) {
+  } else if (imageUrl) {
     // 画像表示モード
-    const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.card_id}.png`;
-    
     const sprite = PIXI.Sprite.from(imageUrl);
     sprite.width = cw;
     sprite.height = ch;
@@ -54,15 +73,17 @@ export const createCardContainer = (
     container.addChild(sprite);
     container.addChild(mask);
 
+    // 枠線
     const border = new PIXI.Graphics();
     border.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
     border.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
     container.addChild(border);
 
   } else {
-    // 色塗りモード (画像がない、または裏面)
+    // 画像なし & 裏面でない場合のフォールバック（色塗り）
     const g = new PIXI.Graphics();
     g.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
+    // isBackのケースは上でimageUrlが設定されるはずだが念のため
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
     g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
     g.endFill();
@@ -74,7 +95,7 @@ export const createCardContainer = (
   // テキスト追加ヘルパー
   const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
     const txt = new PIXI.Text(content, style);
-    if (!isBack) {
+    if (!isBack && imageUrl) {
       style.stroke = '#000000';
       style.strokeThickness = 3;
       txt.style = style;
@@ -101,12 +122,12 @@ export const createCardContainer = (
     container.addChild(txt);
   };
 
-  // --- 情報バッジの描画 ---
+  // --- 情報表示 (画像がある場合はテキストを非表示にする) ---
   if (!isBack) {
-    const cardName = card?.name || "";
     const isResource = ['Trash', 'Deck', 'Life'].includes(cardName) || cardName.startsWith('Don!!');
     const isLeader = card?.type === 'LEADER' || card?.type === 'リーダー';
 
+    // バッジ（コスト）
     if (card?.cost !== undefined && !isLeader && !isResource) {
       const cx = -cw / 2 + UI_DETAILS.CARD_BADGE_OFFSET;
       const cy = -ch / 2 + UI_DETAILS.CARD_BADGE_OFFSET;
@@ -119,11 +140,13 @@ export const createCardContainer = (
       addText(`${card.cost}`, { fontSize: SIZES.FONT_COST, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
+    // カウンター
     if (card?.counter !== undefined && card.counter > 0) {
       const xOffset = isOpponent ? (cw / 2 - UI_DETAILS.CARD_TEXT_PADDING_X) : (-cw / 2 + UI_DETAILS.CARD_TEXT_PADDING_X);
       addText(`+${card.counter}`, { fontSize: SIZES.FONT_COUNTER, fill: '#ffff00', fontWeight: 'bold', stroke: 'black', strokeThickness: 4 }, xOffset, 0, -Math.PI / 2);
     }
 
+    // パワー
     if (card?.power !== undefined && !isResource) {
       const pStyle = { fontSize: SIZES.FONT_POWER, fill: COLORS.TEXT_POWER, fontWeight: 'bold', stroke: 'black', strokeThickness: 4 };
       if (isRest) {
@@ -133,30 +156,7 @@ export const createCardContainer = (
       }
     }
 
-    // 【復活】リソースカードのテキスト表示 (画像がない場合や、識別用)
-    if (isResource) {
-      const nameStyle = { 
-        fontSize: SIZES.FONT_NAME_RESOURCE, 
-        fontWeight: 'bold', 
-        fill: COLORS.TEXT_RESOURCE,
-        stroke: '#000000',
-        strokeThickness: 3
-      };
-      addText(cardName, nameStyle, 0, 0, 'screen');
-    } else {
-      // 通常カードの名前表示 (画像モードなら不要かもしれないが、念のため残す設定も可。今回は画像があるなら省略する)
-      if (!card.card_id) { 
-        const nameStyle = { fontSize: SIZES.FONT_NAME_NORMAL, fontWeight: 'bold', fill: COLORS.TEXT_DEFAULT };
-        if (isRest) {
-          const posX = cw / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
-          addText(cardName, nameStyle, posX, 0, 'screen'); 
-        } else {
-          const posY = ch / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
-          addText(cardName, nameStyle, 0, posY, 'screen');
-        }
-      }
-    }
-
+    // ドン!!付与数
     if (card?.attached_don > 0) {
       const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET);
       const by = isOpponent ? (ch / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET) : (-ch / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET);
@@ -169,10 +169,38 @@ export const createCardContainer = (
       addText(`+${card.attached_don}`, { fontSize: SIZES.FONT_DON, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, bx, by, 'screen');
     }
 
+    // ★重要: カード名テキストの制御
+    // 画像が無い場合、またはリソース系カードで画像が無い場合にのみテキストを表示
+    // 今回の修正でリソース系(Deck, Life, Don)も画像が出るようになったので、imageUrlがあればテキストは出さない
+    if (!imageUrl) {
+      const nameStyle = { 
+        fontSize: isResource ? SIZES.FONT_NAME_RESOURCE : SIZES.FONT_NAME_NORMAL, 
+        fontWeight: 'bold', 
+        fill: isResource ? COLORS.TEXT_RESOURCE : COLORS.TEXT_DEFAULT 
+      };
+
+      if (isResource) {
+        addText(cardName, nameStyle, 0, 0, 'screen');
+      } else {
+        if (isRest) {
+          const posX = cw / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
+          addText(cardName, nameStyle, posX, 0, 'screen'); 
+        } else {
+          const posY = ch / 2 + UI_DETAILS.CARD_TEXT_PADDING_Y;
+          addText(cardName, nameStyle, 0, posY, 'screen');
+        }
+      }
+    }
+
   } else {
-    addText(GAME_UI_CONFIG.TEXT.BACK_SIDE, { fontSize: SIZES.FONT_BACK, fontWeight: 'bold', fill: COLORS.TEXT_LIGHT, align: 'center' }, 0, 0, 'screen');
+    // 裏面テキスト
+    // 画像があるなら "BACK" テキストは出さない
+    if (!imageUrl) {
+      addText(GAME_UI_CONFIG.TEXT.BACK_SIDE, { fontSize: SIZES.FONT_BACK, fontWeight: 'bold', fill: COLORS.TEXT_LIGHT, align: 'center' }, 0, 0, 'screen');
+    }
   }
 
+  // --- 重なり枚数バッジ ---
   if (options.count !== undefined && options.count > 0) {
     const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_OFFSET);
     const by = isOpponent ? (-ch / 2 + UI_DETAILS.CARD_BADGE_OFFSET) : (ch / 2 - UI_DETAILS.CARD_BADGE_OFFSET);
