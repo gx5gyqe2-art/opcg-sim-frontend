@@ -55,10 +55,31 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
   const getPlaceholderForAction = (type: ActionType) => {
     switch (type) {
       case 'BuffPower': return '例: +2000';
-      case 'SelectOption': return '例: 1枚引く | 相手キャラをKO';
-      case 'AddDon': return '例: 2 (枚数)';
+      case 'SelectOption': return '例: 1枚引く | KO';
+      case 'AddDon': return '例: 2';
       default: return '詳細';
     }
+  };
+
+  // 共通スタイル定義
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '12px', // タップしやすいよう拡大
+    background: '#34495e',
+    color: 'white',
+    border: '1px solid #7f8c8d',
+    borderRadius: '4px',
+    fontSize: '16px', // iOSでのズーム防止
+    boxSizing: 'border-box',
+    marginBottom: '5px'
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '0.85em',
+    color: '#bdc3c7',
+    marginBottom: '4px',
+    fontWeight: 'bold'
   };
 
   return (
@@ -69,36 +90,61 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
       transform: 'translate(-50%, -50%)',
       backgroundColor: '#2c3e50',
       color: '#ecf0f1',
-      padding: '20px',
+      padding: '15px', // モバイル向けに少し縮小
       borderRadius: '8px',
       boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
       zIndex: 10000,
-      width: '500px',
+      width: '95%', // モバイル向けに幅を確保
+      maxWidth: '500px', // PCでは広がりすぎないように
       maxHeight: '90vh',
       overflowY: 'auto',
-      fontFamily: 'monospace'
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      fontSize: '14px',
+      boxSizing: 'border-box'
     }}>
-      <h3 style={{ marginTop: 0, borderBottom: '1px solid #7f8c8d', paddingBottom: '10px' }}>
-        🎴 効果定義レポート
-      </h3>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        marginBottom: '15px',
+        borderBottom: '1px solid #7f8c8d', 
+        paddingBottom: '10px' 
+      }}>
+        <h3 style={{ margin: 0, fontSize: '1.2em' }}>🎴 効果定義レポート</h3>
+        <button 
+          onClick={onCancel}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#bdc3c7',
+            fontSize: '1.5em',
+            padding: '0 10px',
+            cursor: 'pointer'
+          }}
+        >
+          ×
+        </button>
+      </div>
       
-      <div style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>カード名</label>
+      {/* カード名 */}
+      <div style={{ marginBottom: '15px' }}>
+        <label style={labelStyle}>カード名</label>
         <input 
           type="text" 
           value={inputCardName}
           onChange={e => setInputCardName(e.target.value)}
           placeholder="カード名を入力"
-          style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+          style={inputStyle}
         />
       </div>
 
-      <div style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>いつ (Trigger)</label>
+      {/* 1. タイミング */}
+      <div style={{ marginBottom: '15px' }}>
+        <label style={labelStyle}>いつ (Trigger)</label>
         <select 
           value={trigger} 
           onChange={e => setTrigger(e.target.value as EffectTrigger)}
-          style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+          style={{...inputStyle, appearance: 'none'}} // appearance: noneでOS標準スタイルを抑制
         >
           <option value="OnPlay">登場時 (OnPlay)</option>
           <option value="WhenAttacking">アタック時 (WhenAttacking)</option>
@@ -111,120 +157,183 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
         </select>
       </div>
 
-      <div style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>どの場合 (Condition)</label>
+      {/* 2. 条件 */}
+      <div style={{ marginBottom: '15px' }}>
+        <label style={labelStyle}>どの場合 (Condition)</label>
         <input 
           type="text" 
           placeholder="例: リーダーが特徴《麦わらの一味》を持つ場合" 
           value={condition}
           onChange={e => setCondition(e.target.value)}
-          style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+          style={inputStyle}
         />
       </div>
 
-      <hr style={{ borderColor: '#7f8c8d', opacity: 0.3 }} />
+      <hr style={{ borderColor: '#7f8c8d', opacity: 0.3, margin: '20px 0' }} />
 
-      <div style={{ marginBottom: '10px', display: 'flex', gap: '10px' }}>
-        <div style={{ flex: 1 }}>
-          <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>どこから (Source)</label>
+      {/* 3. 対象選択 */}
+      <div style={{ marginBottom: '15px', display: 'flex', gap: '10px' }}>
+        <div style={{ flex: 2 }}>
+          <label style={labelStyle}>どこから</label>
           <select 
             value={sourceZone} 
             onChange={e => setSourceZone(e.target.value as GameZone)}
-            style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+            style={inputStyle}
           >
             <option value="Field">盤面</option>
             <option value="Hand">手札</option>
             <option value="Trash">トラッシュ</option>
             <option value="Life">ライフ</option>
             <option value="Deck">デッキ</option>
-            <option value="CostArea">コストエリア</option>
+            <option value="CostArea">コスト</option>
           </select>
         </div>
-        <div style={{ width: '80px' }}>
-          <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>枚数</label>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>枚数</label>
           <input 
             type="number" 
             value={targetCount} 
             onChange={e => setTargetCount(Number(e.target.value))}
-            style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+            style={{...inputStyle, textAlign: 'center'}}
           />
         </div>
       </div>
-      <div style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>何を (Filter)</label>
+      <div style={{ marginBottom: '15px' }}>
+        <label style={labelStyle}>何を (Filter)</label>
         <input 
           type="text" 
           placeholder="例: コスト3以下のキャラ" 
           value={targetFilter} 
           onChange={e => setTargetFilter(e.target.value)}
-          style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+          style={inputStyle}
         />
       </div>
 
-      <hr style={{ borderColor: '#7f8c8d', opacity: 0.3 }} />
+      <hr style={{ borderColor: '#7f8c8d', opacity: 0.3, margin: '20px 0' }} />
 
-      <div style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>効果・行動 (Actions)</label>
+      {/* 4. アクション（複数） */}
+      <div style={{ marginBottom: '20px' }}>
+        <label style={labelStyle}>効果・行動 (Actions)</label>
         {actions.map((act, idx) => (
-          <div key={idx} style={{ marginBottom: '5px', display: 'flex', gap: '5px', alignItems: 'center' }}>
-            <span style={{color: '#95a5a6', fontSize: '0.8em'}}>{idx+1}.</span>
-            <select 
-              value={act.type} 
-              onChange={e => updateAction(idx, 'type', e.target.value as ActionType)}
-              style={{ width: '130px', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
-            >
-              <option value="Other">その他</option>
-              <option value="Rest">レストにする</option>
-              <option value="Active">アクティブにする</option>
-              <option value="KO">KOする</option>
-              <option value="ReturnToHand">手札に戻す</option>
-              <option value="BuffPower">パワー増減</option>
-              <option value="AddDon">ドン追加(アクティブ)</option>
-              <option value="RestDon">ドン追加(レスト)</option>
-              <option value="Draw">ドロー</option>
-              <option value="Trash">トラッシュに送る</option>
-              <option value="SelectOption">選択肢(Option)</option>
-            </select>
-            <input 
-              type="text" 
-              placeholder={getPlaceholderForAction(act.type)}
-              value={act.detail}
-              onChange={e => updateAction(idx, 'detail', e.target.value)}
-              style={{ flex: 1, padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
-            />
-            {actions.length > 1 && (
-              <button 
-                onClick={() => removeAction(idx)}
-                style={{ background: '#c0392b', color: 'white', border: 'none', cursor: 'pointer', padding: '5px 10px' }}
+          <div key={idx} style={{ 
+            marginBottom: '10px', 
+            background: 'rgba(0,0,0,0.2)', 
+            padding: '10px', 
+            borderRadius: '4px' 
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+              <span style={{color: '#95a5a6', fontSize: '0.8em'}}>Action {idx+1}</span>
+              {actions.length > 1 && (
+                <button 
+                  onClick={() => removeAction(idx)}
+                  style={{ 
+                    background: '#c0392b', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '3px',
+                    padding: '2px 8px',
+                    fontSize: '12px'
+                  }}
+                >
+                  削除
+                </button>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <select 
+                value={act.type} 
+                onChange={e => updateAction(idx, 'type', e.target.value as ActionType)}
+                style={inputStyle}
               >
-                ✕
-              </button>
-            )}
+                <option value="Other">その他</option>
+                <option value="Rest">レストにする</option>
+                <option value="Active">アクティブにする</option>
+                <option value="KO">KOする</option>
+                <option value="ReturnToHand">手札に戻す</option>
+                <option value="BuffPower">パワー増減</option>
+                <option value="AddDon">ドン追加(アクティブ)</option>
+                <option value="RestDon">ドン追加(レスト)</option>
+                <option value="Draw">ドロー</option>
+                <option value="Trash">トラッシュに送る</option>
+                <option value="SelectOption">選択肢(Option)</option>
+              </select>
+              <input 
+                type="text" 
+                placeholder={getPlaceholderForAction(act.type)}
+                value={act.detail}
+                onChange={e => updateAction(idx, 'detail', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
           </div>
         ))}
         <button 
           onClick={addAction} 
           type="button" 
-          style={{ marginTop: '5px', fontSize: '0.8em', background: 'transparent', border: '1px dashed #7f8c8d', color: '#bdc3c7', cursor: 'pointer', width: '100%' }}
+          style={{ 
+            marginTop: '5px', 
+            fontSize: '14px', 
+            padding: '12px',
+            background: 'transparent', 
+            border: '2px dashed #7f8c8d', 
+            color: '#ecf0f1', 
+            cursor: 'pointer', 
+            width: '100%',
+            borderRadius: '4px'
+          }}
         >
           + アクション追加
         </button>
       </div>
 
-      <div style={{ marginBottom: '15px' }}>
-        <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>補足メモ</label>
+      <div style={{ marginBottom: '20px' }}>
+        <label style={labelStyle}>補足メモ</label>
         <textarea
           value={note}
           onChange={e => setNote(e.target.value)}
           rows={2}
-          style={{ width: '100%', padding: '5px', background: '#34495e', color: 'white', border: '1px solid #7f8c8d' }}
+          style={{...inputStyle, height: 'auto'}}
         />
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-        <button onClick={onCancel} style={{ padding: '8px 16px', background: '#7f8c8d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>キャンセル</button>
-        <button onClick={handleSubmit} style={{ padding: '8px 16px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>報告送信</button>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button 
+          onClick={onCancel} 
+          style={{ 
+            flex: 1,
+            padding: '12px', 
+            background: '#7f8c8d', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '4px', 
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer' 
+          }}
+        >
+          キャンセル
+        </button>
+        <button 
+          onClick={handleSubmit} 
+          style={{ 
+            flex: 1,
+            padding: '12px', 
+            background: '#27ae60', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '4px', 
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer' 
+          }}
+        >
+          報告送信
+        </button>
       </div>
+      
+      {/* iOS Safariの下部バー余白用 */}
+      <div style={{ height: '20px' }}></div>
     </div>
   );
 };
