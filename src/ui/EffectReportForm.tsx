@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { 
   EffectReport, TriggerType, EffectAction, TargetQuery, 
-  CardAbility, ActionType, Condition, ConditionType, CompareOperator, Zone, PlayerType
+  CardAbility, ActionType, Condition, Zone, PlayerType
 } from '../game/effectReporting';
 
 // --- Types & Interfaces ---
@@ -101,7 +101,6 @@ const TargetEditor: React.FC<{
   
   // 文字列配列をカンマ区切り文字列として扱う
   const listToString = (list?: string[]) => list?.join(',') || '';
-  const stringToList = (str: string) => str.split(',').map(s => s.trim()).filter(s => s);
 
   return (
     <div style={styles.subSection}>
@@ -210,10 +209,6 @@ const DetailsEditor: React.FC<{
       onChange({ ...details, [newKey]: '' });
       setNewKey('');
     }
-  };
-
-  const handleUpdate = (key: string, val: string) => {
-    onChange({ ...details, [key]: val });
   };
 
   const handleRemove = (key: string) => {
