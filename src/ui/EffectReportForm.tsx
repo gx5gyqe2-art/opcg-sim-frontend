@@ -22,60 +22,62 @@ interface SimpleCard {
 }
 
 export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, activePlayerId, onSubmit, onCancel }) => {
-  // 基本情報
   const [inputCardName, setInputCardName] = useState(cardName);
   const [rawText, setRawText] = useState('');
   const [trigger, setTrigger] = useState<EffectTrigger>('ON_PLAY');
   const [conditionText, setConditionText] = useState('');
   const [note, setNote] = useState('');
 
-  // UI状態
   const [showCardSelector, setShowCardSelector] = useState(false);
-  const [selectionRange, setSelectionRange] = useState<{start: number, end: number, text: string} | null>(null);
-  const [selectedSegmentIndices, setSelectedSegmentIndices] = useState<number[]>([]);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // ▼▼▼ 変更: 文字単位の選択範囲管理 ▼▼▼
+  const [rangeStart, setRangeStart] = useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
+  // ▲▲▲ 変更ここまで ▲▲▲
 
-  // リスト項目
   const [costs, setCosts] = useState<CostDefinition[]>([]);
   const [effects, setEffects] = useState<EffectDefinition[]>([]);
   const [verifications, setVerifications] = useState<VerificationCheck[]>([]);
 
-  // --- テキスト分割ロジック ---
-  const textSegments = useMemo(() => {
-    if (!rawText) return [];
-    return rawText
-      .split(/([【\[].*?[\]】]|ドン!!(?:[-−×x]?\d+|.*?)|[:：。、\n])/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-  }, [rawText]);
-
-  const toggleSegment = (index: number) => {
-    setSelectionRange(null);
-    setSelectedSegmentIndices(prev => {
-      if (prev.includes(index)) {
-        return prev.filter(i => i !== index);
+  // --- 文字列選択ロジック (始点・終点タップ式) ---
+  const handleCharClick = (index: number) => {
+    if (rangeStart === null) {
+      // 1回目タップ: 始点設定
+      setRangeStart(index);
+      setRangeEnd(null); // 終点はまだ
+    } else if (rangeEnd === null) {
+      // 2回目タップ: 終点設定
+      if (index < rangeStart) {
+        // 始点より前をタップした場合、順序を入れ替える
+        setRangeEnd(rangeStart);
+        setRangeStart(index);
       } else {
-        return [...prev, index].sort((a, b) => a - b);
+        setRangeEnd(index);
       }
-    });
+    } else {
+      // 3回目タップ: リセットして新しい始点
+      setRangeStart(index);
+      setRangeEnd(null);
+    }
   };
 
-  // --- テキスト解析・推測ロジック ---
+  // 選択範囲のテキストを取得
+  const selectedText = useMemo(() => {
+    if (!rawText || rangeStart === null) return "";
+    const start = rangeStart;
+    const end = rangeEnd !== null ? rangeEnd : rangeStart; // 終点未定なら1文字だけ
+    return rawText.slice(start, end + 1);
+  }, [rawText, rangeStart, rangeEnd]);
+
+  // --- 解析・適用ロジック ---
+  // ※選択されたテキストの内容自体は解析して、フォーム入力を補助します
   
   const guessCost = (text: string): CostDefinition => {
     let type: CostType = 'NONE';
     let amount = 1;
-
-    if (text.match(/ドン!!\s*[-−]\s*(\d+)/)) {
-      type = 'DOWN_DON';
-      amount = parseInt(RegExp.$1);
-    } else if (text.match(/ドン!!\s*(\d+)\s*枚をレスト/)) {
-      type = 'REST_DON';
-      amount = parseInt(RegExp.$1);
-    } else if (text.match(/手札(\d+)枚を捨てる/)) {
-      type = 'TRASH_HAND';
-      amount = parseInt(RegExp.$1);
-    }
+    if (text.match(/ドン!!\s*[-−]\s*(\d+)/)) { type = 'DOWN_DON'; amount = parseInt(RegExp.$1); }
+    else if (text.match(/ドン!!\s*(\d+)\s*枚をレスト/)) { type = 'REST_DON'; amount = parseInt(RegExp.$1); }
+    else if (text.match(/手札(\d+)枚を捨てる/)) { type = 'TRASH_HAND'; amount = parseInt(RegExp.$1); }
     return { type, amount, rawText: text };
   };
 
@@ -86,13 +88,12 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
 
     if (text.includes('KO')) type = 'KO';
     else if (text.includes('手札に戻す')) type = 'RETURN_TO_HAND';
-    else if (text.includes('レストにする')) type = 'REST';
-    else if (text.includes('アクティブにする')) type = 'ACTIVE';
+    else if (text.includes('レスト')) type = 'REST';
+    else if (text.includes('アクティブ')) type = 'ACTIVE';
     else if (text.includes('引く')) type = 'DRAW';
     else if (text.includes('パワー')) type = 'BUFF_POWER';
     else if (text.includes('登場')) type = 'PLAY';
 
-    // ターゲット推測
     if (['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE'].includes(type)) {
       target = { 
         player: text.includes('自分') ? 'SELF' : 'OPPONENT',
@@ -105,12 +106,10 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
       if (numMatch) target.count = parseInt(numMatch[1]);
     }
     
-    // バフ値推測
     if (type === 'BUFF_POWER') {
       const buffMatch = text.match(/([+＋\-−]\d+)/);
       if (buffMatch) value = buffMatch[1];
     }
-
     return { type, target, value, rawText: text };
   };
 
@@ -124,51 +123,27 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     return null;
   };
 
-  // --- ハンドラ ---
-
-  const handleTextSelect = () => {
-    const el = textAreaRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const text = el.value.substring(start, end).trim();
-    
-    if (text.length > 0) {
-      setSelectionRange({ start, end, text });
-      setSelectedSegmentIndices([]); 
-    } else {
-      setSelectionRange(null);
-    }
-  };
-
   const applySelection = (category: 'TRIGGER' | 'CONDITION' | 'COST' | 'EFFECT') => {
-    let text = "";
-    if (selectionRange) {
-      text = selectionRange.text;
-    } else if (selectedSegmentIndices.length > 0) {
-      text = selectedSegmentIndices.map(i => textSegments[i]).join('');
-    }
-
-    if (!text) return;
+    if (!selectedText) return;
 
     switch (category) {
       case 'TRIGGER':
-        const t = guessTrigger(text);
+        const t = guessTrigger(selectedText);
         if (t) setTrigger(t);
         break;
       case 'CONDITION':
-        setConditionText(prev => prev ? prev + " AND " + text : text);
+        setConditionText(prev => prev ? prev + " AND " + selectedText : selectedText);
         break;
       case 'COST':
-        setCosts([...costs, guessCost(text)]);
+        setCosts([...costs, guessCost(selectedText)]);
         break;
       case 'EFFECT':
-        setEffects([...effects, guessEffect(text)]);
+        setEffects([...effects, guessEffect(selectedText)]);
         break;
     }
-    
-    setSelectionRange(null);
-    setSelectedSegmentIndices([]);
+    // 選択解除
+    setRangeStart(null);
+    setRangeEnd(null);
   };
 
   // --- カード選択ロジック ---
@@ -192,7 +167,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     setInputCardName(card.name);
     if (card.text) {
       setRawText(card.text);
-      setSelectedSegmentIndices([]); 
+      setRangeStart(null); setRangeEnd(null);
     }
     setShowCardSelector(false);
   };
@@ -234,7 +209,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   // Styles
   const overlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center' };
   const formContainerStyle: React.CSSProperties = { width: '100%', height: '100%', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' };
-  const scrollAreaStyle: React.CSSProperties = { flex: 1, overflowY: 'auto', padding: '15px', paddingBottom: '100px', WebkitOverflowScrolling: 'touch' };
+  const scrollAreaStyle: React.CSSProperties = { flex: 1, overflowY: 'auto', padding: '15px', paddingBottom: '120px', WebkitOverflowScrolling: 'touch' };
   const sectionStyle: React.CSSProperties = { marginBottom: '20px', border: '1px solid #7f8c8d', padding: '10px', borderRadius: '8px', background: '#34495e' };
   const inputStyle: React.CSSProperties = { padding: '8px', borderRadius: '4px', border: '1px solid #7f8c8d', background: '#2c3e50', color: 'white', flex: 1, fontSize: '14px', maxWidth: '100%' };
   const btnStyle = (bg: string) => ({ padding: '8px 12px', background: bg, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' });
@@ -261,10 +236,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     );
   }
 
-  const currentSelection = selectionRange 
-    ? selectionRange.text 
-    : selectedSegmentIndices.map(i => textSegments[i]).join('');
-
   return (
     <div style={overlayStyle}>
       <div style={formContainerStyle}>
@@ -281,64 +252,59 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
               <button onClick={() => setShowCardSelector(true)} style={btnStyle('#e67e22')}>カード選択</button>
             </div>
             
-            <textarea 
-              ref={textAreaRef}
-              value={rawText} 
-              onChange={e => setRawText(e.target.value)}
-              onSelect={handleTextSelect}
-              placeholder="カードを選択するとテキストが自動入力されます" 
-              style={{...inputStyle, width: '100%', height: '60px', fontFamily: 'monospace', fontSize: '13px', boxSizing:'border-box', marginBottom: '8px'}} 
-            />
-
+            {/* ▼▼▼ 文字単位選択エリア ▼▼▼ */}
             <div style={{
-              display: 'flex', flexWrap: 'wrap', gap: '6px', 
-              padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '4px', minHeight: '40px'
+              background: '#202020', padding: '15px', borderRadius: '6px', 
+              fontFamily: 'monospace', fontSize: '16px', lineHeight: '1.8',
+              minHeight: '60px', whiteSpace: 'pre-wrap', marginBottom: '10px',
+              border: '1px solid #7f8c8d'
             }}>
-              {textSegments.length === 0 && <span style={{color:'#95a5a6', fontSize:'0.8em'}}>テキストがありません</span>}
-              {textSegments.map((seg, idx) => {
-                const isSelected = selectedSegmentIndices.includes(idx);
+              {rawText ? rawText.split('').map((char, idx) => {
+                const isSelected = rangeStart !== null && rangeEnd !== null 
+                  ? (idx >= rangeStart && idx <= rangeEnd)
+                  : (idx === rangeStart); // 始点のみ選択中
+                
                 return (
-                  <button
+                  <span 
                     key={idx}
-                    onClick={() => toggleSegment(idx)}
+                    onClick={() => handleCharClick(idx)}
                     style={{
-                      padding: '6px 10px',
-                      background: isSelected ? '#3498db' : '#34495e',
-                      color: 'white',
-                      border: isSelected ? '1px solid #2980b9' : '1px solid #7f8c8d',
-                      borderRadius: '16px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      transition: 'all 0.1s',
-                      maxWidth: '100%',
-                      whiteSpace: 'pre-wrap',
-                      textAlign: 'left'
+                      background: isSelected ? '#3498db' : 'transparent',
+                      color: isSelected ? 'white' : '#ecf0f1',
+                      padding: '2px 1px', margin: '0 1px',
+                      borderRadius: '2px', cursor: 'pointer',
+                      borderBottom: rangeStart === idx ? '2px solid #e74c3c' : 'none' // 始点マーカー
                     }}
                   >
-                    {seg}
-                  </button>
+                    {char}
+                  </span>
                 );
-              })}
+              }) : <span style={{color: '#7f8c8d'}}>カードを選択するとテキストが表示されます</span>}
             </div>
+            {/* ▲▲▲ 文字単位選択エリア ▲▲▲ */}
 
-            {currentSelection && (
+            {/* アクションメニュー (選択時のみ固定表示) */}
+            {selectedText && (
               <div style={{
                 position: 'sticky', bottom: '0', 
                 background: '#2980b9', padding: '10px', borderRadius: '4px', 
-                display: 'flex', gap: '5px', zIndex: 10, overflowX: 'auto',
-                marginTop: '10px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                display: 'flex', gap: '8px', zIndex: 10, overflowX: 'auto',
+                boxShadow: '0 -2px 10px rgba(0,0,0,0.5)'
               }}>
-                <span style={{fontSize:'11px', alignSelf:'center', color:'white', whiteSpace:'nowrap', maxWidth:'100px', overflow:'hidden', textOverflow:'ellipsis'}}>
-                  「{currentSelection}」を:
-                </span>
-                <button onClick={() => applySelection('TRIGGER')} style={btnStyle('#16a085')}>トリガー</button>
-                <button onClick={() => applySelection('CONDITION')} style={btnStyle('#8e44ad')}>条件</button>
-                <button onClick={() => applySelection('COST')} style={btnStyle('#d35400')}>コスト</button>
-                <button onClick={() => applySelection('EFFECT')} style={btnStyle('#c0392b')}>効果</button>
+                <div style={{color:'white', fontSize:'12px', marginBottom:'4px', width:'100%'}}>
+                  選択中: <b>{selectedText}</b>
+                </div>
+                <div style={{display:'flex', gap:'5px'}}>
+                  <button onClick={() => applySelection('TRIGGER')} style={btnStyle('#16a085')}>トリガー</button>
+                  <button onClick={() => applySelection('CONDITION')} style={btnStyle('#8e44ad')}>条件</button>
+                  <button onClick={() => applySelection('COST')} style={btnStyle('#d35400')}>コスト</button>
+                  <button onClick={() => applySelection('EFFECT')} style={btnStyle('#c0392b')}>効果</button>
+                </div>
               </div>
             )}
           </div>
 
+          {/* 2. トリガー & 条件 */}
           <div style={sectionStyle}>
             <div style={{marginBottom: '10px'}}>
               <label style={{fontSize:'0.9em', color:'#bdc3c7'}}>発動タイミング</label>
@@ -360,6 +326,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
             </div>
           </div>
 
+          {/* 3. コスト */}
           <div style={sectionStyle}>
             <label style={labelStyle}>③ コスト (Cost)</label>
             {costs.map((c, i) => (
@@ -378,6 +345,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
             ))}
           </div>
 
+          {/* 4. 効果 */}
           <div style={sectionStyle}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
               <label style={labelStyle}>④ 効果 (Effect)</label>
@@ -424,6 +392,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
             ))}
           </div>
 
+          {/* 5. 検証 */}
           <div style={sectionStyle}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
                <label style={labelStyle}>✅ 検証 (Verification)</label>
