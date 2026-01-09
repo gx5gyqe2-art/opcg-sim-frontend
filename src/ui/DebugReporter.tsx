@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { logger } from '../utils/logger';
 import { EffectReportForm } from './EffectReportForm';
-import { EffectReport } from '../game/effectReporting';
+import type { EffectReport } from '../game/effectReporting';
 
 interface DebugReporterProps {
-  data: any; // 保存したいデータ（gameStateなど）
+  data: any;
 }
 
 export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showEffectForm, setShowEffectForm] = useState(false);
 
-  // 既存機能: JSONダンプとクリップボードコピー
   const handleDumpState = () => {
     const reportData = {
       timestamp: new Date().toISOString(),
@@ -51,11 +50,9 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
     URL.revokeObjectURL(url);
   };
 
-  // 新機能: 効果定義レポート送信
   const handleEffectReport = (report: EffectReport) => {
     report.timestamp = new Date().toISOString();
     
-    // 既存のロガーを利用してバックエンドにエラーとして送信（action名で区別）
     logger.error('EFFECT_DEF_REPORT', `効果定義報告: ${report.cardName}`, {
         report: report,
         gameStateSummary: {
@@ -72,7 +69,6 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
 
   return (
     <>
-      {/* メインのフローティングボタン */}
       <div 
         style={{
           position: 'fixed',
@@ -85,7 +81,6 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
           gap: '10px'
         }}
       >
-        {/* メニュー展開時 */}
         {showMenu && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
             <button
@@ -121,7 +116,6 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
           </div>
         )}
 
-        {/* トグルボタン */}
         <button
           onClick={() => setShowMenu(!showMenu)}
           title="デバッグメニュー"
@@ -146,11 +140,8 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
         </button>
       </div>
 
-      {/* 効果報告フォームモーダル */}
       {showEffectForm && (
         <EffectReportForm
-          // 可能であればデータからカード名などを推測して渡すことも可能だが、
-          // 現状は未入力で開始する
           cardName=""
           onSubmit={handleEffectReport}
           onCancel={() => setShowEffectForm(false)}

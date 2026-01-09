@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { EffectReport, EffectTrigger, GameZone, ActionType } from '../game/effectReporting';
+import type { EffectReport, EffectTrigger, GameZone, ActionType } from '../game/effectReporting';
 
 interface Props {
   cardName?: string;
@@ -82,7 +82,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
         🎴 効果定義レポート
       </h3>
       
-      {/* カード名 */}
       <div style={{ marginBottom: '10px' }}>
         <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>カード名</label>
         <input 
@@ -94,7 +93,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
         />
       </div>
 
-      {/* 1. タイミング */}
       <div style={{ marginBottom: '10px' }}>
         <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>いつ (Trigger)</label>
         <select 
@@ -113,7 +111,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
         </select>
       </div>
 
-      {/* 2. 条件 */}
       <div style={{ marginBottom: '10px' }}>
         <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>どの場合 (Condition)</label>
         <input 
@@ -127,7 +124,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
 
       <hr style={{ borderColor: '#7f8c8d', opacity: 0.3 }} />
 
-      {/* 3. 対象選択 */}
       <div style={{ marginBottom: '10px', display: 'flex', gap: '10px' }}>
         <div style={{ flex: 1 }}>
           <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>どこから (Source)</label>
@@ -167,7 +163,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
 
       <hr style={{ borderColor: '#7f8c8d', opacity: 0.3 }} />
 
-      {/* 4. アクション（複数） */}
       <div style={{ marginBottom: '10px' }}>
         <label style={{ display: 'block', fontSize: '0.8em', color: '#bdc3c7' }}>効果・行動 (Actions)</label>
         {actions.map((act, idx) => (
