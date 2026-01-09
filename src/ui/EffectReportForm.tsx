@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef } from 'react';
 import type { 
   EffectReport, EffectTrigger, CostType, ActionType,
-  CostDefinition, EffectDefinition, VerificationCheck
+  CostDefinition, EffectDefinition, VerificationCheck,
+  TargetPlayer, CardZone, CardTypeFilter, TargetSelector
 } from '../game/effectReporting';
 
 interface Props {
@@ -44,6 +45,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     let type: CostType = 'NONE';
     let amount = 1;
 
+    // 正規表現のエスケープ修正
     if (text.match(/ドン!!\s*[-−]\s*(\d+)/)) {
       type = 'DOWN_DON';
       amount = parseInt(RegExp.$1);
@@ -59,8 +61,8 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
 
   const guessEffect = (text: string): EffectDefinition => {
     let type: ActionType = 'OTHER';
-    let target = undefined;
-    let value = undefined;
+    let target: TargetSelector | undefined = undefined; // 明示的に型指定
+    let value: string | undefined = undefined;
 
     // キーワード簡易判定
     if (text.includes('KO')) type = 'KO';
@@ -74,9 +76,9 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     // ターゲット推測
     if (['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE'].includes(type)) {
       target = { 
-        player: text.includes('自分') ? 'SELF' : 'OPPONENT',
-        zone: 'FIELD',
-        cardType: 'CHARACTER',
+        player: (text.includes('自分') ? 'SELF' : 'OPPONENT') as TargetPlayer,
+        zone: 'FIELD' as CardZone,
+        cardType: 'CHARACTER' as CardTypeFilter,
         filterQuery: '',
         count: 1
       };
@@ -87,7 +89,8 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     
     // バフ値推測
     if (type === 'BUFF_POWER') {
-      const buffMatch = text.match(/([+＋-−]\d+)/);
+      // ハイフンをエスケープして範囲エラーを修正: [+\-−]
+      const buffMatch = text.match(/([+＋\-−]\d+)/);
       if (buffMatch) value = buffMatch[1];
     }
 
@@ -142,7 +145,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     setSelectionRange(null); // 選択解除
   };
 
-  // --- カード選択ロジック (変更なし) ---
+  // --- カード選択ロジック ---
   const visibleCards = useMemo(() => {
     if (!gameState) return [];
     const cards: SimpleCard[] = [];
@@ -199,13 +202,16 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     onSubmit(report);
   };
 
-  // Styles (Fixed Overflow)
+  // Styles (Fixed Overflow & Missing labelStyle)
   const overlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center' };
   const formContainerStyle: React.CSSProperties = { width: '100%', height: '100%', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' };
   const scrollAreaStyle: React.CSSProperties = { flex: 1, overflowY: 'auto', padding: '15px', paddingBottom: '80px', WebkitOverflowScrolling: 'touch' };
   const sectionStyle: React.CSSProperties = { marginBottom: '20px', border: '1px solid #7f8c8d', padding: '10px', borderRadius: '8px', background: '#34495e' };
   const inputStyle: React.CSSProperties = { padding: '8px', borderRadius: '4px', border: '1px solid #7f8c8d', background: '#2c3e50', color: 'white', flex: 1, fontSize: '14px', maxWidth: '100%' };
   const btnStyle = (bg: string) => ({ padding: '8px 12px', background: bg, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' });
+  
+  // 追加: 欠けていたスタイル
+  const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9em', color: '#bdc3c7' };
 
   // カード選択モーダル
   if (showCardSelector) {
@@ -243,7 +249,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
           
           {/* 1. テキスト解析エリア */}
           <div style={sectionStyle}>
-            <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>① カードテキストから抽出</label>
+            <label style={labelStyle}>① カードテキストから抽出</label>
             <div style={{display: 'flex', gap: '8px', marginBottom: '10px'}}>
               <input value={inputCardName} readOnly placeholder="カードを選択してください" style={{...inputStyle, background: '#2c3e50'}} />
               <button onClick={() => setShowCardSelector(true)} style={btnStyle('#e67e22')}>カード選択</button>
@@ -264,7 +270,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
                   background: '#2980b9', padding: '5px', borderRadius: '4px', 
                   display: 'flex', gap: '5px', zIndex: 10, overflowX: 'auto'
                 }}>
-                  <span style={{fontSize:'11px', alignSelf:'center'}}>「{selectionRange.text.slice(0,5)}...」を:</span>
+                  <span style={{fontSize:'11px', alignSelf:'center', color:'white'}}>選択範囲を:</span>
                   <button onClick={() => applySelection('TRIGGER')} style={btnStyle('#16a085')}>トリガー</button>
                   <button onClick={() => applySelection('CONDITION')} style={btnStyle('#8e44ad')}>条件</button>
                   <button onClick={() => applySelection('COST')} style={btnStyle('#d35400')}>コスト</button>
@@ -298,7 +304,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
 
           {/* 3. コスト */}
           <div style={sectionStyle}>
-            <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>③ コスト (Cost)</label>
+            <label style={labelStyle}>③ コスト (Cost)</label>
             {costs.map((c, i) => (
               <div key={i} style={{display:'flex', gap:'5px', marginBottom:'5px', alignItems:'center'}}>
                 <select value={c.type} onChange={e => updateCost(i, 'type', e.target.value)} style={{...inputStyle, flex:2}}>
@@ -318,7 +324,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
           {/* 4. 効果 */}
           <div style={sectionStyle}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
-              <label style={{fontWeight:'bold'}}>④ 効果 (Effect)</label>
+              <label style={labelStyle}>④ 効果 (Effect)</label>
               <button onClick={addEffect} style={{...btnStyle('#7f8c8d'), padding:'2px 8px'}}>+ 追加</button>
             </div>
             {effects.map((eff, i) => (
@@ -366,7 +372,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
           {/* 5. 検証 */}
           <div style={sectionStyle}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
-               <label style={{fontWeight:'bold'}}>✅ 検証 (Verification)</label>
+               <label style={labelStyle}>✅ 検証 (Verification)</label>
                <button onClick={addVerification} style={{...btnStyle('#7f8c8d'), padding:'2px 8px'}}>+ 追加</button>
             </div>
             {verifications.map((v, i) => (
