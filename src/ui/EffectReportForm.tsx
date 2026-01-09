@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { 
   EffectReport, TriggerType, EffectAction, TargetQuery, 
-  CardAbility, ActionType, PlayerType, Zone
+  CardAbility, ActionType
 } from '../game/effectReporting';
 
 interface Props {
