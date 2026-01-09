@@ -1,20 +1,16 @@
-// src/game/effectReporting.ts
-
-// --- Enums ---
-
 export type TriggerType = 
-  | 'ON_PLAY'        // 登場時
-  | 'ON_ATTACK'      // アタック時
-  | 'ON_BLOCK'       // ブロック時
-  | 'ON_KO'          // KO時
-  | 'ACTIVATE_MAIN'  // 起動メイン
-  | 'TURN_END'       // ターン終了時
-  | 'OPP_TURN_END'   // 相手のターン終了時
-  | 'ON_OPP_ATTACK'  // 相手のアタック時
-  | 'TRIGGER'        // トリガー
-  | 'COUNTER'        // カウンター
-  | 'RULE'           // ルール
-  | 'PASSIVE'        // 常時
+  | 'ON_PLAY'
+  | 'ON_ATTACK'
+  | 'ON_BLOCK'
+  | 'ON_KO'
+  | 'ACTIVATE_MAIN'
+  | 'TURN_END'
+  | 'OPP_TURN_END'
+  | 'ON_OPP_ATTACK'
+  | 'TRIGGER'
+  | 'COUNTER'
+  | 'RULE'
+  | 'PASSIVE'
   | 'UNKNOWN';
 
 export type ActionType = 
@@ -52,14 +48,14 @@ export type VerificationOperator =
   | 'NOT_CONTAINS'
   | 'EQUALS';
 
-// --- Data Structures ---
-
 export interface TargetQuery {
   zone: Zone;
   player: PlayerType;
   card_type?: string[]; 
   traits?: string[];
   attributes?: string[];
+  colors?: string[];
+  names?: string[];
   cost_min?: number;
   cost_max?: number;
   power_min?: number;
@@ -73,9 +69,9 @@ export interface TargetQuery {
 
 export interface Condition {
   type: string; 
-  value: any;
-  operator: string;
   target?: TargetQuery;
+  operator: string;
+  value: any;
 }
 
 export interface EffectAction {
@@ -86,6 +82,7 @@ export interface EffectAction {
   value?: number;
   source_zone?: Zone;
   dest_zone?: Zone;
+  dest_position?: string;
   raw_text?: string;
   details?: any;
   then_actions?: EffectAction[];
@@ -93,7 +90,6 @@ export interface EffectAction {
 
 export interface CardAbility {
   trigger: TriggerType;
-  condition?: string; // ▼ 追加: フォームの入力に対応
   costs: EffectAction[];
   actions: EffectAction[];
   raw_text?: string;
@@ -106,15 +102,13 @@ export interface VerificationCheck {
   value: string | number;
 }
 
-// --- Report Wrapper ---
-
 export interface EffectReport {
   correction: {
     cardName: string;
     rawText: string;
     ability: CardAbility;
   };
-  verification: {
+  verification?: {
     expectedStateChanges: VerificationCheck[];
   };
   note: string;
