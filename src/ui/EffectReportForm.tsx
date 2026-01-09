@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { 
-  EffectReport, TriggerType, CostType, ActionType,
+  EffectReport, TriggerType, ActionType,
   EffectAction, TargetQuery, VerificationCheck,
   Zone, PlayerType
 } from '../game/effectReporting';
@@ -22,17 +22,15 @@ interface SimpleCard {
 }
 
 export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, activePlayerId, onSubmit, onCancel }) => {
-  // 基本情報
   const [inputCardName, setInputCardName] = useState(cardName);
   const [rawText, setRawText] = useState('');
   const [trigger, setTrigger] = useState<TriggerType>('ON_PLAY');
   const [conditionText, setConditionText] = useState('');
   const [note, setNote] = useState('');
 
-  // UI状態
   const [showCardSelector, setShowCardSelector] = useState(false);
   
-  // 文字単位選択用ステート
+  // 文字選択用
   const [rangeStart, setRangeStart] = useState<number | null>(null);
   const [rangeEnd, setRangeEnd] = useState<number | null>(null);
 
@@ -41,7 +39,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   const [effects, setEffects] = useState<EffectAction[]>([]);
   const [verifications, setVerifications] = useState<VerificationCheck[]>([]);
 
-  // --- 文字選択ロジック (始点・終点タップ式) ---
+  // --- 文字選択ロジック ---
   const handleCharClick = (index: number) => {
     if (rangeStart === null) {
       setRangeStart(index);
@@ -67,10 +65,9 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   }, [rawText, rangeStart, rangeEnd]);
 
   // --- 解析ロジック ---
-  
   const guessCost = (text: string): EffectAction => {
-    let action: EffectAction = { type: 'OTHER', value: 1, raw_text: text };
-
+    const action: EffectAction = { type: 'OTHER', value: 1, raw_text: text };
+    
     if (text.match(/ドン!!\s*[-−]\s*(\d+)/)) {
       action.type = 'RETURN_DON';
       action.value = parseInt(RegExp.$1);
@@ -94,19 +91,19 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
 
   const guessEffect = (text: string): EffectAction => {
     let type: ActionType = 'OTHER';
-    
+    let value = 0;
+
     if (text.includes('KO')) type = 'KO';
-    else if (text.includes('手札に戻す')) type = 'RETURN_TO_HAND';
+    else if (text.includes('手札に戻す')) type = 'MOVE_TO_HAND';
     else if (text.includes('レスト')) type = 'REST';
     else if (text.includes('アクティブ')) type = 'ACTIVE';
     else if (text.includes('引く')) type = 'DRAW';
     else if (text.includes('パワー')) type = 'BUFF';
     else if (text.includes('登場')) type = 'PLAY_CARD';
-    else if (text.includes('加える')) type = 'LIFE_MANIPULATE';
 
     const action: EffectAction = { type, value: 0, raw_text: text };
 
-    if (['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE', 'BUFF'].includes(type)) {
+    if (['KO', 'MOVE_TO_HAND', 'REST', 'ACTIVE', 'BUFF'].includes(type)) {
       const countMatch = text.match(/(\d+)枚/);
       const count = countMatch ? parseInt(countMatch[1]) : 1;
       const isOpponent = !text.includes('自分');
@@ -114,7 +111,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
       action.target = {
         player: isOpponent ? 'OPPONENT' : 'SELF',
         zone: 'FIELD',
-        card_type: ['CHARACTER'],
         count: count,
         is_up_to: text.includes('まで'),
       };
@@ -140,7 +136,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     if (text.includes('ブロック時')) return 'ON_BLOCK';
     if (text.includes('KO時')) return 'ON_KO';
     if (text.includes('トリガー')) return 'TRIGGER';
-    if (text.includes('ターン終了時')) return 'TURN_END';
     return null;
   };
 
@@ -166,7 +161,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     setRangeEnd(null);
   };
 
-  // --- カード選択ロジック ---
+  // --- カード選択 ---
   const visibleCards = useMemo(() => {
     if (!gameState) return [];
     const cards: SimpleCard[] = [];
@@ -187,36 +182,21 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     setInputCardName(card.name);
     if (card.text) {
       setRawText(card.text);
-      setRangeStart(null); setRangeEnd(null);
+      setRangeStart(null);
+      setRangeEnd(null);
     }
     setShowCardSelector(false);
   };
 
-  // --- UI操作ヘルパー ---
-  const updateCost = (idx: number, field: keyof EffectAction, val: any) => {
-    const newCosts = [...costs]; (newCosts[idx] as any)[field] = val; setCosts(newCosts);
-  };
+  // --- Helpers ---
   const removeCost = (idx: number) => setCosts(costs.filter((_, i) => i !== idx));
-
-  const addEffect = () => setEffects([...effects, { type: 'OTHER', value: 0 }]);
-  const updateEffect = (idx: number, field: keyof EffectAction, val: any) => {
-    const newEffects = [...effects]; (newEffects[idx] as any)[field] = val; setEffects(newEffects);
-  };
-  const updateEffectTarget = (idx: number, field: keyof TargetQuery, val: any) => {
-    const newEffects = [...effects];
-    if (!newEffects[idx].target) {
-        newEffects[idx].target = { zone: 'FIELD', player: 'OPPONENT', count: 1, is_up_to: false };
-    }
-    (newEffects[idx].target as any)[field] = val;
-    setEffects(newEffects);
-  };
   const removeEffect = (idx: number) => setEffects(effects.filter((_, i) => i !== idx));
+  const removeVerification = (idx: number) => setVerifications(verifications.filter((_, i) => i !== idx));
 
   const addVerification = () => setVerifications([...verifications, { targetPlayer: 'OPPONENT', targetProperty: 'field', operator: 'DECREASE_BY', value: 1 }]);
   const updateVerification = (idx: number, field: keyof VerificationCheck, val: any) => {
     const newVer = [...verifications]; (newVer[idx] as any)[field] = val; setVerifications(newVer);
   };
-  const removeVerification = (idx: number) => setVerifications(verifications.filter((_, i) => i !== idx));
 
   const handleSubmit = () => {
     const report: EffectReport = {
@@ -291,7 +271,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
               {rawText ? rawText.split('').map((char, idx) => {
                 const isSelected = rangeStart !== null && rangeEnd !== null 
                   ? (idx >= rangeStart && idx <= rangeEnd)
-                  : (idx === rangeStart); 
+                  : (idx === rangeStart);
                 
                 return (
                   <span 
@@ -343,6 +323,8 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
                 <option value="ON_KO">KO時</option>
                 <option value="TURN_END">ターン終了時</option>
                 <option value="TRIGGER">トリガー</option>
+                <option value="RULE">ルール効果</option>
+                <option value="UNKNOWN">その他</option>
               </select>
             </div>
             <div>
@@ -354,15 +336,8 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
           <div style={sectionStyle}>
             <label style={labelStyle}>③ コスト (Cost)</label>
             {costs.map((c, i) => (
-              <div key={i} style={{display:'flex', gap:'5px', marginBottom:'5px', alignItems:'center'}}>
-                <select value={c.type} onChange={e => updateCost(i, 'type', e.target.value)} style={{...inputStyle, flex:2}}>
-                  <option value="RETURN_DON">ドン!!戻す</option>
-                  <option value="REST_DON">ドン!!レスト</option>
-                  <option value="TRASH">手札捨て</option>
-                  <option value="OTHER">その他</option>
-                </select>
-                <input type="number" value={c.value} onChange={e => updateCost(i, 'value', Number(e.target.value))} style={{...inputStyle, flex:1, textAlign:'center'}} />
-                {c.raw_text && <span style={{fontSize:'0.7em', color:'#95a5a6'}}>({c.raw_text})</span>}
+              <div key={i} style={{display:'flex', gap:'5px', marginBottom:'5px', alignItems:'center', background:'rgba(0,0,0,0.2)', padding:'5px', borderRadius:'4px'}}>
+                <div style={{flex:1, fontSize:'0.9em'}}>{c.type} {c.value} {c.raw_text && `(${c.raw_text})`}</div>
                 <button onClick={() => removeCost(i)} style={btnStyle('#c0392b')}>×</button>
               </div>
             ))}
@@ -371,44 +346,18 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
           <div style={sectionStyle}>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
               <label style={labelStyle}>④ 効果 (Effect)</label>
-              <button onClick={addEffect} style={{...btnStyle('#7f8c8d'), padding:'2px 8px'}}>+ 追加</button>
             </div>
             {effects.map((eff, i) => (
               <div key={i} style={{background: 'rgba(0,0,0,0.2)', padding:'8px', marginBottom:'8px', borderRadius:'4px'}}>
-                <div style={{display:'flex', gap:'5px', marginBottom:'5px'}}>
-                  <select value={eff.type} onChange={e => updateEffect(i, 'type', e.target.value)} style={{...inputStyle, flex:2}}>
-                    <option value="KO">KO</option>
-                    <option value="RETURN_TO_HAND">バウンス</option>
-                    <option value="REST">レスト</option>
-                    <option value="ACTIVE">アクティブ</option>
-                    <option value="BUFF">パワー+</option>
-                    <option value="DRAW">ドロー</option>
-                    <option value="ACTIVE_DON">ドン追加</option>
-                    <option value="OTHER">その他</option>
-                  </select>
-                  <button onClick={() => removeEffect(i)} style={btnStyle('#c0392b')}>削除</button>
+                <div style={{display:'flex', gap:'5px', marginBottom:'5px', justifyContent:'space-between'}}>
+                  <span style={{fontWeight:'bold', color:'#3498db'}}>{eff.type}</span>
+                  <button onClick={() => removeEffect(i)} style={btnStyle('#c0392b')}>×</button>
                 </div>
-                
-                {['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE', 'BUFF'].includes(eff.type) && (
-                   <div style={{fontSize:'0.9em', marginLeft:'5px', borderLeft:'2px solid #3498db', paddingLeft:'5px'}}>
-                      <div style={{display:'flex', gap:'5px', marginBottom:'5px'}}>
-                        <select value={eff.target?.player} onChange={e => updateEffectTarget(i, 'player', e.target.value)} style={inputStyle}>
-                          <option value="OPPONENT">相手</option>
-                          <option value="SELF">自分</option>
-                        </select>
-                        <select value={eff.target?.zone} onChange={e => updateEffectTarget(i, 'zone', e.target.value)} style={inputStyle}>
-                          <option value="FIELD">盤面</option>
-                          <option value="HAND">手札</option>
-                        </select>
-                         <input type="number" value={eff.target?.count} onChange={e => updateEffectTarget(i, 'count', Number(e.target.value))} style={{...inputStyle, width:'40px'}} />
-                      </div>
-                   </div>
-                )}
-                
-                {['BUFF', 'ACTIVE_DON'].includes(eff.type) && (
-                  <input value={eff.value} onChange={e => updateEffect(i, 'value', Number(e.target.value))} placeholder="値 (+1000)" style={{...inputStyle, marginTop:'5px', width:'100%', boxSizing:'border-box'}} />
-                )}
-                {eff.raw_text && <div style={{fontSize:'0.7em', color:'#bdc3c7', marginTop:'2px'}}>元の文: {eff.raw_text}</div>}
+                <div style={{fontSize:'0.8em', color:'#bdc3c7'}}>
+                  {eff.target && `Target: ${eff.target.player} ${eff.target.count}枚`}
+                  {eff.value !== 0 && ` Value: ${eff.value}`}
+                  {eff.raw_text && ` ("${eff.raw_text}")`}
+                </div>
               </div>
             ))}
           </div>

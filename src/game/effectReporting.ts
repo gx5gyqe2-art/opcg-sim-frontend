@@ -1,6 +1,6 @@
 // src/game/effectReporting.ts
 
-// --- Enums (src/models/enums.py に準拠) ---
+// --- Enums (Backend aligned) ---
 
 export type TriggerType = 
   | 'ON_PLAY'        // 登場時
@@ -23,8 +23,8 @@ export type ActionType =
   | 'ACTIVE'
   | 'DRAW'
   | 'TRASH'            // トラッシュに送る
-  | 'RETURN_TO_HAND'   // 手札に戻す (MOVE_TO_HAND かな？ resolverを確認すると MOVE_TO_HAND が使われています)
-  | 'MOVE_TO_HAND'     // resolver.py で使用
+  | 'RETURN_TO_HAND'   // 手札に戻す (Frontend用エイリアス)
+  | 'MOVE_TO_HAND'     // Backend用
   | 'DECK_BOTTOM'
   | 'DECK_TOP'
   | 'PLAY_CARD'        // 登場させる
@@ -45,13 +45,19 @@ export type Zone =
 
 export type PlayerType = 'SELF' | 'OPPONENT' | 'OWNER' | 'ALL';
 
-// --- Data Structures (src/models/effect_types.py に準拠) ---
+export type VerificationOperator = 
+  | 'INCREASE_BY'
+  | 'DECREASE_BY'
+  | 'CONTAINS'
+  | 'NOT_CONTAINS'
+  | 'EQUALS';
 
-// 対象選択のクエリ
+// --- Data Structures ---
+
 export interface TargetQuery {
   zone: Zone;
   player: PlayerType;
-  card_type?: string[]; // "CHARACTER", "LEADER" など
+  card_type?: string[]; 
   traits?: string[];
   attributes?: string[];
   cost_min?: number;
@@ -60,38 +66,43 @@ export interface TargetQuery {
   power_max?: number;
   is_rest?: boolean;
   count: number;
-  is_up_to: boolean;    // "〜枚まで"
-  select_mode?: string; // "CHOOSE", "ALL" など
+  is_up_to: boolean;
+  select_mode?: string;
+  filterQuery?: string; // Frontend helper
 }
 
-// 条件定義
 export interface Condition {
-  type: string; // ConditionType Enum (LIFE_COUNT, HAND_COUNT etc.)
+  type: string; 
   value: any;
-  operator: string; // "GE", "LE", "EQ" etc.
+  operator: string;
   target?: TargetQuery;
 }
 
-// 効果/コストのアクション定義 (EffectAction)
 export interface EffectAction {
   type: ActionType;
   subject?: PlayerType;
   target?: TargetQuery;
   condition?: Condition;
-  value?: number;       // パワー値、枚数、コスト値など
+  value?: number;
   source_zone?: Zone;
   dest_zone?: Zone;
-  raw_text?: string;    // 元のテキスト
-  details?: any;        // その他の詳細
-  then_actions?: EffectAction[]; // 後続効果
+  raw_text?: string;
+  details?: any;
+  then_actions?: EffectAction[];
 }
 
-// カードの能力定義 (Ability)
 export interface CardAbility {
   trigger: TriggerType;
   costs: EffectAction[];
-  actions: EffectAction[]; // effects ではなく actions
+  actions: EffectAction[];
   raw_text?: string;
+}
+
+export interface VerificationCheck {
+  targetPlayer: PlayerType;
+  targetProperty: string;
+  operator: VerificationOperator;
+  value: string | number;
 }
 
 // --- Report Wrapper ---
@@ -100,10 +111,10 @@ export interface EffectReport {
   correction: {
     cardName: string;
     rawText: string;
-    ability: CardAbility; // この構造がそのままバックエンドで使えるようになる
+    ability: CardAbility;
   };
   verification: {
-    expectedStateChanges: any[]; // 検証用（一旦簡易形式）
+    expectedStateChanges: VerificationCheck[];
   };
   note: string;
 }
