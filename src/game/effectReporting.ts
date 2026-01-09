@@ -1,6 +1,6 @@
 // src/game/effectReporting.ts
 
-// --- Enums (Backend aligned) ---
+// --- Enums ---
 
 export type TriggerType = 
   | 'ON_PLAY'        // 登場時
@@ -22,22 +22,22 @@ export type ActionType =
   | 'REST'
   | 'ACTIVE'
   | 'DRAW'
-  | 'TRASH'            // トラッシュに送る
-  | 'RETURN_TO_HAND'   // 手札に戻す (Frontend用エイリアス)
-  | 'MOVE_TO_HAND'     // Backend用
+  | 'TRASH'
+  | 'RETURN_TO_HAND'
+  | 'MOVE_TO_HAND'
   | 'DECK_BOTTOM'
   | 'DECK_TOP'
-  | 'PLAY_CARD'        // 登場させる
-  | 'ATTACH_DON'       // ドン付与
-  | 'REST_DON'         // ドンをレスト（コスト等）
-  | 'RETURN_DON'       // ドンを戻す（コスト等）
-  | 'ACTIVE_DON'       // ドンをアクティブに
-  | 'BUFF'             // パワー増減
-  | 'COST_CHANGE'      // コスト増減
-  | 'GRANT_KEYWORD'    // 速攻などを付与
-  | 'LIFE_MANIPULATE'  // ライフ操作
-  | 'LOOK'             // デッキトップを見る
-  | 'SELECT_OPTION'    // 選択肢
+  | 'PLAY_CARD'
+  | 'ATTACH_DON'
+  | 'REST_DON'
+  | 'RETURN_DON'
+  | 'ACTIVE_DON'
+  | 'BUFF'
+  | 'COST_CHANGE'
+  | 'GRANT_KEYWORD'
+  | 'LIFE_MANIPULATE'
+  | 'LOOK'
+  | 'SELECT_OPTION'
   | 'OTHER';
 
 export type Zone = 
@@ -68,7 +68,7 @@ export interface TargetQuery {
   count: number;
   is_up_to: boolean;
   select_mode?: string;
-  filterQuery?: string; // Frontend helper
+  filterQuery?: string;
 }
 
 export interface Condition {
@@ -93,6 +93,7 @@ export interface EffectAction {
 
 export interface CardAbility {
   trigger: TriggerType;
+  condition?: string; // ▼ 追加: フォームの入力に対応
   costs: EffectAction[];
   actions: EffectAction[];
   raw_text?: string;

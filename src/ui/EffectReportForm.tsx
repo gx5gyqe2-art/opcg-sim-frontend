@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { 
   EffectReport, TriggerType, ActionType,
-  EffectAction, VerificationCheck,
-  Zone, PlayerType
+  EffectAction, VerificationCheck, VerificationOperator
 } from '../game/effectReporting';
 
 interface Props {
@@ -49,14 +48,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
 
   // --- Helpers ---
   
-  // 選択中のテキスト取得
-  const selectedText = useMemo(() => {
-    if (!rawText || rangeStart === null) return "";
-    const start = rangeStart;
-    const end = rangeEnd !== null ? rangeEnd : rangeStart;
-    return rawText.slice(start, end + 1);
-  }, [rawText, rangeStart, rangeEnd]);
-
   // テキスト選択ハンドラ
   const handleCharClick = (index: number) => {
     let newStart = rangeStart;
@@ -99,7 +90,6 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     // 数値変換を試みる（全角対応）
     const numVal = parseInt(text.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[^0-9-]/g, '')) || 0;
     
-    // 状態更新関数
     const updateList = (list: EffectAction[], setList: React.Dispatch<React.SetStateAction<EffectAction[]>>) => {
       const newList = [...list];
       const item = newList[idx];
@@ -112,9 +102,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
         if (subProp === 'count') item.target.count = numVal;
         else if (subProp === 'filterQuery') item.target.filterQuery = text;
       }
-      // 生テキストも保存しておく（デバッグ用）
       item.raw_text = text;
-      
       setList(newList);
     };
 
@@ -123,10 +111,8 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     
     if (section === 'condition') setConditionText(prev => prev ? prev + " " + text : text);
 
-    // 注入したら選択解除しない（連続入力のため）または解除する？ -> 一旦解除する
     setRangeStart(null);
     setRangeEnd(null);
-    // アクティブフィールドは維持する？ -> 解除したほうが誤操作減るかも
     setActiveFieldId(null);
   };
 
@@ -157,6 +143,21 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
     if (!newList[idx].target) newList[idx].target = { player: 'OPPONENT', zone: 'FIELD', count: 1, is_up_to: false };
     (newList[idx].target as any)[key] = val;
     setList(newList);
+  };
+
+  // 検証項目の操作
+  const addVerification = () => {
+    setVerifications([...verifications, { targetPlayer: 'OPPONENT', targetProperty: 'field', operator: 'DECREASE_BY', value: 1 }]);
+  };
+
+  const removeVerification = (idx: number) => {
+    setVerifications(verifications.filter((_, i) => i !== idx));
+  };
+
+  const updateVerification = (idx: number, field: keyof VerificationCheck, val: any) => {
+    const newVer = [...verifications];
+    (newVer[idx] as any)[field] = val;
+    setVerifications(newVer);
   };
 
   // カード選択
@@ -192,7 +193,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
         rawText: rawText,
         ability: {
           trigger: trigger,
-          condition: conditionText,
+          condition: conditionText, // 型修正済み
           costs: costs,
           actions: effects,
           raw_text: rawText
@@ -239,6 +240,7 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '0.9em', color: '#bdc3c7' };
   const btnStyle = (bg: string) => ({ padding: '8px 12px', background: bg, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' });
   const selectStyle: React.CSSProperties = { padding: '5px', borderRadius: '4px', border: '1px solid #7f8c8d', background: '#2c3e50', color: 'white', fontSize: '13px' };
+  const inputStyle: React.CSSProperties = { padding: '5px', borderRadius: '4px', border: '1px solid #7f8c8d', background: '#2c3e50', color: 'white', fontSize: '13px', maxWidth: '60px' };
 
   if (showCardSelector) {
     return (
@@ -412,6 +414,33 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
                     <SlotInput id={`effect-${i}-target-filterQuery`} value={eff.target?.filterQuery || ''} placeholder="Cost<=4" width="100px" />
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 検証 (追加) */}
+          <div style={sectionStyle}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
+              <label style={labelStyle}>Verification (検証)</label>
+              <button onClick={addVerification} style={btnStyle('#7f8c8d')}>+ 追加</button>
+            </div>
+            {verifications.map((v, i) => (
+              <div key={i} style={{background: 'rgba(0,0,0,0.2)', padding:'5px', marginBottom:'5px', borderRadius:'4px', display:'flex', gap:'5px', flexWrap:'wrap', alignItems:'center'}}>
+                <select value={v.targetPlayer} onChange={e => updateVerification(i, 'targetPlayer', e.target.value)} style={selectStyle}>
+                  <option value="OPPONENT">相手</option>
+                  <option value="SELF">自分</option>
+                </select>
+                <select value={v.targetProperty} onChange={e => updateVerification(i, 'targetProperty', e.target.value)} style={selectStyle}>
+                  <option value="field">盤面</option>
+                  <option value="hand">手札</option>
+                  <option value="life">ライフ</option>
+                </select>
+                <select value={v.operator} onChange={e => updateVerification(i, 'operator', e.target.value as VerificationOperator)} style={selectStyle}>
+                  <option value="DECREASE_BY">減る</option>
+                  <option value="INCREASE_BY">増える</option>
+                </select>
+                <input value={v.value} onChange={e => updateVerification(i, 'value', e.target.value)} style={inputStyle} placeholder="1" />
+                <button onClick={() => removeVerification(i)} style={{...btnStyle('#c0392b'), padding:'2px 6px'}}>×</button>
               </div>
             ))}
           </div>
