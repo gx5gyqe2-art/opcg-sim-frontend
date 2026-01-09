@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type { 
-  EffectReport, CostType, ActionType, EffectTrigger, 
-  TargetPlayer, CardZone, CardTypeFilter, VerificationOperator,
+  EffectReport, EffectTrigger, 
   CostDefinition, EffectDefinition, VerificationCheck
 } from '../game/effectReporting';
 
@@ -225,6 +224,16 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onC
           </div>
         ))}
         <button onClick={addVerification} style={btnStyle('#7f8c8d')}>+ 検証条件追加</button>
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <label>補足メモ</label>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          rows={2}
+          style={{...inputStyle, height: 'auto', width: '100%'}}
+        />
       </div>
 
       <div style={rowStyle}>
