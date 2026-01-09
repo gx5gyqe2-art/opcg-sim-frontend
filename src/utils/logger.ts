@@ -19,9 +19,21 @@ interface LogOptions {
 
 const logBuffer: any[] = [];
 
+// ▼▼▼ 追加: ローカル時間をISO形式(YYYY-MM-DDTHH:mm:ss.SSS)にするヘルパー ▼▼▼
+const getLocalISOString = () => {
+  const date = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const pad3 = (n: number) => n.toString().padStart(3, '0');
+  
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad3(date.getMilliseconds())}`;
+};
+// ▲▲▲ 追加ここまで ▲▲▲
+
 const createLogPayload = (options: LogOptions) => {
   const sid = options.sessionId || sessionManager.getSessionId();
-  const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+  // ▼▼▼ 修正: 独自のISO文字列生成を使用 ▼▼▼
+  const now = getLocalISOString();
+  // ▲▲▲ 修正ここまで ▲▲▲
   const source = "FE";
 
   return {
@@ -69,7 +81,9 @@ export const logger = {
   log: (options: LogOptions) => {
     const { level, action, msg, sessionId, player = "unknown" } = options;
     const sid = sessionId || sessionManager.getSessionId();
-    const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+    // ▼▼▼ 修正: 表示用も合わせる（必須ではないが見やすさのため） ▼▼▼
+    const now = getLocalISOString();
+    // ▲▲▲ 修正ここまで ▲▲▲
     const source = "FE";
 
     const header = `[${now}][${source}][${level}][${K.SESSION}=${sid}][${player}]`;
