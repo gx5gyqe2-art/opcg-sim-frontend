@@ -17,24 +17,30 @@ interface LogOptions {
   payload?: any;
 }
 
+const logBuffer: any[] = [];
+
+const createLogPayload = (options: LogOptions) => {
+  const sid = options.sessionId || sessionManager.getSessionId();
+  const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+  const source = "FE";
+
+  return {
+    [K.TIME]: now,
+    [K.SOURCE]: source,
+    [K.LEVEL]: options.level,
+    [K.SESSION]: sid,
+    [K.PLAYER]: options.player || "unknown",
+    [K.ACTION]: options.action,
+    [K.MESSAGE]: options.msg,
+    [K.PAYLOAD]: options.payload,
+    sessionId: sid
+  };
+};
+
 export const logger = {
   sendRemoteLog: (options: LogOptions) => {
     const LOG_URL = `${baseUrl}/api/log`;
-    const sid = sessionManager.getSessionId();
-    const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
-    const source = "FE";
-
-    const logObject = {
-      [K.TIME]: now,
-      [K.SOURCE]: source,
-      [K.LEVEL]: options.level,
-      [K.SESSION]: sid,
-      [K.PLAYER]: options.player || "unknown",
-      [K.ACTION]: options.action,
-      [K.MESSAGE]: options.msg,
-      [K.PAYLOAD]: options.payload,
-      sessionId: sid
-    };
+    const logObject = createLogPayload(options);
 
     fetch(LOG_URL, {
       method: 'POST',
@@ -42,6 +48,22 @@ export const logger = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(logObject)
     }).catch(() => {});
+  },
+
+  flushLogs: () => {
+    if (logBuffer.length === 0) return;
+
+    const LOG_URL = `${baseUrl}/api/log`;
+    const payload = [...logBuffer];
+    logBuffer.length = 0;
+
+    fetch(LOG_URL, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true 
+    }).catch(e => console.error("Failed to flush logs", e));
   },
 
   log: (options: LogOptions) => {
@@ -64,6 +86,8 @@ export const logger = {
     console.groupCollapsed(`%c${header} %c${summary}`, styles[level], styles.summary);
     console.log("Details:", { ...options, sessionId: sid, time: now, source });
     console.groupEnd();
+
+    logBuffer.push(createLogPayload(options));
 
     if (level === 'error' || level === 'warn') {
       logger.sendRemoteLog(options);

@@ -6,7 +6,7 @@ import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
-import { DebugReporter } from '../ui/DebugReporter'; // 【追加】バグレポート用
+import { DebugReporter } from '../ui/DebugReporter';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
@@ -131,7 +131,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
       if (playerState.zones.hand.some(c => c.uuid === targetCard.uuid)) return 'hand';
       if (playerState.zones.trash.some(c => c.uuid === targetCard.uuid)) return 'trash';
       if (playerState.zones.life.some(c => c.uuid === targetCard.uuid)) return 'life';
-      if (playerState.stage?.uuid === targetCard.uuid) return 'field'; // ステージもフィールド扱い
+      if (playerState.stage?.uuid === targetCard.uuid) return 'field';
       return null;
     };
 
@@ -255,10 +255,24 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     }
   }, [pendingRequest]);
 
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      logger.flushLogs();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  const handleBackToTitle = () => {
+    logger.flushLogs();
+    onBack();
+  };
+
   const showSearchModal = pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT;
   const constraints = pendingRequest?.constraints || {};
 
-  // アクティブドンの枚数を計算
   const activeDonCount = gameState && activePlayerId 
     ? (gameState.players[activePlayerId] as any).don_active.length 
     : 0;
@@ -266,9 +280,8 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
       
-      {/* TOPへ戻るボタン */}
       <button 
-        onClick={onBack}
+        onClick={handleBackToTitle}
         style={{
           position: 'absolute',
           top: '10px',
@@ -304,7 +317,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         </div>
       )}
 
-      {/* メインアクションの時はメッセージを表示しない */}
       {pendingRequest && !isAttackTargeting && !showSearchModal && pendingRequest.action !== 'MAIN_ACTION' && (
         <div style={{ 
             position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', 
@@ -358,7 +370,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         card={selectedCard.card}
         location={selectedCard.location}
         isMyTurn={selectedCard.isMyTurn}
-        activeDonCount={activeDonCount} // ドン付与計算用に渡す
+        activeDonCount={activeDonCount}
         onAction={handleAction}
         onClose={() => {
           setIsDetailMode(false);
@@ -378,7 +390,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
       />
     )}
 
-    {/* バグ報告用ボタン */}
     <DebugReporter 
       data={{ 
         gameState, 
