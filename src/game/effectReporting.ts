@@ -1,52 +1,20 @@
+// src/game/effectReporting.ts
+
 export type TriggerType = 
-  | 'ON_PLAY'
-  | 'ON_ATTACK'
-  | 'ON_BLOCK'
-  | 'ON_KO'
-  | 'ACTIVATE_MAIN'
-  | 'TURN_END'
-  | 'OPP_TURN_END'
-  | 'ON_OPP_ATTACK'
-  | 'TRIGGER'
-  | 'COUNTER'
-  | 'RULE'
-  | 'PASSIVE'
-  | 'UNKNOWN';
+  | 'ON_PLAY' | 'ON_ATTACK' | 'ON_BLOCK' | 'ON_KO' | 'ACTIVATE_MAIN'
+  | 'TURN_END' | 'OPP_TURN_END' | 'ON_OPP_ATTACK' | 'TRIGGER' | 'COUNTER' 
+  | 'RULE' | 'PASSIVE' | 'UNKNOWN';
 
 export type ActionType = 
-  | 'KO'
-  | 'REST'
-  | 'ACTIVE'
-  | 'DRAW'
-  | 'TRASH'
-  | 'RETURN_TO_HAND'
-  | 'MOVE_TO_HAND'
-  | 'DECK_BOTTOM'
-  | 'DECK_TOP'
-  | 'PLAY_CARD'
-  | 'ATTACH_DON'
-  | 'REST_DON'
-  | 'RETURN_DON'
-  | 'ACTIVE_DON'
-  | 'BUFF'
-  | 'COST_CHANGE'
-  | 'GRANT_KEYWORD'
-  | 'LIFE_MANIPULATE'
-  | 'LOOK'
-  | 'SELECT_OPTION'
-  | 'OTHER';
+  | 'KO' | 'REST' | 'ACTIVE' | 'DRAW' | 'TRASH' | 'RETURN_TO_HAND' | 'MOVE_TO_HAND'
+  | 'DECK_BOTTOM' | 'DECK_TOP' | 'PLAY_CARD' | 'ATTACH_DON' | 'REST_DON' | 'RETURN_DON'
+  | 'ACTIVE_DON' | 'BUFF' | 'COST_CHANGE' | 'GRANT_KEYWORD' | 'LIFE_MANIPULATE'
+  | 'LOOK' | 'SELECT_OPTION' | 'OTHER';
 
 export type Zone = 
   | 'FIELD' | 'HAND' | 'DECK' | 'TRASH' | 'LIFE' | 'DON_DECK' | 'COST_AREA' | 'TEMP' | 'ANY';
 
 export type PlayerType = 'SELF' | 'OPPONENT' | 'OWNER' | 'ALL';
-
-export type VerificationOperator = 
-  | 'INCREASE_BY'
-  | 'DECREASE_BY'
-  | 'CONTAINS'
-  | 'NOT_CONTAINS'
-  | 'EQUALS';
 
 export interface TargetQuery {
   zone: Zone;
@@ -95,21 +63,12 @@ export interface CardAbility {
   raw_text?: string;
 }
 
-export interface VerificationCheck {
-  targetPlayer: PlayerType;
-  targetProperty: string;
-  operator: VerificationOperator;
-  value: string | number;
-}
-
 export interface EffectReport {
   correction: {
     cardName: string;
     rawText: string;
     ability: CardAbility;
-  };
-  verification?: {
-    expectedStateChanges: VerificationCheck[];
+    unusedTextParts?: string[]; // 追加: 使用されなかったテキスト部分
   };
   note: string;
 }
