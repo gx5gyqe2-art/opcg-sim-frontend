@@ -244,16 +244,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     renderScene();
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
 
-  useEffect(() => {
-    if (pendingRequest) {
-      logger.log({
-        level: 'info',
-        action: 'trace.pending_request_state',
-        msg: `Current Pending Action: ${pendingRequest.action}`,
-        payload: { action: pendingRequest.action, full: pendingRequest }
-      });
-    }
-  }, [pendingRequest]);
+  // ログ削除: useEffectでのtrace.pending_request_state
 
   useEffect(() => {
     const handleBeforeUnload = () => {
