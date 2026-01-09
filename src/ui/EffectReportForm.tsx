@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import type { EffectReport, EffectTrigger, GameZone, ActionType } from '../game/effectReporting';
+import type { 
+  EffectReport, CostType, ActionType, EffectTrigger, 
+  TargetPlayer, CardZone, CardTypeFilter, VerificationOperator,
+  CostDefinition, EffectDefinition, VerificationCheck
+} from '../game/effectReporting';
 
 interface Props {
   cardName?: string;
@@ -8,332 +12,225 @@ interface Props {
 }
 
 export const EffectReportForm: React.FC<Props> = ({ cardName = '', onSubmit, onCancel }) => {
+  // 基本情報
   const [inputCardName, setInputCardName] = useState(cardName);
-  const [trigger, setTrigger] = useState<EffectTrigger>('OnPlay');
-  const [condition, setCondition] = useState('');
-  const [sourceZone, setSourceZone] = useState<GameZone>('Field');
-  const [targetCount, setTargetCount] = useState(1);
-  const [targetFilter, setTargetFilter] = useState('');
+  const [rawText, setRawText] = useState('');
+  const [trigger, setTrigger] = useState<EffectTrigger>('ON_PLAY');
+  const [conditionText, setConditionText] = useState('');
   const [note, setNote] = useState('');
+
+  // リスト項目
+  const [costs, setCosts] = useState<CostDefinition[]>([]);
+  const [effects, setEffects] = useState<EffectDefinition[]>([]);
+  const [verifications, setVerifications] = useState<VerificationCheck[]>([]);
+
+  // --- Helpers for UI Builders ---
   
-  const [actions, setActions] = useState<{type: ActionType, detail: string}[]>([
-    { type: 'Other', detail: '' }
-  ]);
-
-  const addAction = () => {
-    setActions([...actions, { type: 'Other', detail: '' }]);
+  const addCost = () => setCosts([...costs, { type: 'DOWN_DON', amount: 1 }]);
+  const updateCost = (idx: number, field: keyof CostDefinition, val: any) => {
+    const newCosts = [...costs];
+    (newCosts[idx] as any)[field] = val;
+    setCosts(newCosts);
   };
+  const removeCost = (idx: number) => setCosts(costs.filter((_, i) => i !== idx));
 
-  const removeAction = (index: number) => {
-    const newActions = actions.filter((_, i) => i !== index);
-    setActions(newActions);
+  const addEffect = () => setEffects([...effects, { 
+    type: 'KO', 
+    target: { player: 'OPPONENT', zone: 'FIELD', cardType: 'CHARACTER', filterQuery: '', count: 1 } 
+  }]);
+  const updateEffect = (idx: number, field: keyof EffectDefinition, val: any) => {
+    const newEffects = [...effects];
+    (newEffects[idx] as any)[field] = val;
+    setEffects(newEffects);
   };
+  const updateEffectTarget = (idx: number, field: string, val: any) => {
+    const newEffects = [...effects];
+    if (!newEffects[idx].target) return;
+    (newEffects[idx].target as any)[field] = val;
+    setEffects(newEffects);
+  };
+  const removeEffect = (idx: number) => setEffects(effects.filter((_, i) => i !== idx));
 
-  const updateAction = (index: number, field: 'type' | 'detail', value: string) => {
-    const newActions = [...actions];
-    // @ts-ignore
-    newActions[index][field] = value;
-    setActions(newActions);
+  const addVerification = () => setVerifications([...verifications, { 
+    targetPlayer: 'OPPONENT', targetProperty: 'field', operator: 'DECREASE_BY', value: 1 
+  }]);
+  const updateVerification = (idx: number, field: keyof VerificationCheck, val: any) => {
+    const newVer = [...verifications];
+    (newVer[idx] as any)[field] = val;
+    setVerifications(newVer);
   };
+  const removeVerification = (idx: number) => setVerifications(verifications.filter((_, i) => i !== idx));
 
   const handleSubmit = () => {
     const report: EffectReport = {
-      cardName: inputCardName,
-      trigger,
-      condition,
-      sourceZone,
-      targetSelector: {
-        count: targetCount,
-        filter: targetFilter
+      correction: {
+        cardName: inputCardName,
+        rawText,
+        structuredEffect: {
+          trigger,
+          costs,
+          conditions: conditionText,
+          effects
+        }
       },
-      actions,
+      verification: {
+        expectedStateChanges: verifications
+      },
       note
     };
     onSubmit(report);
   };
 
-  const getPlaceholderForAction = (type: ActionType) => {
-    switch (type) {
-      case 'BuffPower': return '例: +2000';
-      case 'SelectOption': return '例: 1枚引く | KO';
-      case 'AddDon': return '例: 2';
-      default: return '詳細';
-    }
+  // Styles
+  const containerStyle: React.CSSProperties = {
+    position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+    backgroundColor: '#2c3e50', color: '#ecf0f1', padding: '20px', borderRadius: '8px',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.5)', zIndex: 10000,
+    width: '95%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto',
+    fontFamily: 'sans-serif', fontSize: '14px', boxSizing: 'border-box'
   };
-
-  // 共通スタイル定義
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '12px', // タップしやすいよう拡大
-    background: '#34495e',
-    color: 'white',
-    border: '1px solid #7f8c8d',
-    borderRadius: '4px',
-    fontSize: '16px', // iOSでのズーム防止
-    boxSizing: 'border-box',
-    marginBottom: '5px'
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '0.85em',
-    color: '#bdc3c7',
-    marginBottom: '4px',
-    fontWeight: 'bold'
-  };
+  const sectionStyle: React.CSSProperties = { marginBottom: '20px', border: '1px solid #7f8c8d', padding: '10px', borderRadius: '4px' };
+  const rowStyle: React.CSSProperties = { display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'center' };
+  const inputStyle: React.CSSProperties = { padding: '8px', borderRadius: '4px', border: '1px solid #95a5a6', background: '#34495e', color: 'white', flex: 1 };
+  const btnStyle = (color: string) => ({ padding: '5px 10px', background: color, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' });
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      backgroundColor: '#2c3e50',
-      color: '#ecf0f1',
-      padding: '15px', // モバイル向けに少し縮小
-      borderRadius: '8px',
-      boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-      zIndex: 10000,
-      width: '95%', // モバイル向けに幅を確保
-      maxWidth: '500px', // PCでは広がりすぎないように
-      maxHeight: '90vh',
-      overflowY: 'auto',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      fontSize: '14px',
-      boxSizing: 'border-box'
-    }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        marginBottom: '15px',
-        borderBottom: '1px solid #7f8c8d', 
-        paddingBottom: '10px' 
-      }}>
-        <h3 style={{ margin: 0, fontSize: '1.2em' }}>🎴 効果定義レポート</h3>
-        <button 
-          onClick={onCancel}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#bdc3c7',
-            fontSize: '1.5em',
-            padding: '0 10px',
-            cursor: 'pointer'
-          }}
-        >
-          ×
-        </button>
-      </div>
+    <div style={containerStyle}>
+      <h3 style={{ marginTop: 0, borderBottom: '1px solid #7f8c8d', paddingBottom: '10px' }}>🛠 自動修正用データ作成</h3>
       
-      {/* カード名 */}
-      <div style={{ marginBottom: '15px' }}>
-        <label style={labelStyle}>カード名</label>
-        <input 
-          type="text" 
-          value={inputCardName}
-          onChange={e => setInputCardName(e.target.value)}
-          placeholder="カード名を入力"
-          style={inputStyle}
-        />
-      </div>
-
-      {/* 1. タイミング */}
-      <div style={{ marginBottom: '15px' }}>
-        <label style={labelStyle}>いつ (Trigger)</label>
-        <select 
-          value={trigger} 
-          onChange={e => setTrigger(e.target.value as EffectTrigger)}
-          style={{...inputStyle, appearance: 'none'}} // appearance: noneでOS標準スタイルを抑制
-        >
-          <option value="OnPlay">登場時 (OnPlay)</option>
-          <option value="WhenAttacking">アタック時 (WhenAttacking)</option>
-          <option value="ActivateMain">起動メイン (ActivateMain)</option>
-          <option value="OnBlock">ブロック時 (OnBlock)</option>
-          <option value="OnKO">KO時 (OnKO)</option>
-          <option value="TurnEnd">ターン終了時 (TurnEnd)</option>
-          <option value="Trigger">トリガー (Trigger)</option>
-          <option value="Other">その他</option>
-        </select>
-      </div>
-
-      {/* 2. 条件 */}
-      <div style={{ marginBottom: '15px' }}>
-        <label style={labelStyle}>どの場合 (Condition)</label>
-        <input 
-          type="text" 
-          placeholder="例: リーダーが特徴《麦わらの一味》を持つ場合" 
-          value={condition}
-          onChange={e => setCondition(e.target.value)}
-          style={inputStyle}
-        />
-      </div>
-
-      <hr style={{ borderColor: '#7f8c8d', opacity: 0.3, margin: '20px 0' }} />
-
-      {/* 3. 対象選択 */}
-      <div style={{ marginBottom: '15px', display: 'flex', gap: '10px' }}>
-        <div style={{ flex: 2 }}>
-          <label style={labelStyle}>どこから</label>
-          <select 
-            value={sourceZone} 
-            onChange={e => setSourceZone(e.target.value as GameZone)}
-            style={inputStyle}
-          >
-            <option value="Field">盤面</option>
-            <option value="Hand">手札</option>
-            <option value="Trash">トラッシュ</option>
-            <option value="Life">ライフ</option>
-            <option value="Deck">デッキ</option>
-            <option value="CostArea">コスト</option>
+      {/* 1. 基本情報 */}
+      <div style={sectionStyle}>
+        <div style={rowStyle}>
+          <input placeholder="カード名" value={inputCardName} onChange={e => setInputCardName(e.target.value)} style={inputStyle} />
+          <select value={trigger} onChange={e => setTrigger(e.target.value as EffectTrigger)} style={inputStyle}>
+            <option value="ON_PLAY">登場時</option>
+            <option value="WHEN_ATTACKING">アタック時</option>
+            <option value="ACTIVATE_MAIN">起動メイン</option>
+            <option value="ON_BLOCK">ブロック時</option>
+            <option value="ON_KO">KO時</option>
+            <option value="TURN_END">ターン終了時</option>
+            <option value="TRIGGER">トリガー</option>
           </select>
         </div>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>枚数</label>
-          <input 
-            type="number" 
-            value={targetCount} 
-            onChange={e => setTargetCount(Number(e.target.value))}
-            style={{...inputStyle, textAlign: 'center'}}
-          />
-        </div>
-      </div>
-      <div style={{ marginBottom: '15px' }}>
-        <label style={labelStyle}>何を (Filter)</label>
-        <input 
-          type="text" 
-          placeholder="例: コスト3以下のキャラ" 
-          value={targetFilter} 
-          onChange={e => setTargetFilter(e.target.value)}
-          style={inputStyle}
+        <textarea 
+          placeholder="カードテキスト原文 (Parser学習用)" 
+          value={rawText} onChange={e => setRawText(e.target.value)} 
+          style={{...inputStyle, width: '100%', height: '50px'}} 
         />
       </div>
 
-      <hr style={{ borderColor: '#7f8c8d', opacity: 0.3, margin: '20px 0' }} />
-
-      {/* 4. アクション（複数） */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={labelStyle}>効果・行動 (Actions)</label>
-        {actions.map((act, idx) => (
-          <div key={idx} style={{ 
-            marginBottom: '10px', 
-            background: 'rgba(0,0,0,0.2)', 
-            padding: '10px', 
-            borderRadius: '4px' 
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-              <span style={{color: '#95a5a6', fontSize: '0.8em'}}>Action {idx+1}</span>
-              {actions.length > 1 && (
-                <button 
-                  onClick={() => removeAction(idx)}
-                  style={{ 
-                    background: '#c0392b', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '3px',
-                    padding: '2px 8px',
-                    fontSize: '12px'
-                  }}
-                >
-                  削除
-                </button>
-              )}
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <select 
-                value={act.type} 
-                onChange={e => updateAction(idx, 'type', e.target.value as ActionType)}
-                style={inputStyle}
-              >
-                <option value="Other">その他</option>
-                <option value="Rest">レストにする</option>
-                <option value="Active">アクティブにする</option>
-                <option value="KO">KOする</option>
-                <option value="ReturnToHand">手札に戻す</option>
-                <option value="BuffPower">パワー増減</option>
-                <option value="AddDon">ドン追加(アクティブ)</option>
-                <option value="RestDon">ドン追加(レスト)</option>
-                <option value="Draw">ドロー</option>
-                <option value="Trash">トラッシュに送る</option>
-                <option value="SelectOption">選択肢(Option)</option>
-              </select>
-              <input 
-                type="text" 
-                placeholder={getPlaceholderForAction(act.type)}
-                value={act.detail}
-                onChange={e => updateAction(idx, 'detail', e.target.value)}
-                style={inputStyle}
-              />
-            </div>
+      {/* 2. コスト & 条件 */}
+      <div style={sectionStyle}>
+        <label>💰 コスト定義</label>
+        {costs.map((c, i) => (
+          <div key={i} style={rowStyle}>
+            <select value={c.type} onChange={e => updateCost(i, 'type', e.target.value)} style={inputStyle}>
+              <option value="DOWN_DON">ドン!!-</option>
+              <option value="REST_DON">ドン!!レスト</option>
+              <option value="TRASH_CARD">手札を捨てる</option>
+              <option value="RETURN_DON">ドン!!を戻す</option>
+            </select>
+            <input type="number" value={c.amount} onChange={e => updateCost(i, 'amount', Number(e.target.value))} style={{...inputStyle, maxWidth: '60px'}} />
+            <button onClick={() => removeCost(i)} style={btnStyle('#c0392b')}>×</button>
           </div>
         ))}
-        <button 
-          onClick={addAction} 
-          type="button" 
-          style={{ 
-            marginTop: '5px', 
-            fontSize: '14px', 
-            padding: '12px',
-            background: 'transparent', 
-            border: '2px dashed #7f8c8d', 
-            color: '#ecf0f1', 
-            cursor: 'pointer', 
-            width: '100%',
-            borderRadius: '4px'
-          }}
-        >
-          + アクション追加
-        </button>
+        <button onClick={addCost} style={btnStyle('#7f8c8d')}>+ コスト追加</button>
+        
+        <div style={{ marginTop: '10px' }}>
+          <input placeholder="発動条件 (例: リーダーが特徴《麦わら》を持つ)" value={conditionText} onChange={e => setConditionText(e.target.value)} style={{...inputStyle, width: '100%'}} />
+        </div>
       </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <label style={labelStyle}>補足メモ</label>
-        <textarea
-          value={note}
-          onChange={e => setNote(e.target.value)}
-          rows={2}
-          style={{...inputStyle, height: 'auto'}}
-        />
+      {/* 3. 効果定義 (Actions) */}
+      <div style={sectionStyle}>
+        <label>⚡ 効果定義 (Matcher & Resolver)</label>
+        {effects.map((eff, i) => (
+          <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', marginBottom: '10px', borderRadius: '4px' }}>
+            <div style={rowStyle}>
+              <select value={eff.type} onChange={e => updateEffect(i, 'type', e.target.value)} style={inputStyle}>
+                <option value="KO">KOする</option>
+                <option value="RETURN_TO_HAND">手札に戻す</option>
+                <option value="REST">レストにする</option>
+                <option value="ACTIVE">アクティブにする</option>
+                <option value="TRASH">トラッシュに送る</option>
+                <option value="BUFF_POWER">パワー増減</option>
+                <option value="ADD_DON_ACTIVE">ドン追加(アクティブ)</option>
+                <option value="DRAW">ドロー</option>
+                <option value="OTHER">その他</option>
+              </select>
+              <button onClick={() => removeEffect(i)} style={btnStyle('#c0392b')}>削除</button>
+            </div>
+            
+            {/* 対象セレクタ (対象を取る効果の場合) */}
+            {['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE', 'TRASH', 'BUFF_POWER'].includes(eff.type) && eff.target && (
+              <div style={{ fontSize: '0.9em', paddingLeft: '10px', borderLeft: '3px solid #3498db' }}>
+                <div style={rowStyle}>
+                  <select value={eff.target.player} onChange={e => updateEffectTarget(i, 'player', e.target.value)} style={inputStyle}>
+                    <option value="OPPONENT">相手の</option>
+                    <option value="SELF">自分の</option>
+                    <option value="BOTH">お互いの</option>
+                  </select>
+                  <select value={eff.target.zone} onChange={e => updateEffectTarget(i, 'zone', e.target.value)} style={inputStyle}>
+                    <option value="FIELD">盤面</option>
+                    <option value="HAND">手札</option>
+                    <option value="LIFE">ライフ</option>
+                    <option value="TRASH">トラッシュ</option>
+                  </select>
+                  <select value={eff.target.cardType} onChange={e => updateEffectTarget(i, 'cardType', e.target.value)} style={inputStyle}>
+                    <option value="CHARACTER">キャラ</option>
+                    <option value="LEADER">リーダー</option>
+                    <option value="STAGE">ステージ</option>
+                    <option value="ALL">すべて</option>
+                  </select>
+                </div>
+                <div style={rowStyle}>
+                  <input placeholder="条件 (例: Cost<=4)" value={eff.target.filterQuery} onChange={e => updateEffectTarget(i, 'filterQuery', e.target.value)} style={inputStyle} />
+                  <input type="number" placeholder="枚数" value={eff.target.count} onChange={e => updateEffectTarget(i, 'count', Number(e.target.value))} style={{...inputStyle, maxWidth: '60px'}} />
+                  <span>枚まで</span>
+                </div>
+              </div>
+            )}
+            
+            {['BUFF_POWER', 'ADD_DON_ACTIVE', 'DRAW'].includes(eff.type) && (
+              <input placeholder="値 (例: +1000, 2)" value={eff.value || ''} onChange={e => updateEffect(i, 'value', e.target.value)} style={inputStyle} />
+            )}
+          </div>
+        ))}
+        <button onClick={addEffect} style={btnStyle('#7f8c8d')}>+ 効果追加</button>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <button 
-          onClick={onCancel} 
-          style={{ 
-            flex: 1,
-            padding: '12px', 
-            background: '#7f8c8d', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px', 
-            fontSize: '16px',
-            fontWeight: 'bold',
-            cursor: 'pointer' 
-          }}
-        >
-          キャンセル
-        </button>
-        <button 
-          onClick={handleSubmit} 
-          style={{ 
-            flex: 1,
-            padding: '12px', 
-            background: '#27ae60', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px', 
-            fontSize: '16px',
-            fontWeight: 'bold',
-            cursor: 'pointer' 
-          }}
-        >
-          報告送信
-        </button>
+      {/* 4. 検証条件 (Verification) */}
+      <div style={sectionStyle}>
+        <label>✅ 検証条件 (テスト自動生成用)</label>
+        {verifications.map((v, i) => (
+          <div key={i} style={rowStyle}>
+            <select value={v.targetPlayer} onChange={e => updateVerification(i, 'targetPlayer', e.target.value)} style={inputStyle}>
+              <option value="OPPONENT">相手の</option>
+              <option value="SELF">自分の</option>
+            </select>
+            <select value={v.targetProperty} onChange={e => updateVerification(i, 'targetProperty', e.target.value)} style={inputStyle}>
+              <option value="field">盤面枚数</option>
+              <option value="hand">手札枚数</option>
+              <option value="life">ライフ枚数</option>
+              <option value="don_active">アクティブドン</option>
+            </select>
+            <select value={v.operator} onChange={e => updateVerification(i, 'operator', e.target.value)} style={inputStyle}>
+              <option value="DECREASE_BY">が減る (数)</option>
+              <option value="INCREASE_BY">が増える (数)</option>
+              <option value="CONTAINS">を含む (ID)</option>
+              <option value="NOT_CONTAINS">を含まない (ID)</option>
+            </select>
+            <input placeholder="値" value={v.value} onChange={e => updateVerification(i, 'value', e.target.value)} style={{...inputStyle, maxWidth: '100px'}} />
+            <button onClick={() => removeVerification(i)} style={btnStyle('#c0392b')}>×</button>
+          </div>
+        ))}
+        <button onClick={addVerification} style={btnStyle('#7f8c8d')}>+ 検証条件追加</button>
       </div>
-      
-      {/* iOS Safariの下部バー余白用 */}
-      <div style={{ height: '20px' }}></div>
+
+      <div style={rowStyle}>
+        <button onClick={onCancel} style={{...btnStyle('#7f8c8d'), flex: 1, padding: '12px'}}>キャンセル</button>
+        <button onClick={handleSubmit} style={{...btnStyle('#27ae60'), flex: 1, padding: '12px', fontWeight: 'bold'}}>報告送信</button>
+      </div>
     </div>
   );
 };
