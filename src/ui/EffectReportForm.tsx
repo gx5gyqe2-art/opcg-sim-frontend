@@ -1,18 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { 
-  EffectReport, EffectTrigger, 
+  EffectReport, EffectTrigger, CostType, ActionType,
   CostDefinition, EffectDefinition, VerificationCheck
 } from '../game/effectReporting';
 
 interface Props {
   cardName?: string;
-  gameState: any; // GameState型だが、柔軟に対応するためany
+  gameState: any;
   activePlayerId: string;
   onSubmit: (report: EffectReport) => void;
   onCancel: () => void;
 }
 
-// 簡易カード型
 interface SimpleCard {
   uuid: string;
   name: string;
@@ -31,45 +30,132 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
 
   // UI状態
   const [showCardSelector, setShowCardSelector] = useState(false);
+  const [selectionRange, setSelectionRange] = useState<{start: number, end: number, text: string} | null>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   // リスト項目
   const [costs, setCosts] = useState<CostDefinition[]>([]);
   const [effects, setEffects] = useState<EffectDefinition[]>([]);
   const [verifications, setVerifications] = useState<VerificationCheck[]>([]);
 
-  // --- カード抽出ロジック ---
+  // --- テキスト解析・推測ロジック ---
+  
+  const guessCost = (text: string): CostDefinition => {
+    let type: CostType = 'NONE';
+    let amount = 1;
+
+    if (text.match(/ドン!!\s*[-−]\s*(\d+)/)) {
+      type = 'DOWN_DON';
+      amount = parseInt(RegExp.$1);
+    } else if (text.match(/ドン!!\s*(\d+)\s*枚をレスト/)) {
+      type = 'REST_DON';
+      amount = parseInt(RegExp.$1);
+    } else if (text.match(/手札(\d+)枚を捨てる/)) {
+      type = 'TRASH_HAND';
+      amount = parseInt(RegExp.$1);
+    }
+    return { type, amount, rawText: text };
+  };
+
+  const guessEffect = (text: string): EffectDefinition => {
+    let type: ActionType = 'OTHER';
+    let target = undefined;
+    let value = undefined;
+
+    // キーワード簡易判定
+    if (text.includes('KO')) type = 'KO';
+    else if (text.includes('手札に戻す')) type = 'RETURN_TO_HAND';
+    else if (text.includes('レストにする')) type = 'REST';
+    else if (text.includes('アクティブにする')) type = 'ACTIVE';
+    else if (text.includes('引く')) type = 'DRAW';
+    else if (text.includes('パワー')) type = 'BUFF_POWER';
+    else if (text.includes('登場')) type = 'PLAY';
+
+    // ターゲット推測
+    if (['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE'].includes(type)) {
+      target = { 
+        player: text.includes('自分') ? 'SELF' : 'OPPONENT',
+        zone: 'FIELD',
+        cardType: 'CHARACTER',
+        filterQuery: '',
+        count: 1
+      };
+      // 数値があれば抽出
+      const numMatch = text.match(/(\d+)枚/);
+      if (numMatch) target.count = parseInt(numMatch[1]);
+    }
+    
+    // バフ値推測
+    if (type === 'BUFF_POWER') {
+      const buffMatch = text.match(/([+＋-−]\d+)/);
+      if (buffMatch) value = buffMatch[1];
+    }
+
+    return { type, target, value, rawText: text };
+  };
+
+  const guessTrigger = (text: string): EffectTrigger | null => {
+    if (text.includes('登場時')) return 'ON_PLAY';
+    if (text.includes('アタック時')) return 'WHEN_ATTACKING';
+    if (text.includes('起動メイン')) return 'ACTIVATE_MAIN';
+    if (text.includes('ブロック時')) return 'ON_BLOCK';
+    if (text.includes('KO時')) return 'ON_KO';
+    if (text.includes('トリガー')) return 'TRIGGER';
+    return null;
+  };
+
+  // --- ハンドラ ---
+
+  const handleTextSelect = () => {
+    const el = textAreaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const text = el.value.substring(start, end).trim();
+    
+    if (text.length > 0) {
+      setSelectionRange({ start, end, text });
+    } else {
+      setSelectionRange(null);
+    }
+  };
+
+  const applySelection = (category: 'TRIGGER' | 'CONDITION' | 'COST' | 'EFFECT') => {
+    if (!selectionRange) return;
+    const { text } = selectionRange;
+
+    switch (category) {
+      case 'TRIGGER':
+        const t = guessTrigger(text);
+        if (t) setTrigger(t);
+        break;
+      case 'CONDITION':
+        setConditionText(prev => prev ? prev + " AND " + text : text);
+        break;
+      case 'COST':
+        setCosts([...costs, guessCost(text)]);
+        break;
+      case 'EFFECT':
+        setEffects([...effects, guessEffect(text)]);
+        break;
+    }
+    setSelectionRange(null); // 選択解除
+  };
+
+  // --- カード選択ロジック (変更なし) ---
   const visibleCards = useMemo(() => {
     if (!gameState) return [];
     const cards: SimpleCard[] = [];
-    
     const processPlayer = (pid: string, pData: any) => {
       const ownerLabel = pid === activePlayerId ? '自分' : '相手';
-      
-      // Leader
-      if (pData.leader) {
-        cards.push({ uuid: pData.leader.uuid, name: pData.leader.name, text: pData.leader.text, owner: ownerLabel, zone: 'リーダー' });
-      }
-      // Stage
-      if (pData.stage) {
-        cards.push({ uuid: pData.stage.uuid, name: pData.stage.name, text: pData.stage.text, owner: ownerLabel, zone: 'ステージ' });
-      }
-      // Field
-      pData.zones.field.forEach((c: any) => {
-        cards.push({ uuid: c.uuid, name: c.name, text: c.text, owner: ownerLabel, zone: '盤面' });
-      });
-      // Hand
-      pData.zones.hand.forEach((c: any) => {
-        cards.push({ uuid: c.uuid, name: c.name, text: c.text, owner: ownerLabel, zone: '手札' });
-      });
-      // Trash
-      pData.zones.trash.forEach((c: any) => {
-        cards.push({ uuid: c.uuid, name: c.name, text: c.text, owner: ownerLabel, zone: 'トラッシュ' });
-      });
+      if (pData.leader) cards.push({ uuid: pData.leader.uuid, name: pData.leader.name, text: pData.leader.text, owner: ownerLabel, zone: 'リーダー' });
+      if (pData.stage) cards.push({ uuid: pData.stage.uuid, name: pData.stage.name, text: pData.stage.text, owner: ownerLabel, zone: 'ステージ' });
+      pData.zones.field.forEach((c: any) => cards.push({ uuid: c.uuid, name: c.name, text: c.text, owner: ownerLabel, zone: '盤面' }));
+      pData.zones.hand.forEach((c: any) => cards.push({ uuid: c.uuid, name: c.name, text: c.text, owner: ownerLabel, zone: '手札' }));
+      pData.zones.trash.forEach((c: any) => cards.push({ uuid: c.uuid, name: c.name, text: c.text, owner: ownerLabel, zone: 'トラッシュ' }));
     };
-
     if (gameState.players.p1) processPlayer('p1', gameState.players.p1);
     if (gameState.players.p2) processPlayer('p2', gameState.players.p2);
-
     return cards;
   }, [gameState, activePlayerId]);
 
@@ -80,39 +166,23 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   };
 
   // --- Helpers for UI Builders ---
-  
-  const addCost = () => setCosts([...costs, { type: 'DOWN_DON', amount: 1 }]);
   const updateCost = (idx: number, field: keyof CostDefinition, val: any) => {
-    const newCosts = [...costs];
-    (newCosts[idx] as any)[field] = val;
-    setCosts(newCosts);
+    const newCosts = [...costs]; (newCosts[idx] as any)[field] = val; setCosts(newCosts);
   };
   const removeCost = (idx: number) => setCosts(costs.filter((_, i) => i !== idx));
 
-  const addEffect = () => setEffects([...effects, { 
-    type: 'KO', 
-    target: { player: 'OPPONENT', zone: 'FIELD', cardType: 'CHARACTER', filterQuery: '', count: 1 } 
-  }]);
+  const addEffect = () => setEffects([...effects, { type: 'OTHER', target: { player: 'OPPONENT', zone: 'FIELD', cardType: 'CHARACTER', filterQuery: '', count: 1 } }]);
   const updateEffect = (idx: number, field: keyof EffectDefinition, val: any) => {
-    const newEffects = [...effects];
-    (newEffects[idx] as any)[field] = val;
-    setEffects(newEffects);
+    const newEffects = [...effects]; (newEffects[idx] as any)[field] = val; setEffects(newEffects);
   };
   const updateEffectTarget = (idx: number, field: string, val: any) => {
-    const newEffects = [...effects];
-    if (!newEffects[idx].target) return;
-    (newEffects[idx].target as any)[field] = val;
-    setEffects(newEffects);
+    const newEffects = [...effects]; if (!newEffects[idx].target) return; (newEffects[idx].target as any)[field] = val; setEffects(newEffects);
   };
   const removeEffect = (idx: number) => setEffects(effects.filter((_, i) => i !== idx));
 
-  const addVerification = () => setVerifications([...verifications, { 
-    targetPlayer: 'OPPONENT', targetProperty: 'field', operator: 'DECREASE_BY', value: 1 
-  }]);
+  const addVerification = () => setVerifications([...verifications, { targetPlayer: 'OPPONENT', targetProperty: 'field', operator: 'DECREASE_BY', value: 1 }]);
   const updateVerification = (idx: number, field: keyof VerificationCheck, val: any) => {
-    const newVer = [...verifications];
-    (newVer[idx] as any)[field] = val;
-    setVerifications(newVer);
+    const newVer = [...verifications]; (newVer[idx] as any)[field] = val; setVerifications(newVer);
   };
   const removeVerification = (idx: number) => setVerifications(verifications.filter((_, i) => i !== idx));
 
@@ -121,85 +191,36 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
       correction: {
         cardName: inputCardName,
         rawText,
-        structuredEffect: {
-          trigger,
-          costs,
-          conditions: conditionText,
-          effects
-        }
+        structuredEffect: { trigger, costs, conditions: conditionText, effects }
       },
-      verification: {
-        expectedStateChanges: verifications
-      },
+      verification: { expectedStateChanges: verifications },
       note
     };
     onSubmit(report);
   };
 
-  // Styles (Mobile Optimized)
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-    backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
-    display: 'flex', justifyContent: 'center', alignItems: 'flex-end' // Bottom sheet style usually
-  };
-  
-  const formContainerStyle: React.CSSProperties = {
-    width: '100%', maxWidth: '600px', height: '95vh', 
-    backgroundColor: '#2c3e50', color: '#ecf0f1',
-    borderTopLeftRadius: '16px', borderTopRightRadius: '16px',
-    padding: '16px', boxSizing: 'border-box',
-    display: 'flex', flexDirection: 'column',
-    overflow: 'hidden' // 内部スクロールのため
-  };
-
-  const scrollAreaStyle: React.CSSProperties = {
-    flex: 1, overflowY: 'auto', paddingBottom: '20px', WebkitOverflowScrolling: 'touch'
-  };
-
-  const sectionStyle: React.CSSProperties = { 
-    marginBottom: '24px', border: '1px solid #7f8c8d', padding: '12px', borderRadius: '8px', background: '#34495e' 
-  };
-  
-  const labelStyle: React.CSSProperties = {
-    display: 'block', marginBottom: '8px', color: '#95a5a6', fontSize: '0.9em', fontWeight: 'bold'
-  };
-
-  const rowStyle: React.CSSProperties = { display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' };
-  const inputStyle: React.CSSProperties = { 
-    padding: '10px', borderRadius: '6px', border: '1px solid #7f8c8d', 
-    background: '#2c3e50', color: 'white', flex: 1, fontSize: '16px' // 16px to prevent iOS zoom
-  };
-  
-  const btnStyle = (bg: string) => ({ 
-    padding: '8px 12px', background: bg, color: 'white', border: 'none', 
-    borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px',
-    minHeight: '40px' // タップしやすく
-  });
+  // Styles (Fixed Overflow)
+  const overlayStyle: React.CSSProperties = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center' };
+  const formContainerStyle: React.CSSProperties = { width: '100%', height: '100%', backgroundColor: '#2c3e50', color: '#ecf0f1', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' };
+  const scrollAreaStyle: React.CSSProperties = { flex: 1, overflowY: 'auto', padding: '15px', paddingBottom: '80px', WebkitOverflowScrolling: 'touch' };
+  const sectionStyle: React.CSSProperties = { marginBottom: '20px', border: '1px solid #7f8c8d', padding: '10px', borderRadius: '8px', background: '#34495e' };
+  const inputStyle: React.CSSProperties = { padding: '8px', borderRadius: '4px', border: '1px solid #7f8c8d', background: '#2c3e50', color: 'white', flex: 1, fontSize: '14px', maxWidth: '100%' };
+  const btnStyle = (bg: string) => ({ padding: '8px 12px', background: bg, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' });
 
   // カード選択モーダル
   if (showCardSelector) {
     return (
       <div style={overlayStyle}>
-        <div style={{...formContainerStyle, height: '80vh'}}>
+        <div style={{...formContainerStyle, background: '#2c3e50', padding: '10px'}}>
           <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
             <h3>🃏 対象カードを選択</h3>
             <button onClick={() => setShowCardSelector(false)} style={btnStyle('#95a5a6')}>閉じる</button>
           </div>
-          <div style={scrollAreaStyle}>
-            {visibleCards.length === 0 && <p>選択可能なカードがありません</p>}
+          <div style={{...scrollAreaStyle, padding: 0}}>
             {visibleCards.map((c) => (
-              <div 
-                key={c.uuid} 
-                onClick={() => handleSelectCard(c)}
-                style={{
-                  padding: '12px', borderBottom: '1px solid #7f8c8d', cursor: 'pointer',
-                  background: inputCardName === c.name ? '#2980b9' : 'transparent'
-                }}
-              >
+              <div key={c.uuid} onClick={() => handleSelectCard(c)} style={{padding: '12px', borderBottom: '1px solid #7f8c8d', cursor: 'pointer', background: inputCardName === c.name ? '#2980b9' : 'transparent'}}>
                 <div style={{fontWeight: 'bold'}}>{c.name}</div>
-                <div style={{fontSize: '0.8em', color: '#bdc3c7'}}>
-                  [{c.owner}] {c.zone}
-                </div>
+                <div style={{fontSize: '0.8em', color: '#bdc3c7'}}>[{c.owner}] {c.zone}</div>
               </div>
             ))}
           </div>
@@ -211,173 +232,159 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   return (
     <div style={overlayStyle}>
       <div style={formContainerStyle}>
-        
-        {/* ヘッダー */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid #7f8c8d', paddingBottom: '10px' }}>
+        {/* Header */}
+        <div style={{ padding: '10px 15px', background: '#2c3e50', borderBottom: '1px solid #7f8c8d', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>🛠 効果修正レポート</h3>
           <button onClick={onCancel} style={{ background: 'transparent', border: 'none', color: '#bdc3c7', fontSize: '24px' }}>×</button>
         </div>
 
-        {/* スクロール領域 */}
+        {/* Content */}
         <div style={scrollAreaStyle}>
           
-          {/* 1. 基本情報 */}
+          {/* 1. テキスト解析エリア */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>① 対象カードとタイミング</label>
+            <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>① カードテキストから抽出</label>
             <div style={{display: 'flex', gap: '8px', marginBottom: '10px'}}>
-              <input 
-                placeholder="カード名 (選択で自動入力)" 
-                value={inputCardName} 
-                readOnly
-                style={{...inputStyle, background: '#2c3e50', opacity: 0.8}} 
-              />
-              <button onClick={() => setShowCardSelector(true)} style={btnStyle('#e67e22')}>選択</button>
+              <input value={inputCardName} readOnly placeholder="カードを選択してください" style={{...inputStyle, background: '#2c3e50'}} />
+              <button onClick={() => setShowCardSelector(true)} style={btnStyle('#e67e22')}>カード選択</button>
             </div>
+            
+            <div style={{position: 'relative'}}>
+              <textarea 
+                ref={textAreaRef}
+                value={rawText} 
+                onChange={e => setRawText(e.target.value)}
+                onSelect={handleTextSelect}
+                placeholder="テキストを選択すると、下にメニューが出ます" 
+                style={{...inputStyle, width: '100%', height: '80px', fontFamily: 'monospace', fontSize: '13px', boxSizing:'border-box'}} 
+              />
+              {selectionRange && (
+                <div style={{
+                  position: 'absolute', bottom: '-40px', left: 0, right: 0, 
+                  background: '#2980b9', padding: '5px', borderRadius: '4px', 
+                  display: 'flex', gap: '5px', zIndex: 10, overflowX: 'auto'
+                }}>
+                  <span style={{fontSize:'11px', alignSelf:'center'}}>「{selectionRange.text.slice(0,5)}...」を:</span>
+                  <button onClick={() => applySelection('TRIGGER')} style={btnStyle('#16a085')}>トリガー</button>
+                  <button onClick={() => applySelection('CONDITION')} style={btnStyle('#8e44ad')}>条件</button>
+                  <button onClick={() => applySelection('COST')} style={btnStyle('#d35400')}>コスト</button>
+                  <button onClick={() => applySelection('EFFECT')} style={btnStyle('#c0392b')}>効果</button>
+                </div>
+              )}
+            </div>
+          </div>
 
+          {/* 2. トリガー & 条件 */}
+          <div style={sectionStyle}>
             <div style={{marginBottom: '10px'}}>
-              <label style={{fontSize:'0.8em', color:'#bdc3c7'}}>発動タイミング</label>
+              <label style={{fontSize:'0.9em', color:'#bdc3c7'}}>発動タイミング</label>
               <select value={trigger} onChange={e => setTrigger(e.target.value as EffectTrigger)} style={{...inputStyle, width: '100%'}}>
-                <option value="ON_PLAY">登場時 (OnPlay)</option>
-                <option value="WHEN_ATTACKING">アタック時 (WhenAttacking)</option>
-                <option value="ACTIVATE_MAIN">起動メイン (ActivateMain)</option>
-                <option value="ON_BLOCK">ブロック時 (OnBlock)</option>
-                <option value="ON_KO">KO時 (OnKO)</option>
-                <option value="TURN_END">ターン終了時 (TurnEnd)</option>
-                <option value="TRIGGER">トリガー (Trigger)</option>
+                <option value="ON_PLAY">登場時</option>
+                <option value="WHEN_ATTACKING">アタック時</option>
+                <option value="ACTIVATE_MAIN">起動メイン</option>
+                <option value="ON_BLOCK">ブロック時</option>
+                <option value="ON_KO">KO時</option>
+                <option value="TURN_END">ターン終了時</option>
+                <option value="TRIGGER">トリガー</option>
+                <option value="RULE">ルール効果(速攻等)</option>
                 <option value="OTHER">その他</option>
               </select>
             </div>
-
-            <textarea 
-              placeholder="カードテキスト原文 (自動入力されます)" 
-              value={rawText} onChange={e => setRawText(e.target.value)} 
-              style={{...inputStyle, width: '100%', height: '60px', fontFamily: 'monospace', fontSize: '12px'}} 
-            />
-          </div>
-
-          {/* 2. 条件 (分離) */}
-          <div style={sectionStyle}>
-            <label style={labelStyle}>② 発動条件 (Condition)</label>
-            <input 
-              placeholder="例: リーダーが特徴《麦わら》を持つ場合" 
-              value={conditionText} 
-              onChange={e => setConditionText(e.target.value)} 
-              style={{...inputStyle, width: '100%'}} 
-            />
+            <div>
+              <label style={{fontSize:'0.9em', color:'#bdc3c7'}}>発動条件</label>
+              <input value={conditionText} onChange={e => setConditionText(e.target.value)} placeholder="例: リーダーが特徴《麦わら》を持つ" style={{...inputStyle, width: '100%', boxSizing:'border-box'}} />
+            </div>
           </div>
 
           {/* 3. コスト */}
           <div style={sectionStyle}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
-              <label style={{...labelStyle, marginBottom:0}}>③ コスト (Cost)</label>
-              <button onClick={addCost} style={{...btnStyle('#7f8c8d'), padding:'4px 8px', fontSize:'12px'}}>+ 追加</button>
-            </div>
-            
-            {costs.length === 0 && <div style={{color:'#7f8c8d', fontSize:'0.9em', textAlign:'center'}}>コストなし</div>}
-            
+            <label style={{display:'block', marginBottom:'5px', fontWeight:'bold'}}>③ コスト (Cost)</label>
             {costs.map((c, i) => (
-              <div key={i} style={rowStyle}>
-                <select value={c.type} onChange={e => updateCost(i, 'type', e.target.value)} style={inputStyle}>
+              <div key={i} style={{display:'flex', gap:'5px', marginBottom:'5px', alignItems:'center'}}>
+                <select value={c.type} onChange={e => updateCost(i, 'type', e.target.value)} style={{...inputStyle, flex:2}}>
                   <option value="DOWN_DON">ドン!!-</option>
                   <option value="REST_DON">ドン!!レスト</option>
-                  <option value="TRASH_CARD">手札を捨てる</option>
-                  <option value="RETURN_DON">ドン!!を戻す</option>
+                  <option value="RETURN_DON">ドン!!戻す</option>
+                  <option value="TRASH_HAND">手札捨て</option>
+                  <option value="NONE">なし</option>
                 </select>
-                <input type="number" value={c.amount} onChange={e => updateCost(i, 'amount', Number(e.target.value))} style={{...inputStyle, maxWidth: '60px', textAlign:'center'}} />
+                <input type="number" value={c.amount} onChange={e => updateCost(i, 'amount', Number(e.target.value))} style={{...inputStyle, flex:1, textAlign:'center'}} />
+                {c.rawText && <span style={{fontSize:'0.7em', color:'#95a5a6'}}>({c.rawText})</span>}
                 <button onClick={() => removeCost(i)} style={btnStyle('#c0392b')}>×</button>
               </div>
             ))}
           </div>
 
-          {/* 4. 効果定義 */}
+          {/* 4. 効果 */}
           <div style={sectionStyle}>
-             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
-              <label style={{...labelStyle, marginBottom:0}}>④ 効果内容 (Effects)</label>
-              <button onClick={addEffect} style={{...btnStyle('#7f8c8d'), padding:'4px 8px', fontSize:'12px'}}>+ 追加</button>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
+              <label style={{fontWeight:'bold'}}>④ 効果 (Effect)</label>
+              <button onClick={addEffect} style={{...btnStyle('#7f8c8d'), padding:'2px 8px'}}>+ 追加</button>
             </div>
-
             {effects.map((eff, i) => (
-              <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', marginBottom: '10px', borderRadius: '4px' }}>
-                <div style={rowStyle}>
-                  <select value={eff.type} onChange={e => updateEffect(i, 'type', e.target.value)} style={inputStyle}>
-                    <option value="KO">KOする</option>
-                    <option value="RETURN_TO_HAND">手札に戻す</option>
-                    <option value="REST">レストにする</option>
-                    <option value="ACTIVE">アクティブにする</option>
-                    <option value="TRASH">トラッシュ送</option>
-                    <option value="BUFF_POWER">パワー増減</option>
-                    <option value="ADD_DON_ACTIVE">ドン追加(アクティブ)</option>
+              <div key={i} style={{background: 'rgba(0,0,0,0.2)', padding:'8px', marginBottom:'8px', borderRadius:'4px'}}>
+                <div style={{display:'flex', gap:'5px', marginBottom:'5px'}}>
+                  <select value={eff.type} onChange={e => updateEffect(i, 'type', e.target.value)} style={{...inputStyle, flex:2}}>
+                    <option value="KO">KO</option>
+                    <option value="RETURN_TO_HAND">バウンス</option>
+                    <option value="REST">レスト</option>
+                    <option value="ACTIVE">アクティブ</option>
+                    <option value="BUFF_POWER">パワー+</option>
                     <option value="DRAW">ドロー</option>
+                    <option value="ADD_DON_ACTIVE">ドン追加</option>
                     <option value="OTHER">その他</option>
                   </select>
                   <button onClick={() => removeEffect(i)} style={btnStyle('#c0392b')}>削除</button>
                 </div>
                 
-                {/* 対象セレクタ */}
-                {['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE', 'TRASH', 'BUFF_POWER'].includes(eff.type) && eff.target && (
-                  <div style={{ fontSize: '0.9em', paddingLeft: '8px', borderLeft: '2px solid #3498db', marginTop:'5px' }}>
-                    <div style={rowStyle}>
-                      <select value={eff.target.player} onChange={e => updateEffectTarget(i, 'player', e.target.value)} style={inputStyle}>
-                        <option value="OPPONENT">相手の</option>
-                        <option value="SELF">自分の</option>
-                        <option value="BOTH">お互い</option>
-                      </select>
-                      <select value={eff.target.zone} onChange={e => updateEffectTarget(i, 'zone', e.target.value)} style={inputStyle}>
-                        <option value="FIELD">盤面</option>
-                        <option value="HAND">手札</option>
-                        <option value="LIFE">ライフ</option>
-                        <option value="TRASH">トラッシュ</option>
-                      </select>
-                    </div>
-                    <div style={rowStyle}>
-                      <select value={eff.target.cardType} onChange={e => updateEffectTarget(i, 'cardType', e.target.value)} style={inputStyle}>
-                        <option value="CHARACTER">キャラ</option>
-                        <option value="LEADER">リーダー</option>
-                        <option value="STAGE">ステージ</option>
-                        <option value="ALL">全部</option>
-                      </select>
-                       <input type="number" placeholder="枚" value={eff.target.count} onChange={e => updateEffectTarget(i, 'count', Number(e.target.value))} style={{...inputStyle, maxWidth: '50px'}} />
-                       <span style={{fontSize:'0.8em'}}>枚</span>
-                    </div>
-                    <div style={rowStyle}>
-                       <input placeholder="条件 (例: Cost<=4)" value={eff.target.filterQuery} onChange={e => updateEffectTarget(i, 'filterQuery', e.target.value)} style={{...inputStyle, width:'100%'}} />
-                    </div>
-                  </div>
+                {/* ターゲットがある場合 */}
+                {['KO', 'RETURN_TO_HAND', 'REST', 'ACTIVE', 'BUFF_POWER'].includes(eff.type) && (
+                   <div style={{fontSize:'0.9em', marginLeft:'5px', borderLeft:'2px solid #3498db', paddingLeft:'5px'}}>
+                      <div style={{display:'flex', gap:'5px', marginBottom:'5px'}}>
+                        <select value={eff.target?.player} onChange={e => updateEffectTarget(i, 'player', e.target.value)} style={inputStyle}>
+                          <option value="OPPONENT">相手</option>
+                          <option value="SELF">自分</option>
+                        </select>
+                        <select value={eff.target?.cardType} onChange={e => updateEffectTarget(i, 'cardType', e.target.value)} style={inputStyle}>
+                          <option value="CHARACTER">キャラ</option>
+                          <option value="LEADER">リーダー</option>
+                        </select>
+                         <input type="number" value={eff.target?.count} onChange={e => updateEffectTarget(i, 'count', Number(e.target.value))} style={{...inputStyle, width:'40px'}} />
+                      </div>
+                      <input value={eff.target?.filterQuery} onChange={e => updateEffectTarget(i, 'filterQuery', e.target.value)} placeholder="条件 (Cost<=4)" style={{...inputStyle, width:'100%', boxSizing:'border-box'}} />
+                   </div>
                 )}
                 
-                {['BUFF_POWER', 'ADD_DON_ACTIVE', 'DRAW'].includes(eff.type) && (
-                  <input placeholder="値 (例: +1000, 2)" value={eff.value || ''} onChange={e => updateEffect(i, 'value', e.target.value)} style={{...inputStyle, marginTop:'5px'}} />
+                {['BUFF_POWER', 'ADD_DON_ACTIVE'].includes(eff.type) && (
+                  <input value={eff.value} onChange={e => updateEffect(i, 'value', e.target.value)} placeholder="値 (+1000)" style={{...inputStyle, marginTop:'5px', width:'100%', boxSizing:'border-box'}} />
                 )}
+                {eff.rawText && <div style={{fontSize:'0.7em', color:'#bdc3c7', marginTop:'2px'}}>元の文: {eff.rawText}</div>}
               </div>
             ))}
           </div>
 
-          {/* 5. 検証条件 */}
+          {/* 5. 検証 */}
           <div style={sectionStyle}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
-              <label style={{...labelStyle, marginBottom:0}}>✅ 検証 (Verification)</label>
-              <button onClick={addVerification} style={{...btnStyle('#7f8c8d'), padding:'4px 8px', fontSize:'12px'}}>+ 追加</button>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
+               <label style={{fontWeight:'bold'}}>✅ 検証 (Verification)</label>
+               <button onClick={addVerification} style={{...btnStyle('#7f8c8d'), padding:'2px 8px'}}>+ 追加</button>
             </div>
-
             {verifications.map((v, i) => (
-              <div key={i} style={{...rowStyle, flexWrap: 'wrap', background: 'rgba(0,0,0,0.2)', padding:'5px', borderRadius:'4px'}}>
-                <select value={v.targetPlayer} onChange={e => updateVerification(i, 'targetPlayer', e.target.value)} style={{...inputStyle, minWidth:'80px'}}>
+              <div key={i} style={{display:'flex', flexWrap:'wrap', gap:'5px', marginBottom:'5px', background:'rgba(0,0,0,0.2)', padding:'5px', borderRadius:'4px'}}>
+                <select value={v.targetPlayer} onChange={e => updateVerification(i, 'targetPlayer', e.target.value)} style={{...inputStyle, width:'60px'}}>
                   <option value="OPPONENT">相手</option>
                   <option value="SELF">自分</option>
                 </select>
-                <select value={v.targetProperty} onChange={e => updateVerification(i, 'targetProperty', e.target.value)} style={{...inputStyle, minWidth:'100px'}}>
-                  <option value="field">盤面枚数</option>
-                  <option value="hand">手札枚数</option>
+                <select value={v.targetProperty} onChange={e => updateVerification(i, 'targetProperty', e.target.value)} style={{...inputStyle, width:'80px'}}>
+                  <option value="field">盤面</option>
+                  <option value="hand">手札</option>
                   <option value="life">ライフ</option>
-                  <option value="don_active">アクティブドン</option>
                 </select>
-                <select value={v.operator} onChange={e => updateVerification(i, 'operator', e.target.value)} style={{...inputStyle, minWidth:'100px'}}>
-                  <option value="DECREASE_BY">が減る</option>
-                  <option value="INCREASE_BY">が増える</option>
-                  <option value="CONTAINS">を含む</option>
-                  <option value="NOT_CONTAINS">含まない</option>
+                <select value={v.operator} onChange={e => updateVerification(i, 'operator', e.target.value)} style={{...inputStyle, width:'80px'}}>
+                  <option value="DECREASE_BY">減る</option>
+                  <option value="INCREASE_BY">増える</option>
                 </select>
-                <input placeholder="値" value={v.value} onChange={e => updateVerification(i, 'value', e.target.value)} style={{...inputStyle, maxWidth: '60px'}} />
+                <input value={v.value} onChange={e => updateVerification(i, 'value', e.target.value)} placeholder="1" style={{...inputStyle, width:'40px'}} />
                 <button onClick={() => removeVerification(i)} style={btnStyle('#c0392b')}>×</button>
               </div>
             ))}
@@ -385,19 +392,14 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
           
            <div style={{ marginBottom: '20px' }}>
             <label style={labelStyle}>補足メモ</label>
-            <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              rows={2}
-              style={{...inputStyle, width: '100%'}}
-            />
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} style={{...inputStyle, width: '100%', boxSizing:'border-box'}} />
           </div>
 
         </div>
 
-        {/* フッターアクション */}
-        <div style={{ paddingTop: '10px', borderTop: '1px solid #7f8c8d', display: 'flex', gap: '10px' }}>
-          <button onClick={onCancel} style={{...btnStyle('#7f8c8d'), flex: 1, padding: '12px'}}>キャンセル</button>
+        {/* Footer */}
+        <div style={{ padding: '15px', background: '#2c3e50', borderTop: '1px solid #7f8c8d', display: 'flex', gap: '10px' }}>
+          <button onClick={onCancel} style={{...btnStyle('#7f8c8d'), flex: 1, padding: '12px', fontSize:'16px'}}>キャンセル</button>
           <button onClick={handleSubmit} style={{...btnStyle('#27ae60'), flex: 1, padding: '12px', fontSize:'16px'}}>報告送信</button>
         </div>
 
