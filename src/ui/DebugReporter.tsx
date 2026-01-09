@@ -12,6 +12,7 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
   const [showEffectForm, setShowEffectForm] = useState(false);
 
   const handleDumpState = () => {
+    // ... (既存の処理そのまま)
     const reportData = {
       timestamp: new Date().toISOString(),
       url: window.location.href,
@@ -45,31 +46,25 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
   };
 
   const handleEffectReport = (report: EffectReport) => {
-    // 自動修正パイプライン用の完全なフォーマットを作成
     const structuredPayload = {
       meta: {
         version: "2.0",
         timestamp: new Date().toISOString(),
-        reporter: "User" // ログイン機能があればID
+        reporter: "User"
       },
       
-      // 1. Context (再現用データ)
       context: {
-        ...data // gameState, pendingRequest, activePlayerId などを含む
+        ...data
       },
 
-      // 2. Correction (修正指示データ)
       correction: report.correction,
-
-      // 3. Verification (検証条件)
       verification: report.verification,
       
       note: report.note
     };
     
-    // ロガーへ送信 (action="EFFECT_DEF_REPORT" としてGCSのreportsフォルダへ)
     logger.error('EFFECT_DEF_REPORT', `効果定義報告: ${report.correction.cardName}`, {
-        payload: structuredPayload // 新フォーマットでラップ
+        payload: structuredPayload
     });
 
     alert('効果定義を報告しました。開発チームに送信されます。');
@@ -98,6 +93,10 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
       {showEffectForm && (
         <EffectReportForm
           cardName=""
+          // ▼▼▼ 追加: Stateを渡す ▼▼▼
+          gameState={data?.gameState || data} // データ構造に合わせて柔軟に
+          activePlayerId={data?.activePlayerId || 'p1'}
+          // ▲▲▲ 追加ここまで ▲▲▲
           onSubmit={handleEffectReport}
           onCancel={() => setShowEffectForm(false)}
         />
