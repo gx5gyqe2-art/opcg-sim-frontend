@@ -22,12 +22,14 @@ interface SimpleCard {
 }
 
 export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, activePlayerId, onSubmit, onCancel }) => {
+  // 基本情報
   const [inputCardName, setInputCardName] = useState(cardName);
   const [rawText, setRawText] = useState('');
   const [trigger, setTrigger] = useState<TriggerType>('ON_PLAY');
   const [conditionText, setConditionText] = useState('');
   const [note, setNote] = useState('');
 
+  // UI状態
   const [showCardSelector, setShowCardSelector] = useState(false);
   
   // 文字選択用
@@ -189,14 +191,29 @@ export const EffectReportForm: React.FC<Props> = ({ cardName = '', gameState, ac
   };
 
   // --- Helpers ---
+  // ▼▼▼ 修正: CostDefinition / EffectDefinition を EffectAction に変更 ▼▼▼
+  const updateCost = (idx: number, field: keyof EffectAction, val: any) => {
+    const newCosts = [...costs]; (newCosts[idx] as any)[field] = val; setCosts(newCosts);
+  };
   const removeCost = (idx: number) => setCosts(costs.filter((_, i) => i !== idx));
+
+  const addEffect = () => setEffects([...effects, { type: 'OTHER', target: { player: 'OPPONENT', zone: 'FIELD', count: 1, is_up_to: false } }]);
+  
+  const updateEffect = (idx: number, field: keyof EffectAction, val: any) => {
+    const newEffects = [...effects]; (newEffects[idx] as any)[field] = val; setEffects(newEffects);
+  };
+  // ▲▲▲ 修正ここまで ▲▲▲
+
+  const updateEffectTarget = (idx: number, field: string, val: any) => {
+    const newEffects = [...effects]; if (!newEffects[idx].target) return; (newEffects[idx].target as any)[field] = val; setEffects(newEffects);
+  };
   const removeEffect = (idx: number) => setEffects(effects.filter((_, i) => i !== idx));
-  const removeVerification = (idx: number) => setVerifications(verifications.filter((_, i) => i !== idx));
 
   const addVerification = () => setVerifications([...verifications, { targetPlayer: 'OPPONENT', targetProperty: 'field', operator: 'DECREASE_BY', value: 1 }]);
   const updateVerification = (idx: number, field: keyof VerificationCheck, val: any) => {
     const newVer = [...verifications]; (newVer[idx] as any)[field] = val; setVerifications(newVer);
   };
+  const removeVerification = (idx: number) => setVerifications(verifications.filter((_, i) => i !== idx));
 
   const handleSubmit = () => {
     const report: EffectReport = {
