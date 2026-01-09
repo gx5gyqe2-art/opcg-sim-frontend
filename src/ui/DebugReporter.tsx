@@ -12,7 +12,6 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
   const [showEffectForm, setShowEffectForm] = useState(false);
 
   const handleDumpState = () => {
-    // ... (既存の処理そのまま)
     const reportData = {
       timestamp: new Date().toISOString(),
       url: window.location.href,
@@ -58,7 +57,7 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
       },
 
       correction: report.correction,
-      verification: report.verification,
+      // verification は EffectReport から削除されたため除去
       
       note: report.note
     };
@@ -93,10 +92,8 @@ export const DebugReporter: React.FC<DebugReporterProps> = ({ data }) => {
       {showEffectForm && (
         <EffectReportForm
           cardName=""
-          // ▼▼▼ 追加: Stateを渡す ▼▼▼
-          gameState={data?.gameState || data} // データ構造に合わせて柔軟に
+          gameState={data?.gameState || data}
           activePlayerId={data?.activePlayerId || 'p1'}
-          // ▲▲▲ 追加ここまで ▲▲▲
           onSubmit={handleEffectReport}
           onCancel={() => setShowEffectForm(false)}
         />
