@@ -1,113 +1,109 @@
 // src/game/effectReporting.ts
 
-// トリガー（いつ）
-export type EffectTrigger = 
+// --- Enums (src/models/enums.py に準拠) ---
+
+export type TriggerType = 
   | 'ON_PLAY'        // 登場時
-  | 'WHEN_ATTACKING' // アタック時
+  | 'ON_ATTACK'      // アタック時
   | 'ON_BLOCK'       // ブロック時
   | 'ON_KO'          // KO時
   | 'ACTIVATE_MAIN'  // 起動メイン
   | 'TURN_END'       // ターン終了時
-  | 'MY_TURN'        // 自分のターン中（常時）
-  | 'OPPONENT_TURN'  // 相手のターン中（常時）
+  | 'OPP_TURN_END'   // 相手のターン終了時
+  | 'ON_OPP_ATTACK'  // 相手のアタック時
   | 'TRIGGER'        // トリガー
-  | 'RULE'           // ルール処理（速攻、ブロッカーなど）
-  | 'OTHER';
+  | 'COUNTER'        // カウンター
+  | 'RULE'           // ルール
+  | 'PASSIVE'        // 常時
+  | 'UNKNOWN';
 
-// コスト（代償）
-export type CostType = 
-  | 'DOWN_DON'       // ドン!!-X
-  | 'REST_DON'       // ドン!!X枚をレスト
-  | 'RETURN_DON'     // ドン!!X枚をドンデッキに戻す
-  | 'TRASH_HAND'     // 手札をX枚捨てる
-  | 'TRASH_SELF'     // 自身をトラッシュに送る
-  | 'REST_SELF'      // 自身をレストにする
-  | 'LIFE_TO_HAND'   // ライフを手札に加える
-  | 'NONE';
-
-export type TargetPlayer = 'SELF' | 'OPPONENT' | 'BOTH';
-
-export type CardZone = 'HAND' | 'DECK' | 'TRASH' | 'LIFE' | 'FIELD' | 'COST_AREA' | 'LEADER' | 'STAGE';
-
-export type CardTypeFilter = 'CHARACTER' | 'LEADER' | 'STAGE' | 'EVENT' | 'ALL';
-
-// アクション（効果）
 export type ActionType = 
-  | 'KO'               // KOする
-  | 'REST'             // レストにする
-  | 'ACTIVE'           // アクティブにする
-  | 'RETURN_TO_HAND'   // 手札に戻す
-  | 'RETURN_TO_DECK'   // デッキの下/上に戻す
+  | 'KO'
+  | 'REST'
+  | 'ACTIVE'
+  | 'DRAW'
   | 'TRASH'            // トラッシュに送る
-  | 'PLAY'             // 登場させる
-  | 'ADD_DON_ACTIVE'   // ドン追加(アクティブ)
-  | 'ADD_DON_REST'     // ドン追加(レスト)
-  | 'ATTACH_DON'       // ドンを付与する
-  | 'BUFF_POWER'       // パワー増減
-  | 'DEBUFF_COST'      // コスト減少
-  | 'DRAW'             // ドロー
-  | 'TRASH_RANDOM'     // ハンデス
-  | 'RECOVER_LIFE'     // ライフ回復
-  | 'ADD_LIFE'         // ライフ追加
-  | 'LOOK_AND_ADD'     // デッキトップを見て加える（サーチ）
-  | 'SET_KEYWORD'      // 速攻などを付与
+  | 'RETURN_TO_HAND'   // 手札に戻す (MOVE_TO_HAND かな？ resolverを確認すると MOVE_TO_HAND が使われています)
+  | 'MOVE_TO_HAND'     // resolver.py で使用
+  | 'DECK_BOTTOM'
+  | 'DECK_TOP'
+  | 'PLAY_CARD'        // 登場させる
+  | 'ATTACH_DON'       // ドン付与
+  | 'REST_DON'         // ドンをレスト（コスト等）
+  | 'RETURN_DON'       // ドンを戻す（コスト等）
+  | 'ACTIVE_DON'       // ドンをアクティブに
+  | 'BUFF'             // パワー増減
+  | 'COST_CHANGE'      // コスト増減
+  | 'GRANT_KEYWORD'    // 速攻などを付与
+  | 'LIFE_MANIPULATE'  // ライフ操作
+  | 'LOOK'             // デッキトップを見る
+  | 'SELECT_OPTION'    // 選択肢
   | 'OTHER';
 
-export type VerificationOperator = 
-  | 'INCREASE_BY'    // 増える
-  | 'DECREASE_BY'    // 減る
-  | 'CONTAINS'       // 特定カードを含む
-  | 'NOT_CONTAINS'   // 含まない
-  | 'EQUALS';        // 等しい
+export type Zone = 
+  | 'FIELD' | 'HAND' | 'DECK' | 'TRASH' | 'LIFE' | 'DON_DECK' | 'COST_AREA' | 'TEMP' | 'ANY';
 
-// --- Structure Definitions ---
+export type PlayerType = 'SELF' | 'OPPONENT' | 'OWNER' | 'ALL';
 
-export interface CostDefinition {
-  type: CostType;
-  amount: number;
-  rawText?: string; // 元のテキスト
-}
+// --- Data Structures (src/models/effect_types.py に準拠) ---
 
-export interface TargetSelector {
-  player: TargetPlayer;
-  zone: CardZone;
-  cardType: CardTypeFilter;
-  filterQuery: string; 
+// 対象選択のクエリ
+export interface TargetQuery {
+  zone: Zone;
+  player: PlayerType;
+  card_type?: string[]; // "CHARACTER", "LEADER" など
+  traits?: string[];
+  attributes?: string[];
+  cost_min?: number;
+  cost_max?: number;
+  power_min?: number;
+  power_max?: number;
+  is_rest?: boolean;
   count: number;
+  is_up_to: boolean;    // "〜枚まで"
+  select_mode?: string; // "CHOOSE", "ALL" など
 }
 
-export interface EffectDefinition {
+// 条件定義
+export interface Condition {
+  type: string; // ConditionType Enum (LIFE_COUNT, HAND_COUNT etc.)
+  value: any;
+  operator: string; // "GE", "LE", "EQ" etc.
+  target?: TargetQuery;
+}
+
+// 効果/コストのアクション定義 (EffectAction)
+export interface EffectAction {
   type: ActionType;
-  target?: TargetSelector; 
-  value?: string;
-  rawText?: string; // 元のテキスト
+  subject?: PlayerType;
+  target?: TargetQuery;
+  condition?: Condition;
+  value?: number;       // パワー値、枚数、コスト値など
+  source_zone?: Zone;
+  dest_zone?: Zone;
+  raw_text?: string;    // 元のテキスト
+  details?: any;        // その他の詳細
+  then_actions?: EffectAction[]; // 後続効果
 }
 
-// --- Report Structure ---
-
-export interface CorrectionSpec {
-  cardName: string;
-  rawText: string;
-  
-  structuredEffect: {
-    trigger: EffectTrigger;
-    costs: CostDefinition[];
-    conditions: string;
-    effects: EffectDefinition[];
-  };
+// カードの能力定義 (Ability)
+export interface CardAbility {
+  trigger: TriggerType;
+  costs: EffectAction[];
+  actions: EffectAction[]; // effects ではなく actions
+  raw_text?: string;
 }
 
-export interface VerificationCheck {
-  targetPlayer: TargetPlayer;
-  targetProperty: string;
-  operator: VerificationOperator;
-  value: string | number;
-}
+// --- Report Wrapper ---
 
 export interface EffectReport {
-  correction: CorrectionSpec;
+  correction: {
+    cardName: string;
+    rawText: string;
+    ability: CardAbility; // この構造がそのままバックエンドで使えるようになる
+  };
   verification: {
-    expectedStateChanges: VerificationCheck[];
+    expectedStateChanges: any[]; // 検証用（一旦簡易形式）
   };
   note: string;
 }
