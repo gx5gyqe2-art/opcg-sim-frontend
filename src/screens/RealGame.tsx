@@ -47,6 +47,16 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     });
   };
 
+  // 【追加】選択肢が選ばれたときのハンドラ
+  const handleOptionSelect = async (index: number) => {
+    if (!gameState?.game_id || isPending) return;
+    
+    // インデックスをサーバーに送信
+    await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
+      extra: { index: index }
+    });
+  };
+
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
@@ -244,8 +254,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     renderScene();
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
 
-  // ログ削除: useEffectでのtrace.pending_request_state
-
   useEffect(() => {
     const handleBeforeUnload = () => {
       logger.flushLogs();
@@ -323,6 +331,32 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
               {`ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}`}
             </div>
           )}
+
+          {/* 【追加】選択肢(options)がある場合のボタン表示 */}
+          {(pendingRequest as any).options && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+              {(pendingRequest as any).options.map((label: string, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => handleOptionSelect(idx)}
+                  disabled={isPending}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: COLORS.BTN_PRIMARY,
+                    color: 'white',
+                    border: '1px solid white',
+                    borderRadius: '4px',
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {pendingRequest.can_skip && (
             <button 
               onClick={handlePass} disabled={isPending}
