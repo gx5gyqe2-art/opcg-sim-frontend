@@ -22,7 +22,6 @@ export const createSandboxBoardSide = (
     }
   };
 
-  // 修正: 未使用引数 c を _c に変更してエラー回避
   const getCardOpts = (_c: Partial<CardInstance>) => ({ 
     onClick: () => {}, 
     isOpponent: isOpponent 
@@ -92,9 +91,8 @@ export const createSandboxBoardSide = (
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, getCardOpts(deckCard));
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   
-  // 修正: zonesの型定義にdeckがないため、anyキャストでアクセス
-  const zAny = z as any;
-  const topDeck = zAny.deck && zAny.deck.length > 0 ? zAny.deck[0] : null;
+  const deckList = z.deck || [];
+  const topDeck = deckList.length > 0 ? deckList[0] : null;
   
   if (topDeck) setupInteractive(deck, topDeck);
   side.addChild(deck);
@@ -111,12 +109,21 @@ export const createSandboxBoardSide = (
   side.addChild(trash);
 
   // ドン!!デッキ
+  // ★変更: ドンデッキのカードリストを取得し、一番上のカードを操作可能にする
+  const donDeckList = z.don_deck || []; 
+  const donDeckCount = (p as any).don_deck_count ?? donDeckList.length;
+
   const donDeck = createCardContainer(
     { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, 
     coords.CW, coords.CH, 
-    { ...getCardOpts({} as any), count: (p as any).don_deck_count }
+    { ...getCardOpts({} as any), count: donDeckCount }
   );
   donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
+
+  // ★追加: 一番上のドン!!カードがあればインタラクションを設定
+  const topDon = donDeckList.length > 0 ? donDeckList[0] : null;
+  if (topDon) setupInteractive(donDeck, topDon);
+
   side.addChild(donDeck);
 
   // アクティブドン

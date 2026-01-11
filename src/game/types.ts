@@ -27,7 +27,6 @@ export interface BoardCard extends BaseCard {
   counter?: number;
 }
 
-// uuidを必須に上書き
 export interface HiddenCard extends Partial<BaseCard> {
   uuid: string; 
   owner_id: string;
@@ -36,7 +35,6 @@ export interface HiddenCard extends Partial<BaseCard> {
 
 export type CardInstance = LeaderCard | BoardCard | HiddenCard;
 
-// API定義をそのまま継承
 export interface PendingRequest extends ApiPendingRequest {}
 
 export interface PlayerState {
@@ -49,6 +47,8 @@ export interface PlayerState {
     hand: CardInstance[];
     life: CardInstance[];
     trash: CardInstance[];
+    deck?: CardInstance[];     // ★追加
+    don_deck?: CardInstance[]; // ★追加
   };
   don_count: number;
   active_don: number;
