@@ -14,7 +14,7 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用パネル (DOMオーバーレイ)
+// 確認用パネル (DOMオーバーレイ) - 横スクロール版
 const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
     type: string, 
     cards: CardInstance[], 
@@ -27,8 +27,8 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
             top: '60px', 
             left: '50%', 
             transform: 'translateX(-50%)', 
-            width: '80%', 
-            maxHeight: '50vh', 
+            width: '90%', // 幅を少し広げる
+            // 高さ指定は削除または内容に合わせて調整
             backgroundColor: 'rgba(30, 30, 30, 0.95)', 
             zIndex: 200, 
             display: 'flex', 
@@ -54,22 +54,32 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
                 <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
             </div>
             
-            {/* Content */}
+            {/* Content (横スクロール) */}
             <div style={{ 
                 display: 'flex', 
-                flexWrap: 'wrap', 
+                flexWrap: 'nowrap', // 折り返さない
                 gap: '10px', 
                 padding: '15px', 
                 width: '100%', 
-                overflowY: 'auto',
-                justifyContent: 'center',
-                boxSizing: 'border-box'
+                overflowX: 'auto', // 横スクロール有効化
+                overflowY: 'hidden',
+                justifyContent: 'flex-start', // 左詰め
+                alignItems: 'center',
+                boxSizing: 'border-box',
+                whiteSpace: 'nowrap', //念のため
+                minHeight: '120px' // スクロールバー考慮
             }}>
                 {cards.map(c => (
                     <div 
                         key={c.uuid} 
-                        style={{ position: 'relative', width: '60px', height: '84px', cursor: 'grab' }}
-                        onPointerDown={(e) => onStartDrag(e, c)} // ドラッグ開始
+                        style={{ 
+                            position: 'relative', 
+                            width: '60px', 
+                            height: '84px', 
+                            cursor: 'grab',
+                            flexShrink: 0 // 縮小しない
+                        }}
+                        onPointerDown={(e) => onStartDrag(e, c)}
                     >
                         <img 
                             src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
@@ -146,7 +156,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, []);
 
-  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -197,7 +206,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    // 修正: 引数を5つに変更（onInspectコールバックを削除）
     const p1Side = createSandboxBoardSide(
         gameState.players.p1, false, W, coords, onCardDown
     );
@@ -216,7 +224,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   }, [gameState, isPending, dragState, inspecting]);
 
-  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -336,11 +343,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             
             const stackInfo = (p1 && findInStack(p1, 'p1')) || (p2 && findInStack(p2, 'p2'));
             if (stackInfo) {
-                // インスペクターからのドラッグ操作中は、ドロップ時にクリックと判定されてここに来る可能性がある。
-                // すでにインスペクターが開いている（かつ操作対象がインスペクター内のカードでない）場合は無視する等の制御が必要だが、
-                // 今回は「山札・ライフ」のクリック時のみ開くので、
-                // inspect中に山札をクリックした場合は再オープン（実質何もしない）でOK。
                 setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: stackInfo.pid });
+                setDragState(null);
+                return;
+            }
+
+            // インスペクターからの操作中はクリック判定でレストしない
+            if (inspecting) {
                 setDragState(null);
                 return;
             }
@@ -368,7 +377,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [dragState, gameState, inspecting]); // inspectingも依存に入れる
+  }, [dragState, gameState, inspecting]);
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState) return;
@@ -386,12 +395,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       }
   };
 
-  // インスペクターからのドラッグ開始ハンドラ
   const handleStartDragFromInspector = (e: React.PointerEvent, card: CardInstance) => {
       e.preventDefault();
       
       const startPos = { x: e.clientX, y: e.clientY };
-      
       const { width: W, height: H } = appRef.current!.screen;
       const coords = calculateCoordinates(W, H);
       
@@ -407,7 +414,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
           sprite: ghost,
           startPos
       });
-      // インスペクターは閉じずに、ドラッグ操作へ移行
   };
 
   return (
