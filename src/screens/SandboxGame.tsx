@@ -14,22 +14,35 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
+interface SandboxGameProps {
+  p1Deck: string;
+  p2Deck: string;
+  gameId?: string; // 参加する場合のID
+  myPlayerId?: string; // 'p1' | 'p2' | 'both'
+  onBack: () => void;
+}
+
+export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId = 'both', onBack }: SandboxGameProps) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [activeGameId, setActiveGameId] = useState<string | null>(initialGameId || null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life' | 'trash', pid: string } | null>(null);
-  
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
-
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
-  const isRotated = gameState?.turn_info?.active_player_id === 'p2';
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
+
+  // 視点ロジック: 対戦モードなら自分の視点に固定、ソロならターンプレイヤー基準
+  const isRotated = useMemo(() => {
+    if (myPlayerId === 'p2') return true;
+    if (myPlayerId === 'p1') return false;
+    return gameState?.turn_info?.active_player_id === 'p2';
+  }, [myPlayerId, gameState?.turn_info?.active_player_id]);
 
   const inspectingCards = useMemo(() => {
       if (!inspecting || !gameState) return [];
@@ -41,12 +54,43 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       return [];
   }, [gameState, inspecting]);
 
-  // 初期化
+  // 初期化 & WebSocket接続
   useEffect(() => {
+    let ws: WebSocket | null = null;
+
     const initGame = async () => {
       try {
-        const { state } = await apiClient.createSandboxGame(p1Deck, p2Deck);
-        setGameState(state);
+        let currentId = activeGameId;
+
+        // IDがない場合は新規作成
+        if (!currentId) {
+            const { state } = await apiClient.createSandboxGame(p1Deck, p2Deck);
+            currentId = state.game_id;
+            setActiveGameId(currentId);
+            setGameState(state);
+        }
+
+        // WebSocket接続
+        if (currentId) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            // ローカル開発用ポート考慮 (Backendが8000ポートの場合)
+            const host = window.location.port === '5173' ? `${window.location.hostname}:8000` : window.location.host;
+            const wsUrl = `${protocol}//${host}/ws/sandbox/${currentId}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => console.log("WS Connected");
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'STATE_UPDATE') {
+                        setGameState(data.state);
+                    }
+                } catch(e) { console.error("WS Parse Error", e); }
+            };
+            ws.onclose = () => console.log("WS Disconnected");
+        }
+
       } catch (e) {
         console.error(e);
         alert("Failed to start sandbox");
@@ -54,6 +98,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       }
     };
     initGame();
+
+    return () => {
+        if (ws) ws.close();
+    };
   }, []);
 
   // PixiJS Setup
@@ -140,6 +188,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         if (inspecting) return;
         if (dragState) return;
 
+        // 対戦モード時の操作制限 (オプション: 厳密にするならここで相手のカードを弾く)
+        if (myPlayerId !== 'both' && card.owner_id && gameState.players[myPlayerId] && card.owner_id !== gameState.players[myPlayerId].name) {
+           // 現状はサンドボックスの自由度優先で制限なしとするが、必要なら return;
+        }
+
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
@@ -220,15 +273,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         if (card.owner_id) {
             const p1Name = gameState?.players.p1.name;
             const p2Name = gameState?.players.p2.name;
-            
-            if (card.owner_id === p1Name && destPid === 'p2') {
-                setDragState(null);
-                return;
-            }
-            if (card.owner_id === p2Name && destPid === 'p1') {
-                setDragState(null);
-                return;
-            }
+            if (card.owner_id === p1Name && destPid === 'p2') { setDragState(null); return; }
+            if (card.owner_id === p2Name && destPid === 'p1') { setDragState(null); return; }
         }
 
         const checkDist = (tx: number, ty: number) => {
@@ -304,21 +350,14 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         }
 
         if (distFromStart < 10) {
-            if (inspecting) {
-                setDragState(null);
-                return;
-            }
-
+            if (inspecting) { setDragState(null); return; }
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            
-            // 修正: pid 引数削除
             const findInStack = (p: any) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' };
                 if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' };
                 return null;
             };
-            
             if (currentPlayer) {
                 const stackInfo = findInStack(currentPlayer);
                 if (stackInfo) {
@@ -328,10 +367,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                     return;
                 }
             }
-
             const isInHand = currentPlayer?.zones.hand.some(c => c.uuid === card.uuid);
             if (!isInHand) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            
             setDragState(null);
             return;
         }
@@ -346,7 +383,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
-
     return () => {
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
@@ -354,10 +390,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   }, [dragState, gameState, inspecting, isRotated]);
 
   const handleAction = async (type: string, params: any) => {
-      if (isPending || !gameState) return;
+      // activeGameIdが必須
+      if (isPending || !gameState || !activeGameId) return;
       setIsPending(true);
       try {
-          const res = await apiClient.sendSandboxAction(gameState.game_id, {
+          const res = await apiClient.sendSandboxAction(activeGameId, {
               action_type: type,
               ...params
           });
@@ -375,15 +412,20 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}>
+          <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto', alignItems: 'center' }}>
               <button 
                 onClick={onBack}
                 style={{ zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
               >
                 TOPへ
               </button>
-              <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-                  Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
+              <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', flexDirection: 'column' }}>
+                 <div style={{ fontWeight: 'bold' }}>
+                   {myPlayerId === 'both' ? 'Solo Mode' : `Online: You are ${myPlayerId.toUpperCase()}`}
+                 </div>
+                 {activeGameId && (
+                    <div style={{ fontSize: '10px', opacity: 0.7 }}>ID: {activeGameId}</div>
+                 )}
               </div>
           </div>
 

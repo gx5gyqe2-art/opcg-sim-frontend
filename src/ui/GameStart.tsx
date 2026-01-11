@@ -8,7 +8,12 @@ interface DeckOption {
 }
 
 interface GameStartProps {
-  onStart: (p1: string, p2: string, mode?: 'normal' | 'sandbox') => void;
+  onStart: (
+    p1: string, 
+    p2: string, 
+    mode?: 'normal' | 'sandbox', 
+    sandboxOptions?: { role: 'both' | 'p1' | 'p2', gameId?: string }
+  ) => void;
   onDeckBuilder: () => void;
 }
 
@@ -16,6 +21,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
+  const [joinGameId, setJoinGameId] = useState('');
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -68,7 +74,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       color: '#f0e6d2',
       fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif',
       position: 'relative' as const,
-      overflowX: 'hidden' as const, // 修正: as const を追加して型エラー回避
+      overflowX: 'hidden' as const,
       padding: isMobile ? '20px' : '0',
       boxSizing: 'border-box' as const
     },
@@ -152,8 +158,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     },
     actions: {
       display: 'flex', 
-      flexDirection: isMobile ? 'column-reverse' as const : 'row' as const,
-      gap: isMobile ? '15px' : '20px', 
+      flexDirection: 'column' as const,
+      gap: '15px', 
       marginTop: isMobile ? '20px' : '30px', 
       zIndex: 1, 
       alignItems: 'center',
@@ -205,14 +211,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
 
         <div style={styles.selectGroup}>
           <label style={styles.label}>Player 1 (Host)</label>
-          <select 
-            value={p1Deck}
-            onChange={(e) => setP1Deck(e.target.value)}
-            style={styles.select}
-          >
-            {deckOptions.map(opt => (
-              <option key={`p1-${opt.id}`} value={opt.id}>{opt.name}</option>
-            ))}
+          <select value={p1Deck} onChange={(e) => setP1Deck(e.target.value)} style={styles.select}>
+            {deckOptions.map(opt => <option key={`p1-${opt.id}`} value={opt.id}>{opt.name}</option>)}
           </select>
         </div>
 
@@ -220,42 +220,72 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
 
         <div style={styles.selectGroup}>
           <label style={styles.label}>Player 2 (Opponent)</label>
-          <select 
-            value={p2Deck}
-            onChange={(e) => setP2Deck(e.target.value)}
-            style={styles.select}
-          >
-            {deckOptions.map(opt => (
-              <option key={`p2-${opt.id}`} value={opt.id}>{opt.name}</option>
-            ))}
+          <select value={p2Deck} onChange={(e) => setP2Deck(e.target.value)} style={styles.select}>
+            {deckOptions.map(opt => <option key={`p2-${opt.id}`} value={opt.id}>{opt.name}</option>)}
           </select>
         </div>
       </div>
 
       <div style={styles.actions}>
-        <button 
-          onClick={onDeckBuilder}
-          style={styles.subBtn}
-          className="hover-scale"
-        >
-          デッキ作成
-        </button>
-
-        <button 
-          onClick={() => onStart(p1Deck, p2Deck, 'sandbox')}
-          style={{ ...styles.subBtn, borderColor: '#2ecc71', color: '#2ecc71' }}
-          className="hover-scale"
-        >
-          1人回し
-        </button>
-
+        
+        {/* メインのゲーム開始ボタン */}
         <button 
           onClick={() => onStart(p1Deck, p2Deck, 'normal')}
           style={styles.mainBtn}
           className="hover-scale"
         >
-          決闘開始
+          VS CPU / Rule Enforced
         </button>
+
+        <div style={{ width: '100%', height: 1, background: 'rgba(212, 175, 55, 0.3)', margin: '10px 0' }} />
+
+        {/* サンドボックス（ソロ） */}
+        <div style={{ display: 'flex', width: '100%', gap: 10 }}>
+           <button 
+             onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'both' })}
+             style={{ ...styles.subBtn, flex: 1, borderColor: '#2ecc71', color: '#2ecc71' }}
+             className="hover-scale"
+           >
+             1人回し (Solo)
+           </button>
+           <button 
+             onClick={onDeckBuilder}
+             style={{ ...styles.subBtn, flex: 1 }}
+             className="hover-scale"
+           >
+             デッキ作成
+           </button>
+        </div>
+
+        {/* オンライン対戦用 */}
+        <div style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'center' }}>
+            <button 
+              onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1' })}
+              style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db', fontSize: '14px' }}
+              className="hover-scale"
+            >
+              部屋作成 (P1)
+            </button>
+            <div style={{ flex: 1, display: 'flex', gap: 5 }}>
+                <input 
+                  type="text" 
+                  placeholder="Game ID"
+                  value={joinGameId}
+                  onChange={(e) => setJoinGameId(e.target.value)}
+                  style={{ width: '100%', padding: '5px', borderRadius: 4, border: '1px solid #555', background: '#222', color: '#fff' }}
+                />
+                <button
+                  onClick={() => {
+                      if(!joinGameId) return alert("IDを入力してください");
+                      onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: joinGameId });
+                  }}
+                  style={{ ...styles.subBtn, padding: '5px 10px', fontSize: '12px', minWidth: 'fit-content' }}
+                >
+                  参加
+                </button>
+            </div>
+        </div>
+
       </div>
     </div>
   );

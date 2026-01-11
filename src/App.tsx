@@ -62,6 +62,9 @@ export default function App() {
     p1: 'imu.json',
     p2: 'nami.json'
   });
+  
+  // サンドボックス用の追加設定 (Role, GameID)
+  const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string }>({ role: 'both' });
 
   return (
     <div 
@@ -79,9 +82,14 @@ export default function App() {
       <ErrorBoundary>
         {mode === 'start' && (
           <GameStart 
-            onStart={(p1, p2, gameMode = 'normal') => {
+            onStart={(p1, p2, gameMode = 'normal', sbOptions) => {
               setSelectedDecks({ p1, p2 });
-              setMode(gameMode === 'sandbox' ? 'sandbox' : 'game');
+              if (gameMode === 'sandbox') {
+                  setSandboxOptions(sbOptions || { role: 'both' });
+                  setMode('sandbox');
+              } else {
+                  setMode('game');
+              }
             }}
             onDeckBuilder={() => setMode('deck')}
           />
@@ -103,6 +111,8 @@ export default function App() {
           <SandboxGame 
             p1Deck={selectedDecks.p1} 
             p2Deck={selectedDecks.p2}
+            myPlayerId={sandboxOptions.role === 'both' ? 'both' : sandboxOptions.role}
+            gameId={sandboxOptions.gameId}
             onBack={() => {
               if (confirm("サンドボックスを終了しますか？")) {
                 setMode('start');
