@@ -59,7 +59,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   const styles = useMemo(() => ({
     container: {
       minHeight: '100vh',
-      width: '100%', // 修正: 100vw -> 100%
+      width: '100%', 
       background: 'radial-gradient(circle at center, #3e2723 0%, #1a0b0b 100%)',
       display: 'flex',
       flexDirection: 'column' as const,
@@ -68,9 +68,9 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       color: '#f0e6d2',
       fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif',
       position: 'relative' as const,
-      overflowX: 'hidden', // 横スクロール防止
+      overflowX: 'hidden' as const, // 修正: as const を追加して型エラー回避
       padding: isMobile ? '20px' : '0',
-      boxSizing: 'border-box' as const // 修正: パディングを含める
+      boxSizing: 'border-box' as const
     },
     bgOverlay: {
       position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0,
@@ -90,7 +90,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       zIndex: 1,
       textTransform: 'uppercase' as const,
       textAlign: 'center' as const,
-      maxWidth: '100%' // はみ出し防止
+      maxWidth: '100%'
     },
     panel: {
       background: '#f4e4bc',

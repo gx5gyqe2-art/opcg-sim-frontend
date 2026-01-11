@@ -23,7 +23,7 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
 }) => {
     return (
         <div 
-            onClick={onClose} // 背景クリックで閉じる
+            onClick={onClose} 
             style={{ 
                 position: 'absolute', 
                 top: 0, 
@@ -36,7 +36,7 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
             }}
         >
             <div 
-                onClick={(e) => e.stopPropagation()} // パネル内クリックは伝播させない
+                onClick={(e) => e.stopPropagation()} 
                 style={{ 
                     position: 'absolute', 
                     top: '60px', 
@@ -91,7 +91,7 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
                                 height: '84px', 
                                 cursor: 'grab', 
                                 flexShrink: 0,
-                                willChange: 'transform' // 描画最適化
+                                willChange: 'transform' 
                             }}
                             onPointerDown={(e) => onStartDrag(e, c)}
                         >
@@ -99,8 +99,8 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
                                 src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
                                 style={{ width: '100%', height: '100%', borderRadius: '4px', pointerEvents: 'none', userSelect: 'none' }} 
                                 alt={c.name}
-                                loading="lazy" // 遅延読み込み
-                                decoding="async" // 非同期デコード
+                                loading="lazy" 
+                                decoding="async" 
                                 onError={(e) => { (e.target as HTMLImageElement).style.display='none'; }}
                             />
                         </div>
@@ -118,9 +118,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
-  // 修正: 状態には「どのゾーンを見ているか」だけを保存
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', pid: string } | null>(null);
-  
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const isRotated = gameState?.turn_info?.active_player_id === 'p2';
@@ -128,11 +126,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
 
-  // 修正: 表示するカードリストを常に最新の gameState から算出
   const inspectingCards = useMemo(() => {
       if (!inspecting || !gameState) return [];
       const p = inspecting.pid === 'p1' ? gameState.players.p1 : gameState.players.p2;
-      // 型定義上 deck/life は optional なのでフォールバック
       if (inspecting.type === 'deck') return p.zones.deck || [];
       if (inspecting.type === 'life') return p.zones.life || [];
       return [];
@@ -239,7 +235,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
 
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
-    
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
 
     const bottomSide = createSandboxBoardSide(
@@ -376,16 +371,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         if (distFromStart < 10) {
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             
-            const findInStack = (p: any, pid: string) => {
+            // 修正: pid 引数を削除
+            const findInStack = (p: any) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life };
                 return null;
             };
             
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer, destPid);
+                const stackInfo = findInStack(currentPlayer);
                 if (stackInfo) {
-                    setInspecting({ type: stackInfo.type as any, pid: destPid }); // 修正: カードリストは持たせずIDのみ
+                    setInspecting({ type: stackInfo.type as any, pid: destPid });
                     setDragState(null);
                     return;
                 }
@@ -498,7 +494,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
           <div style={{ pointerEvents: 'auto' }}>
               <InspectPanel 
                   type={inspecting.type} 
-                  cards={inspectingCards} // 最新のカードリストを渡す
+                  cards={inspectingCards} 
                   onClose={() => setInspecting(null)} 
                   onStartDrag={handleStartDragFromInspector}
               />
