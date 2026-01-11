@@ -4,112 +4,15 @@ import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
+import { createInspectOverlay } from '../ui/InspectOverlay'; // 新規インポート
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance } from '../game/types';
-import { API_CONFIG } from '../api/api.config';
 
 type DragState = {
   card: CardInstance;
   sprite: PIXI.Container;
   startPos: { x: number, y: number };
 } | null;
-
-// 確認用パネル (DOMオーバーレイ) - 横スクロール版
-const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
-    type: string, 
-    cards: CardInstance[], 
-    onClose: () => void, 
-    onStartDrag: (e: React.PointerEvent, card: CardInstance) => void 
-}) => {
-    return (
-        <div 
-            onClick={onClose} 
-            style={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: 0, 
-                width: '100%', 
-                height: '100%', 
-                zIndex: 200, 
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                pointerEvents: 'auto'
-            }}
-        >
-            <div 
-                onClick={(e) => e.stopPropagation()} 
-                style={{ 
-                    position: 'absolute', 
-                    top: '60px', 
-                    left: '50%', 
-                    transform: 'translateX(-50%)', 
-                    width: '90%', 
-                    backgroundColor: 'rgba(30, 30, 30, 0.98)', 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    borderRadius: '8px',
-                    border: '2px solid #555',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-                }}
-            >
-                <div style={{ 
-                    width: '100%', 
-                    padding: '10px 15px', 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    borderBottom: '1px solid #555',
-                    background: '#444',
-                    borderTopLeftRadius: '6px',
-                    borderTopRightRadius: '6px',
-                    boxSizing: 'border-box'
-                }}>
-                    <span style={{ color: 'white', fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</span>
-                    <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
-                </div>
-                
-                <div style={{ 
-                    display: 'flex', 
-                    flexWrap: 'nowrap', 
-                    gap: '10px', 
-                    padding: '15px', 
-                    width: '100%', 
-                    overflowX: 'auto', 
-                    overflowY: 'hidden',
-                    justifyContent: 'flex-start',
-                    alignItems: 'center',
-                    boxSizing: 'border-box',
-                    whiteSpace: 'nowrap',
-                    minHeight: '120px',
-                    scrollbarWidth: 'thin'
-                }}>
-                    {cards.map(c => (
-                        <div 
-                            key={c.uuid} 
-                            style={{ 
-                                position: 'relative', 
-                                width: '60px', 
-                                height: '84px', 
-                                cursor: 'grab', 
-                                flexShrink: 0,
-                                willChange: 'transform' 
-                            }}
-                            onPointerDown={(e) => onStartDrag(e, c)}
-                        >
-                            <img 
-                                src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
-                                style={{ width: '100%', height: '100%', borderRadius: '4px', pointerEvents: 'none', userSelect: 'none' }} 
-                                alt={c.name}
-                                loading="lazy" 
-                                decoding="async" 
-                                onError={(e) => { (e.target as HTMLImageElement).style.display='none'; }}
-                            />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
 
 export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -118,14 +21,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
+  // 状態管理
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', pid: string } | null>(null);
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const isRotated = gameState?.turn_info?.active_player_id === 'p2';
-
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
 
+  // inspectingCards の計算
   const inspectingCards = useMemo(() => {
       if (!inspecting || !gameState) return [];
       const p = inspecting.pid === 'p1' ? gameState.players.p1 : gameState.players.p2;
@@ -134,6 +38,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       return [];
   }, [gameState, inspecting]);
 
+  // 初期化 (変更なし)
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -148,13 +53,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
+  // PixiJS Setup (変更なし)
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
-
     const app = new PIXI.Application({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -163,7 +67,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
     });
-
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
@@ -176,18 +79,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       setLayoutCoords(newCoords.turnEndPos);
     };
     window.addEventListener('resize', handleResize);
-
     return () => {
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
   }, []);
 
-  // 描画ループ
+  // 描画ループ (InspectOverlay追加)
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
 
+    // クリーンアップ
     const childrenToDestroy: PIXI.DisplayObject[] = [];
     const children = [...app.stage.children];
     children.forEach(child => {
@@ -206,6 +109,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
 
+    // 背景 & 境界線
     const bg = new PIXI.Graphics();
     bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
@@ -217,15 +121,29 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
+    // ドラッグ開始ハンドラ (共通)
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
-        if (isPending || dragState || inspecting) return;
+        if (isPending) return;
+        // inspecting中はインスペクター外の操作をブロックするが、
+        // インスペクターからのドラッグ開始は許可する必要がある。
+        // ここは BoardSide からの呼び出しなので、inspecting中はブロック。
+        if (inspecting) return;
+        if (dragState) return;
 
+        startDrag(e, card);
+    };
+
+    // 共通ドラッグ開始処理
+    const startDrag = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         const globalPos = e.global.clone();
+        
+        // ゴースト生成 (少し大きく)
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(globalPos.x, globalPos.y);
         ghost.alpha = 0.8;
         ghost.scale.set(1.1);
-        app.stage.addChild(ghost);
+        
+        app.stage.addChild(ghost); // 最前面に追加
 
         setDragState({
             card,
@@ -234,37 +152,60 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
+    const handleInspect = (type: 'deck' | 'life', cards: CardInstance[], pid: string) => {
+        setInspecting({ type, cards, pid });
+    };
+
+    // ボード描画
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
 
     const bottomSide = createSandboxBoardSide(
-        bottomPlayer, false, W, coords, onCardDown
+        bottomPlayer, false, W, coords, onCardDown, 
+        (t, c) => handleInspect(t, c, isRotated ? 'p2' : 'p1')
     );
     bottomSide.y = midY;
     app.stage.addChild(bottomSide);
 
     const topSide = createSandboxBoardSide(
-        topPlayer, true, W, coords, onCardDown
+        topPlayer, true, W, coords, onCardDown,
+        (t, c) => handleInspect(t, c, isRotated ? 'p1' : 'p2')
     );
     topSide.y = 0;
     app.stage.addChild(topSide);
 
+    // ★追加: インスペクターオーバーレイの描画
+    if (inspecting) {
+        const overlay = createInspectOverlay(
+            inspecting.type,
+            inspectingCards,
+            W, H,
+            () => setInspecting(null), // Close handler
+            (e, card) => {
+                // インスペクターからのドラッグ開始
+                // ここで startDrag を呼ぶ
+                // e は Pixiのイベントなのでそのまま渡せる
+                startDrag(e, card);
+            }
+        );
+        app.stage.addChild(overlay);
+    }
+
+    // ドラッグ中のスプライト (常に最前面)
     if (dragState) {
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState, inspecting, isRotated]);
+  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards]);
 
-  // イベントリスナー
+  // イベントリスナー (変更なし、ただし inspecting チェックを調整)
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
 
     const onPointerMove = (e: PointerEvent) => {
         if (!dragState) return;
-        
         if (dragState.card.type === 'LEADER') return;
-
         const newPos = { x: e.clientX, y: e.clientY };
         dragState.sprite.position.set(newPos.x, newPos.y);
     };
@@ -276,10 +217,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const endPos = { x: e.clientX, y: e.clientY };
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
+        // リーダー処理
         if (card.type === 'LEADER') {
-            if (distFromStart < 10) {
-                handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            }
+            if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null);
             return;
         }
@@ -289,10 +229,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const midY = H / 2;
 
         const isTopArea = endPos.y < midY;
-        let destPid = isTopArea 
-            ? (isRotated ? 'p1' : 'p2') 
-            : (isRotated ? 'p2' : 'p1');
-        
+        let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
         let destZone = 'field'; 
 
         if (isTopArea) {
@@ -305,7 +242,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             const dy = ty - endPos.y;
             return Math.sqrt(dx*dx + dy*dy);
         };
-
         const THRESHOLD = coords.CH; 
         
         const checkZone = (isTopSide: boolean) => {
@@ -319,22 +255,19 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             if (checkDist(coords.getLifeX(W), row2Y) < THRESHOLD) return 'life';
             if (checkDist(coords.getTrashX(W), row3Y) < THRESHOLD) return 'trash';
             if (checkDist(coords.getDeckX(W), row2Y) < THRESHOLD) return 'deck';
-            
             if (Math.abs(row4Y - endPos.y) < coords.CH) return 'hand';
-
             if (checkDist(coords.getDonDeckX(W), row3Y) < THRESHOLD) return 'don_deck';
             if (checkDist(coords.getDonActiveX(W), row3Y) < THRESHOLD) return 'don_active';
             if (checkDist(coords.getDonRestX(W), row3Y) < THRESHOLD) return 'don_rested';
-
             return null;
         };
         
+        // ドン処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
                 const leaderX = coords.getLeaderX(W);
                 const leaderY = midY + coords.getY(2) + coords.CH/2;
-                
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
                      handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid });
                      setDragState(null);
@@ -351,7 +284,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                     }
                 }
             }
-
             const dZone = checkZone(false); 
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
@@ -369,17 +301,22 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         }
 
         if (distFromStart < 10) {
+            // インスペクター表示中のクリックは、インスペクター内のカードクリックでなければ何もしない（誤操作防止）
+            // ただし移動距離が短い＝クリック なので、ドラッグしようとして失敗した場合もここに来る。
+            // インスペクターからのドラッグだった場合、移動していなければ何もしないで良い。
+            if (inspecting) {
+                setDragState(null);
+                return;
+            }
+
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            
-            // 修正: pid 引数を削除
-            const findInStack = (p: any) => {
+            const findInStack = (p: any, pid: string) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life };
                 return null;
             };
-            
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer);
+                const stackInfo = findInStack(currentPlayer, destPid);
                 if (stackInfo) {
                     setInspecting({ type: stackInfo.type as any, pid: destPid });
                     setDragState(null);
@@ -387,20 +324,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 }
             }
 
-            if (inspecting) {
-                setDragState(null);
-                return;
-            }
-
             const isInHand = currentPlayer?.zones.hand.some(c => c.uuid === card.uuid);
-            if (!isInHand) {
-                handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            }
+            if (!isInHand) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            
             setDragState(null);
             return;
         }
 
-        handleAction('MOVE_CARD', {
+        // 移動実行
+        // インスペクターから移動した場合は、インスペクターを閉じる必要はない（連続操作のため）
+        // ただしデータが変われば自動的にリレンダリングされてカードは消える
+        await handleAction('MOVE_CARD', {
             card_uuid: card.uuid,
             dest_player_id: destPid,
             dest_zone: destZone
@@ -431,27 +365,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       } finally {
           setIsPending(false);
       }
-  };
-
-  const handleStartDragFromInspector = (e: React.PointerEvent, card: CardInstance) => {
-      e.preventDefault();
-      
-      const startPos = { x: e.clientX, y: e.clientY };
-      const { width: W, height: H } = appRef.current!.screen;
-      const coords = calculateCoordinates(W, H);
-      
-      const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
-      ghost.position.set(startPos.x, startPos.y);
-      ghost.alpha = 0.8;
-      ghost.scale.set(1.1);
-      
-      appRef.current!.stage.addChild(ghost);
-      
-      setDragState({
-          card,
-          sprite: ghost,
-          startPos
-      });
   };
 
   return (
@@ -489,18 +402,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             {isPending ? '送信中...' : 'ターン終了'}
           </button>
       </div>
-
-      {inspecting && (
-          <div style={{ pointerEvents: 'auto' }}>
-              <InspectPanel 
-                  type={inspecting.type} 
-                  cards={inspectingCards} 
-                  onClose={() => setInspecting(null)} 
-                  onStartDrag={handleStartDragFromInspector}
-              />
-          </div>
-      )}
-
     </div>
   );
 };
