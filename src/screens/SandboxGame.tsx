@@ -41,6 +41,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
+    // 既存のCanvasがあれば削除（二重描画防止）
+    while (pixiContainerRef.current.firstChild) {
+      pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
+    }
+
     const app = new PIXI.Application({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -172,7 +177,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
-        // 移動がわずかな場合はクリック(タップ)とみなしてレスト切り替え
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
         if (distFromStart < 10) {
             setIsPending(true);
@@ -189,7 +193,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
-        // 移動実行
         setIsPending(true);
         try {
             const res = await apiClient.sendSandboxAction(gameState!.game_id, {
@@ -232,7 +235,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     }
   };
 
-  const btnStyle = {
+  const btnStyle: React.CSSProperties = {
     padding: '10px 20px',
     background: '#3498db',
     color: 'white',
@@ -244,25 +247,36 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   };
 
   return (
-    <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       
-      {/* 左上: 終了ボタンと情報表示 */}
-      <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 10, zIndex: 100 }}>
-          <button onClick={onBack} style={{...btnStyle, background: '#555'}}>Exit</button>
-          <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
-              Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
-          </div>
-      </div>
+      {/* 1. Canvas Layer */}
+      <div 
+        ref={pixiContainerRef} 
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} 
+      />
 
-      {/* 右下: ターン終了ボタンのみ */}
-      <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: 10, zIndex: 100 }}>
-          <button 
-            onClick={handleTurnEnd} 
-            style={{ ...btnStyle, background: '#e74c3c' }} 
-            disabled={isPending}
-          >
-            ターン終了
-          </button>
+      {/* 2. UI Overlay Layer (Canvas操作を邪魔しないように pointerEvents: none を設定) */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
+          
+          {/* 左上: 情報表示 (ボタンは操作可能に) */}
+          <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 10, pointerEvents: 'auto' }}>
+              <button onClick={onBack} style={{...btnStyle, background: '#555'}}>Exit</button>
+              <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+                  Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
+              </div>
+          </div>
+
+          {/* 右下: ターン終了ボタン (ボタンは操作可能に) */}
+          <div style={{ position: 'absolute', bottom: 20, right: 20, pointerEvents: 'auto' }}>
+              <button 
+                onClick={handleTurnEnd} 
+                style={{ ...btnStyle, background: '#e74c3c' }} 
+                disabled={isPending}
+              >
+                ターン終了
+              </button>
+          </div>
+
       </div>
 
     </div>
