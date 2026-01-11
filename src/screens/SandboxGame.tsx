@@ -5,7 +5,7 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
 import { apiClient } from '../api/client';
-import type { GameState, CardInstance, BoardCard } from '../game/types';
+import type { GameState, CardInstance } from '../game/types'; // BoardCard を削除
 import { API_CONFIG } from '../api/api.config';
 
 type DragState = {
@@ -137,7 +137,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => {
+    // 修正: 引数 container を削除
+    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState || inspecting) return;
 
         const globalPos = e.global.clone();
@@ -218,7 +219,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             const row4Y = isOpp ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
 
             if (checkDist(coords.getLeaderX(W), row2Y) < THRESHOLD) return 'leader';
-            if (checkDist(coords.getStageX(W), row2Y) < THRESHOLD) return 'stage'; // ★追加: ステージ
+            if (checkDist(coords.getStageX(W), row2Y) < THRESHOLD) return 'stage';
             if (checkDist(coords.getTrashX(W), row3Y) < THRESHOLD) return 'trash';
             if (checkDist(coords.getDeckX(W), row2Y) < THRESHOLD) return 'deck';
             
@@ -231,9 +232,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ★追加: ドン!!付与判定 (キャラクターへのドロップ)
-        if (card.card_id === "DON") { // ドンカードの場合
-            // フィールドのカードとの距離を確認
+        // ドン!!付与判定
+        if (card.card_id === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
                 const fieldCards = targetPlayer.zones.field;
@@ -241,20 +241,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                     (coords.midY - coords.getY(1) - coords.CH/2) : 
                     (midY + coords.getY(1) + coords.CH/2);
                 
-                // リーダーもチェック
                 const leaderX = coords.getLeaderX(W);
                 const leaderY = destPid === 'p2' ? 
                     (coords.midY - coords.getY(2) - coords.CH/2) : 
                     (midY + coords.getY(2) + coords.CH/2);
                 
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
-                     // Leader attach
                      handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid });
                      setDragState(null);
                      return;
                 }
 
-                // Field attach
                 for (let i = 0; i < fieldCards.length; i++) {
                     const cx = coords.getFieldX(i, W, coords.CW, fieldCards.length);
                     if (checkDist(cx, fieldY) < THRESHOLD) {
@@ -311,16 +308,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   const handleInspectMove = async (uuid: string, to: 'hand' | 'trash') => {
       if (!gameState || !inspecting) return;
-      // Inspecting state clears automatically via re-render or we keep it?
-      // Better to keep it open, but we need to update state.
-      // For simplicity, close it, or update it if we had realtime updates.
-      // Here just execute action.
       await handleAction('MOVE_CARD', {
           card_uuid: uuid,
           dest_player_id: inspecting.pid,
           dest_zone: to
       });
-      setInspecting(null); // Close after move
+      setInspecting(null);
   };
 
   return (
