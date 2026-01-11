@@ -17,7 +17,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
   
-  // ★追加: 画面幅によるモバイル判定
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -57,11 +56,10 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     fetchDecks();
   }, []);
 
-  // ★修正: isMobile に応じてスタイルを動的に変更
   const styles = useMemo(() => ({
     container: {
       minHeight: '100vh',
-      width: '100vw',
+      width: '100%', // 修正: 100vw -> 100%
       background: 'radial-gradient(circle at center, #3e2723 0%, #1a0b0b 100%)',
       display: 'flex',
       flexDirection: 'column' as const,
@@ -70,8 +68,9 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       color: '#f0e6d2',
       fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif',
       position: 'relative' as const,
-      overflow: 'hidden',
-      padding: isMobile ? '20px' : '0' // モバイル時は余白確保
+      overflowX: 'hidden', // 横スクロール防止
+      padding: isMobile ? '20px' : '0',
+      boxSizing: 'border-box' as const // 修正: パディングを含める
     },
     bgOverlay: {
       position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0,
@@ -80,7 +79,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       zIndex: 0
     },
     title: {
-      // モバイル時はフォントサイズを小さく
       fontSize: isMobile ? 'clamp(32px, 10vw, 50px)' : 'clamp(40px, 8vw, 80px)',
       fontWeight: '900',
       marginBottom: isMobile ? '30px' : '50px',
@@ -91,14 +89,15 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       letterSpacing: isMobile ? '2px' : '6px',
       zIndex: 1,
       textTransform: 'uppercase' as const,
-      textAlign: 'center' as const
+      textAlign: 'center' as const,
+      maxWidth: '100%' // はみ出し防止
     },
     panel: {
       background: '#f4e4bc',
       border: '6px solid #5d4037',
       boxShadow: '0 10px 40px rgba(0,0,0,0.7), inset 0 0 30px rgba(139, 69, 19, 0.2)',
       borderRadius: '8px',
-      padding: isMobile ? '20px' : '40px', // モバイル時はパディング縮小
+      padding: isMobile ? '20px' : '40px',
       display: 'flex',
       flexDirection: 'column' as const,
       gap: isMobile ? '20px' : '30px',
@@ -139,7 +138,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       fontWeight: 'bold',
       outline: 'none',
       cursor: 'pointer',
-      boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.1)'
+      boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.1)',
+      boxSizing: 'border-box' as const
     },
     vs: {
       textAlign: 'center' as const,
@@ -152,13 +152,14 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     },
     actions: {
       display: 'flex', 
-      flexDirection: isMobile ? 'column-reverse' as const : 'row' as const, // モバイルは縦並び(メインボタンを下に)
+      flexDirection: isMobile ? 'column-reverse' as const : 'row' as const,
       gap: isMobile ? '15px' : '20px', 
       marginTop: isMobile ? '20px' : '30px', 
       zIndex: 1, 
       alignItems: 'center',
       width: isMobile ? '100%' : 'auto',
-      maxWidth: '600px'
+      maxWidth: '600px',
+      boxSizing: 'border-box' as const
     },
     subBtn: {
       background: 'transparent',
@@ -171,7 +172,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       cursor: 'pointer',
       fontFamily: 'inherit',
       textShadow: '0 1px 2px black',
-      width: isMobile ? '100%' : 'auto' // モバイル時は幅一杯
+      width: isMobile ? '100%' : 'auto',
+      boxSizing: 'border-box' as const
     },
     mainBtn: {
       background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)',
@@ -186,7 +188,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       textShadow: '0 2px 0 #3e2723',
       fontFamily: 'inherit',
       letterSpacing: '2px',
-      width: isMobile ? '100%' : 'auto' // モバイル時は幅一杯
+      width: isMobile ? '100%' : 'auto',
+      boxSizing: 'border-box' as const
     }
   }), [isMobile]);
 

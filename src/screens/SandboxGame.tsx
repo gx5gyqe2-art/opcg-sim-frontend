@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'; // ★修正: Reactをインポート
+import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -14,7 +14,7 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用パネル (DOMオーバーレイ)
+// 確認用パネル (DOMオーバーレイ) - 横スクロール版
 const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
     type: string, 
     cards: CardInstance[], 
@@ -22,72 +22,90 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
     onStartDrag: (e: React.PointerEvent, card: CardInstance) => void 
 }) => {
     return (
-        <div style={{ 
-            position: 'absolute', 
-            top: '60px', 
-            left: '50%', 
-            transform: 'translateX(-50%)', 
-            width: '90%', 
-            backgroundColor: 'rgba(30, 30, 30, 0.95)', 
-            zIndex: 200, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            borderRadius: '8px',
-            border: '2px solid #555',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-        }}>
-            {/* Header */}
-            <div style={{ 
+        <div 
+            onClick={onClose} // 背景クリックで閉じる
+            style={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
                 width: '100%', 
-                padding: '10px 15px', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                borderBottom: '1px solid #555',
-                background: '#444',
-                borderTopLeftRadius: '6px',
-                borderTopRightRadius: '6px',
-                boxSizing: 'border-box'
-            }}>
-                <span style={{ color: 'white', fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</span>
-                <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
-            </div>
-            
-            {/* Content (横スクロール) */}
-            <div style={{ 
-                display: 'flex', 
-                flexWrap: 'nowrap', 
-                gap: '10px', 
-                padding: '15px', 
-                width: '100%', 
-                overflowX: 'auto', 
-                overflowY: 'hidden',
-                justifyContent: 'flex-start',
-                alignItems: 'center',
-                boxSizing: 'border-box',
-                whiteSpace: 'nowrap',
-                minHeight: '120px'
-            }}>
-                {cards.map(c => (
-                    <div 
-                        key={c.uuid} 
-                        style={{ 
-                            position: 'relative', 
-                            width: '60px', 
-                            height: '84px', 
-                            cursor: 'grab',
-                            flexShrink: 0 
-                        }}
-                        onPointerDown={(e) => onStartDrag(e, c)}
-                    >
-                        <img 
-                            src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
-                            style={{ width: '100%', height: '100%', borderRadius: '4px', pointerEvents: 'none', userSelect: 'none' }} 
-                            alt={c.name}
-                            onError={(e) => { (e.target as HTMLImageElement).style.display='none'; }}
-                        />
-                    </div>
-                ))}
+                height: '100%', 
+                zIndex: 200, 
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                pointerEvents: 'auto'
+            }}
+        >
+            <div 
+                onClick={(e) => e.stopPropagation()} // パネル内クリックは伝播させない
+                style={{ 
+                    position: 'absolute', 
+                    top: '60px', 
+                    left: '50%', 
+                    transform: 'translateX(-50%)', 
+                    width: '90%', 
+                    backgroundColor: 'rgba(30, 30, 30, 0.98)', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    borderRadius: '8px',
+                    border: '2px solid #555',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+                }}
+            >
+                <div style={{ 
+                    width: '100%', 
+                    padding: '10px 15px', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    borderBottom: '1px solid #555',
+                    background: '#444',
+                    borderTopLeftRadius: '6px',
+                    borderTopRightRadius: '6px',
+                    boxSizing: 'border-box'
+                }}>
+                    <span style={{ color: 'white', fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</span>
+                    <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
+                </div>
+                
+                <div style={{ 
+                    display: 'flex', 
+                    flexWrap: 'nowrap', 
+                    gap: '10px', 
+                    padding: '15px', 
+                    width: '100%', 
+                    overflowX: 'auto', 
+                    overflowY: 'hidden',
+                    justifyContent: 'flex-start',
+                    alignItems: 'center',
+                    boxSizing: 'border-box',
+                    whiteSpace: 'nowrap',
+                    minHeight: '120px',
+                    scrollbarWidth: 'thin'
+                }}>
+                    {cards.map(c => (
+                        <div 
+                            key={c.uuid} 
+                            style={{ 
+                                position: 'relative', 
+                                width: '60px', 
+                                height: '84px', 
+                                cursor: 'grab', 
+                                flexShrink: 0,
+                                willChange: 'transform' // 描画最適化
+                            }}
+                            onPointerDown={(e) => onStartDrag(e, c)}
+                        >
+                            <img 
+                                src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
+                                style={{ width: '100%', height: '100%', borderRadius: '4px', pointerEvents: 'none', userSelect: 'none' }} 
+                                alt={c.name}
+                                loading="lazy" // 遅延読み込み
+                                decoding="async" // 非同期デコード
+                                onError={(e) => { (e.target as HTMLImageElement).style.display='none'; }}
+                            />
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );
@@ -99,15 +117,26 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
-  const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
+  
+  // 修正: 状態には「どのゾーンを見ているか」だけを保存
+  const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', pid: string } | null>(null);
   
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
-  // 自動視点切り替え
   const isRotated = gameState?.turn_info?.active_player_id === 'p2';
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
+
+  // 修正: 表示するカードリストを常に最新の gameState から算出
+  const inspectingCards = useMemo(() => {
+      if (!inspecting || !gameState) return [];
+      const p = inspecting.pid === 'p1' ? gameState.players.p1 : gameState.players.p2;
+      // 型定義上 deck/life は optional なのでフォールバック
+      if (inspecting.type === 'deck') return p.zones.deck || [];
+      if (inspecting.type === 'life') return p.zones.life || [];
+      return [];
+  }, [gameState, inspecting]);
 
   useEffect(() => {
     const initGame = async () => {
@@ -209,11 +238,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    // 視点切り替えロジック
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
+    
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
 
-    // ボード描画 (引数は5つ)
     const bottomSide = createSandboxBoardSide(
         bottomPlayer, false, W, coords, onCardDown
     );
@@ -266,15 +294,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const midY = H / 2;
 
         const isTopArea = endPos.y < midY;
-        // 視点に応じてドロップ先のPIDを決定
-        // 手前(isTopArea=false)は、isRotatedならp2, そうでなければp1
         let destPid = isTopArea 
             ? (isRotated ? 'p1' : 'p2') 
             : (isRotated ? 'p2' : 'p1');
         
         let destZone = 'field'; 
 
-        // 相手陣地（奥側）への操作禁止
         if (isTopArea) {
             setDragState(null);
             return;
@@ -352,15 +377,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             
             const findInStack = (p: any, pid: string) => {
-                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck, pid };
-                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life, pid };
+                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck };
+                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life };
                 return null;
             };
             
             if (currentPlayer) {
                 const stackInfo = findInStack(currentPlayer, destPid);
                 if (stackInfo) {
-                    setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: stackInfo.pid });
+                    setInspecting({ type: stackInfo.type as any, pid: destPid }); // 修正: カードリストは持たせずIDのみ
                     setDragState(null);
                     return;
                 }
@@ -473,7 +498,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
           <div style={{ pointerEvents: 'auto' }}>
               <InspectPanel 
                   type={inspecting.type} 
-                  cards={inspecting.cards} 
+                  cards={inspectingCards} // 最新のカードリストを渡す
                   onClose={() => setInspecting(null)} 
                   onStartDrag={handleStartDragFromInspector}
               />
