@@ -1,6 +1,7 @@
 import { Component, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { RealGame } from './screens/RealGame';
+import { SandboxGame } from './screens/SandboxGame';
 import GameStart from './ui/GameStart';
 import { DeckBuilder } from './screens/DeckBuilder';
 
@@ -56,7 +57,7 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'start' | 'game' | 'deck'>('start');
+  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox'>('start');
   const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>({
     p1: 'imu.json',
     p2: 'nami.json'
@@ -78,9 +79,9 @@ export default function App() {
       <ErrorBoundary>
         {mode === 'start' && (
           <GameStart 
-            onStart={(p1, p2) => {
+            onStart={(p1, p2, gameMode = 'normal') => {
               setSelectedDecks({ p1, p2 });
-              setMode('game');
+              setMode(gameMode === 'sandbox' ? 'sandbox' : 'game');
             }}
             onDeckBuilder={() => setMode('deck')}
           />
@@ -92,6 +93,18 @@ export default function App() {
             p2Deck={selectedDecks.p2}
             onBack={() => {
               if (confirm("ゲームを終了してタイトルに戻りますか？")) {
+                setMode('start');
+              }
+            }}
+          />
+        )}
+
+        {mode === 'sandbox' && (
+          <SandboxGame 
+            p1Deck={selectedDecks.p1} 
+            p2Deck={selectedDecks.p2}
+            onBack={() => {
+              if (confirm("サンドボックスを終了しますか？")) {
                 setMode('start');
               }
             }}

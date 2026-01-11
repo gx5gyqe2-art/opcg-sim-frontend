@@ -14,6 +14,12 @@ export const createCardContainer = (
   options: { count?: number; onClick: () => void; isOpponent?: boolean }
 ) => {
   const container = new PIXI.Container();
+  // ▼▼▼ 追加: UUIDをコンテナ名として設定（DnD用） ▼▼▼
+  if (card?.uuid) {
+    container.name = card.uuid;
+  }
+  // ▲▲▲ 追加ここまで ▲▲▲
+
   const isOpponent = options.isOpponent ?? false;
   const isRest = card?.is_rest === true;
   const isBack = card?.is_face_up === false;
@@ -170,8 +176,6 @@ export const createCardContainer = (
     }
 
     // ★重要: カード名テキストの制御
-    // 画像が無い場合、またはリソース系カードで画像が無い場合にのみテキストを表示
-    // 今回の修正でリソース系(Deck, Life, Don)も画像が出るようになったので、imageUrlがあればテキストは出さない
     if (!imageUrl) {
       const nameStyle = { 
         fontSize: isResource ? SIZES.FONT_NAME_RESOURCE : SIZES.FONT_NAME_NORMAL, 
@@ -194,7 +198,6 @@ export const createCardContainer = (
 
   } else {
     // 裏面テキスト
-    // 画像があるなら "BACK" テキストは出さない
     if (!imageUrl) {
       addText(GAME_UI_CONFIG.TEXT.BACK_SIDE, { fontSize: SIZES.FONT_BACK, fontWeight: 'bold', fill: COLORS.TEXT_LIGHT, align: 'center' }, 0, 0, 'screen');
     }

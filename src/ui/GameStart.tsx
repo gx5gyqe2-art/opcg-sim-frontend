@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_CONFIG } from '../api/api.config';
-import './GameUI.css'; // 共通アニメーション等はここから利用
+import './GameUI.css'; 
 
 interface DeckOption {
   id: string;
@@ -8,7 +8,7 @@ interface DeckOption {
 }
 
 interface GameStartProps {
-  onStart: (p1: string, p2: string) => void;
+  onStart: (p1: string, p2: string, mode?: 'normal' | 'sandbox') => void;
   onDeckBuilder: () => void;
 }
 
@@ -48,23 +48,20 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     fetchDecks();
   }, []);
 
-  // --- グランド・バトル風スタイル定義 ---
   const styles = {
     container: {
       minHeight: '100vh',
       width: '100vw',
-      // 暗めの木目調・海賊船の船内をイメージした背景
       background: 'radial-gradient(circle at center, #3e2723 0%, #1a0b0b 100%)',
       display: 'flex',
       flexDirection: 'column' as const,
       alignItems: 'center',
       justifyContent: 'center',
-      color: '#f0e6d2', // 羊皮紙のようなオフホワイト
+      color: '#f0e6d2',
       fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif',
       position: 'relative' as const,
       overflow: 'hidden'
     },
-    // 背景の装飾（古地図のようなグリッド）
     bgOverlay: {
       position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0,
       backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 20px)',
@@ -75,7 +72,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       fontSize: 'clamp(40px, 8vw, 80px)',
       fontWeight: '900',
       marginBottom: '50px',
-      // ゴールドのグラデーション文字
       background: 'linear-gradient(to bottom, #ffd700, #b8860b, #8b4513)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
@@ -85,9 +81,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       textTransform: 'uppercase' as const
     },
     panel: {
-      // 羊皮紙風のパネル
       background: '#f4e4bc',
-      border: '6px solid #5d4037', // 太い木の枠
+      border: '6px solid #5d4037',
       boxShadow: '0 10px 40px rgba(0,0,0,0.7), inset 0 0 30px rgba(139, 69, 19, 0.2)',
       borderRadius: '8px',
       padding: '40px',
@@ -98,9 +93,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       maxWidth: '600px',
       zIndex: 1,
       position: 'relative' as const,
-      color: '#3e2723' // 濃い茶色の文字
+      color: '#3e2723'
     },
-    // パネルの四隅に鋲（びょう）を打つ装飾
     rivet: (top: boolean, left: boolean) => ({
       position: 'absolute' as const,
       width: '12px', height: '12px',
@@ -112,7 +106,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       left: left ? '10px' : 'auto',
       right: !left ? '10px' : 'auto'
     }),
-    
     selectGroup: {
       display: 'flex', flexDirection: 'column' as const, gap: '8px'
     },
@@ -122,7 +115,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     },
     select: {
       width: '100%', padding: '12px',
-      background: '#fff8e1', // 明るい羊皮紙色
+      background: '#fff8e1',
       color: '#3e2723',
       border: '2px solid #8b4513',
       borderRadius: '4px',
@@ -137,12 +130,11 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       textAlign: 'center' as const,
       fontSize: '36px',
       fontWeight: 'bold',
-      color: '#8b0000', // 深紅
+      color: '#8b0000',
       textShadow: '0 2px 0 rgba(0,0,0,0.2)',
       margin: '-10px 0',
       fontStyle: 'italic'
     },
-    
     actions: {
       display: 'flex', gap: '20px', marginTop: '30px', zIndex: 1, alignItems: 'center'
     },
@@ -159,7 +151,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       textShadow: '0 1px 2px black'
     },
     mainBtn: {
-      // 赤い布や宝石をイメージしたボタン
       background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)',
       border: '2px solid #ffeba7',
       padding: '18px 60px',
@@ -178,11 +169,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   return (
     <div style={styles.container}>
       <div style={styles.bgOverlay}></div>
-      
       <div style={styles.title}>OPCG SIM</div>
-
       <div style={styles.panel}>
-        {/* 四隅の鋲 */}
         <div style={styles.rivet(true, true)}></div>
         <div style={styles.rivet(true, false)}></div>
         <div style={styles.rivet(false, true)}></div>
@@ -227,7 +215,15 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
         </button>
 
         <button 
-          onClick={() => onStart(p1Deck, p2Deck)}
+          onClick={() => onStart(p1Deck, p2Deck, 'sandbox')}
+          style={{ ...styles.subBtn, borderColor: '#2ecc71', color: '#2ecc71' }}
+          className="hover-scale"
+        >
+          1人回し
+        </button>
+
+        <button 
+          onClick={() => onStart(p1Deck, p2Deck, 'normal')}
           style={styles.mainBtn}
           className="hover-scale"
         >

@@ -39,7 +39,6 @@ export const apiClient = {
     if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   },
 
-  // ▼▼▼ 修正箇所: 引数に : string を追加 ▼▼▼
   async createGame(
     p1Deck: string = DEFAULT_GAME_SETTINGS.P1_DECK,
     p2Deck: string = DEFAULT_GAME_SETTINGS.P2_DECK
@@ -53,7 +52,6 @@ export const apiClient = {
         p2_name: CONST.PLAYER_KEYS.P2
       }),
     });
-  // ▲▲▲ 修正ここまで ▲▲▲
 
     const data = await res.json();
     
@@ -92,6 +90,66 @@ export const apiClient = {
     };
   },
 
+  // --- Sandbox Methods ---
+
+  async createSandboxGame(
+    p1Deck: string,
+    p2Deck: string
+  ): Promise<{ game_id: string; state: GameState }> {
+    const res = await fetchWithLog(`${BASE_URL}/api/sandbox/create`, {
+      method: 'POST',
+      body: JSON.stringify({
+        p1_deck: p1Deck,
+        p2_deck: p2Deck,
+        p1_name: "P1",
+        p2_name: "P2"
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || 'Failed to create sandbox');
+    }
+    
+    if (data.game_id) sessionManager.setSessionId(data.game_id);
+
+    return {
+      game_id: data.game_id,
+      state: data.game_state
+    };
+  },
+
+  async sendSandboxAction(
+    gameId: string, 
+    action: { 
+      action_type: string; 
+      card_uuid?: string; 
+      dest_player_id?: string; 
+      dest_zone?: string; 
+      index?: number;
+      player_id?: string;
+    }
+  ): Promise<{ success: boolean; state: GameState }> {
+    const res = await fetchWithLog(`${BASE_URL}/api/sandbox/action`, {
+      method: 'POST',
+      body: JSON.stringify({
+        game_id: gameId,
+        ...action
+      }),
+    });
+    
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || 'Sandbox action failed');
+    }
+
+    return {
+      success: true,
+      state: data.game_state
+    };
+  },
+
+  // --- End Sandbox Methods ---
 
   async sendAction(gameId: string, request: GameActionRequest): Promise<GameActionResult> {
     const actionBody = {
