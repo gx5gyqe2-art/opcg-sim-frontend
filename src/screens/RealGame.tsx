@@ -42,16 +42,20 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   const handleSelectionResolve = async (selectedUuids: string[]) => {
     if (!gameState?.game_id || !pendingRequest) return;
     
-    await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
-      extra: { selected_uuids: selectedUuids }
-    });
+    const battleActionTypes = Object.values(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES);
+    
+    if (battleActionTypes.includes(pendingRequest.action)) {
+      await sendBattleAction(pendingRequest.action as any, selectedUuids[0], pendingRequest.request_id);
+    } else {
+      await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
+        extra: { selected_uuids: selectedUuids }
+      });
+    }
   };
 
-  // 【追加】選択肢が選ばれたときのハンドラ
   const handleOptionSelect = async (index: number) => {
     if (!gameState?.game_id || isPending) return;
     
-    // インデックスをサーバーに送信
     await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
       extra: { index: index }
     });
@@ -269,8 +273,24 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     onBack();
   };
 
-  const showSearchModal = pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT;
+  const showSearchModal = 
+    pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
+    pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER;
+    
   const constraints = pendingRequest?.constraints || {};
+
+  const modalCandidates = pendingRequest?.candidates || (
+    (gameState && pendingRequest?.selectable_uuids) ? 
+      [
+        ...gameState.players.p1.zones.hand, 
+        ...gameState.players.p1.zones.field, 
+        ...gameState.players.p2.zones.hand, 
+        ...gameState.players.p2.zones.field,
+        gameState.players.p1.leader,
+        gameState.players.p2.leader
+      ].filter((c): c is CardInstance => !!c && pendingRequest.selectable_uuids!.includes(c.uuid)) 
+      : []
+  );
 
   const activeDonCount = gameState && activePlayerId 
     ? (gameState.players[activePlayerId] as any).don_active.length 
@@ -332,7 +352,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
             </div>
           )}
 
-          {/* 【追加】選択肢(options)がある場合のボタン表示 */}
           {(pendingRequest as any).options && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
               {(pendingRequest as any).options.map((label: string, idx: number) => (
@@ -404,14 +423,14 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
       />
     )}
 
-    {showSearchModal && pendingRequest?.candidates && (
+    {showSearchModal && modalCandidates.length > 0 && (
       <CardSelectModal
-        candidates={pendingRequest.candidates}
-        message={pendingRequest.message}
+        candidates={modalCandidates}
+        message={pendingRequest?.message || ""}
         minSelect={constraints.min ?? 1}
         maxSelect={constraints.max ?? 1}
         onConfirm={handleSelectionResolve}
-        onCancel={pendingRequest.can_skip ? handlePass : undefined}
+        onCancel={pendingRequest?.can_skip ? handlePass : undefined}
       />
     )}
 
