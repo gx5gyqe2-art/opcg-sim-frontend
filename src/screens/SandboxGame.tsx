@@ -22,6 +22,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   const { COLORS } = LAYOUT_CONSTANTS;
 
+  // ゲーム初期化
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -36,6 +37,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
+  // PixiJS初期化
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
@@ -62,6 +64,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, []);
 
+  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -76,6 +79,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
 
+    // 背景
     const bg = new PIXI.Graphics();
     bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
@@ -87,6 +91,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
+    // ドラッグ開始ハンドラ
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState) return;
 
@@ -106,6 +111,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
+    // ボード描画
     const p1Side = createSandboxBoardSide(gameState.players.p1, false, W, coords, onCardDown);
     p1Side.y = midY;
     app.stage.addChild(p1Side);
@@ -114,12 +120,14 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     p2Side.y = 0;
     app.stage.addChild(p2Side);
 
+    // ドラッグ中のスプライト維持
     if (dragState) {
         app.stage.addChild(dragState.sprite);
     }
 
   }, [gameState, isPending]);
 
+  // グローバルイベントリスナー (Drag Move/Up)
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -151,7 +159,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
         const THRESHOLD = coords.CH; 
         
-        // ▼▼▼ 修正箇所: pid 引数を削除 ▼▼▼
         const checkZone = (isOpp: boolean) => {
             const yBase = isOpp ? 0 : midY;
             if (checkDist(coords.getLeaderX(W), isOpp ? coords.getY(2) : yBase + coords.getY(2) + coords.CH/2) < THRESHOLD) return 'leader';
@@ -162,10 +169,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ▼▼▼ 修正箇所: 呼び出し元も引数を削除 ▼▼▼
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
+        // 移動がわずかな場合はクリック(タップ)とみなしてレスト切り替え
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
         if (distFromStart < 10) {
             setIsPending(true);
@@ -182,6 +189,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
+        // 移動実行
         setIsPending(true);
         try {
             const res = await apiClient.sendSandboxAction(gameState!.game_id, {
@@ -208,23 +216,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, [dragState, gameState]);
 
+  // ▼▼▼ ターン終了ハンドラ ▼▼▼
   const handleTurnEnd = async () => {
     if (!gameState || isPending) return;
     setIsPending(true);
     try {
-        const res = await apiClient.sendSandboxAction(gameState.game_id, { action_type: 'TURN_END' });
+        const res = await apiClient.sendSandboxAction(gameState.game_id, {
+            action_type: 'TURN_END'
+        });
         setGameState(res.state);
-    } finally {
-        setIsPending(false);
-    }
-  };
-
-  const handleDraw = async () => {
-    if (!gameState || isPending) return;
-    setIsPending(true);
-    try {
-        const res = await apiClient.sendSandboxAction(gameState.game_id, { action_type: 'DRAW' });
-        setGameState(res.state);
+    } catch(e) {
+        console.error("Turn end failed", e);
     } finally {
         setIsPending(false);
     }
@@ -237,22 +239,32 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
   };
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 10 }}>
-          <button onClick={onBack} style={btnStyle}>Exit</button>
-          <div style={{ color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px 10px' }}>
-              Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id})
+      
+      {/* 左上: 終了ボタンと情報表示 */}
+      <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 10, zIndex: 100 }}>
+          <button onClick={onBack} style={{...btnStyle, background: '#555'}}>Exit</button>
+          <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
+              Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
           </div>
       </div>
 
-      <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: 10 }}>
-          <button onClick={handleDraw} style={btnStyle} disabled={isPending}>Draw</button>
-          <button onClick={handleTurnEnd} style={{ ...btnStyle, background: '#e74c3c' }} disabled={isPending}>Turn End</button>
+      {/* 右下: ターン終了ボタンのみ */}
+      <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', gap: 10, zIndex: 100 }}>
+          <button 
+            onClick={handleTurnEnd} 
+            style={{ ...btnStyle, background: '#e74c3c' }} 
+            disabled={isPending}
+          >
+            ターン終了
+          </button>
       </div>
+
     </div>
   );
 };
