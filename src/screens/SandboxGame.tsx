@@ -79,11 +79,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
             
             ws = new WebSocket(wsUrl);
             
-            ws.onopen = () => console.log("WS Connected");
+            ws.onopen = () => console.log("WS Connected to", wsUrl);
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'STATE_UPDATE') {
+                        // console.log("State updated via WS");
                         setGameState(data.state);
                     }
                 } catch(e) { console.error("WS Parse Error", e); }
@@ -107,9 +108,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
   // PixiJS Setup
   useEffect(() => {
     if (!pixiContainerRef.current) return;
+    
+    // 既存のCanvasがあれば削除（再マウント対策）
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
+
     const app = new PIXI.Application({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -134,7 +138,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
-  }, []);
+  }, []); // 初回のみ実行
 
   // 描画ループ
   useEffect(() => {
@@ -188,11 +192,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         if (inspecting) return;
         if (dragState) return;
 
-        // 操作制限
+        // 対戦モード時の操作制限
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
              const player = gameState.players[myPlayerId];
              if (card.owner_id && player && card.owner_id !== player.name) {
-                 // 相手のカードを操作禁止にする場合はここで return
+                 // 相手のカードは操作不可
+                 return;
              }
         }
 
@@ -397,7 +402,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
   }, [dragState, gameState, inspecting, isRotated]);
 
   const handleAction = async (type: string, params: any) => {
-      // activeGameIdが必須
       if (isPending || !gameState || !activeGameId) return;
       setIsPending(true);
       try {
@@ -413,55 +417,58 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
       }
   };
 
-  if (!gameState) {
-      return (
-          <div style={{ width: '100vw', height: '100vh', background: '#000', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
-            <h2>Connecting to Sandbox...</h2>
-            {activeGameId && <p>Game ID: {activeGameId}</p>}
-          </div>
-      );
-  }
-
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       
+      {/* Pixi Canvas - 常にレンダリングしておく */}
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto', alignItems: 'center' }}>
-              <button 
-                onClick={onBack}
-                style={{ zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
-              >
-                TOPへ
-              </button>
-              <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', flexDirection: 'column' }}>
-                 <div style={{ fontWeight: 'bold' }}>
-                   {myPlayerId === 'both' ? 'Solo Mode' : `Online: You are ${myPlayerId.toUpperCase()}`}
-                 </div>
-                 {activeGameId && (
-                    <div style={{ fontSize: '10px', opacity: 0.7 }}>ID: {activeGameId}</div>
-                 )}
-              </div>
-          </div>
+      {/* Loading Overlay - gameStateがない時だけ表示 */}
+      {!gameState && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}>
+            <h2>Connecting to Room...</h2>
+            {activeGameId && <p style={{ fontSize: '14px', color: '#aaa' }}>ID: {activeGameId}</p>}
+        </div>
+      )}
 
-          <button 
-            onClick={() => handleAction('TURN_END', {})}
-            disabled={isPending}
-            style={{
-              position: 'absolute',
-              left: layoutCoords ? `${layoutCoords.x}px` : 'auto',
-              top: layoutCoords ? `${layoutCoords.y}px` : '50%',
-              right: layoutCoords ? 'auto' : '20px',
-              transform: 'translateY(-50%)',
-              padding: '10px 20px',
-              backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
-              color: 'white', border: 'none', borderRadius: '5px', cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold', pointerEvents: 'auto'
-            }}
-          >
-            {isPending ? '送信中...' : 'ターン終了'}
-          </button>
-      </div>
+      {/* UI Layer - gameStateがある時のみ有効化 */}
+      {gameState && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto', alignItems: 'center' }}>
+                <button 
+                  onClick={onBack}
+                  style={{ zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
+                >
+                  TOPへ
+                </button>
+                <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontWeight: 'bold' }}>
+                    {myPlayerId === 'both' ? 'Solo Mode' : `Online: You are ${myPlayerId.toUpperCase()}`}
+                  </div>
+                  {activeGameId && (
+                      <div style={{ fontSize: '10px', opacity: 0.7 }}>ID: {activeGameId.slice(0,8)}...</div>
+                  )}
+                </div>
+            </div>
+
+            <button 
+              onClick={() => handleAction('TURN_END', {})}
+              disabled={isPending}
+              style={{
+                position: 'absolute',
+                left: layoutCoords ? `${layoutCoords.x}px` : 'auto',
+                top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+                right: layoutCoords ? 'auto' : '20px',
+                transform: 'translateY(-50%)',
+                padding: '10px 20px',
+                backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
+                color: 'white', border: 'none', borderRadius: '5px', cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold', pointerEvents: 'auto'
+              }}
+            >
+              {isPending ? '送信中...' : 'ターン終了'}
+            </button>
+        </div>
+      )}
     </div>
   );
 };
