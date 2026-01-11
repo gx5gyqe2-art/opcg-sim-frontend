@@ -8,7 +8,8 @@ export const createSandboxBoardSide = (
   isOpponent: boolean, 
   W: number, 
   coords: LayoutCoords, 
-  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void
+  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void,
+  onInspect: (type: 'deck' | 'life' | 'trash', cards: CardInstance[]) => void // trash型追加
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -83,7 +84,8 @@ export const createSandboxBoardSide = (
   const lifeCard = { uuid: `life-${p.player_id}`, name: 'Life' } as any;
   const life = createCardContainer(lifeCard, coords.CW, coords.CH, { 
       ...getCardOpts(lifeCard), 
-      count: lifeList.length
+      count: lifeList.length,
+      onClick: () => onInspect('life', lifeList)
   });
   life.x = coords.getLifeX(W); life.y = r2Y;
   const topLife = lifeList.length > 0 ? lifeList[0] : null;
@@ -94,7 +96,8 @@ export const createSandboxBoardSide = (
   const deckList = z.deck || [];
   const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as any;
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, {
-      ...getCardOpts(deckCard)
+      ...getCardOpts(deckCard),
+      onClick: () => onInspect('deck', deckList)
   });
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   
@@ -102,12 +105,17 @@ export const createSandboxBoardSide = (
   if (topDeck) setupInteractive(deck, topDeck);
   side.addChild(deck);
 
-  // トラッシュ
-  const topTrash = z.trash && z.trash.length > 0 ? z.trash[z.trash.length - 1] : null;
+  // トラッシュ (★修正: クリックで一覧表示)
+  const trashList = z.trash || [];
+  const topTrash = trashList.length > 0 ? trashList[trashList.length - 1] : null;
   const trash = createCardContainer(
     { uuid: `trash-${p.player_id}`, name: 'Trash', card_id: topTrash?.card_id } as any, 
     coords.CW, coords.CH, 
-    { ...getCardOpts({} as any), count: z.trash?.length || 0 }
+    { 
+      ...getCardOpts({} as any), 
+      count: trashList.length,
+      onClick: () => onInspect('trash', trashList) // イベント追加
+    }
   );
   trash.x = coords.getTrashX(W); trash.y = r3Y;
   if (topTrash) setupInteractive(trash, topTrash);
