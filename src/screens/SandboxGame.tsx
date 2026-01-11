@@ -150,7 +150,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         };
 
         const THRESHOLD = coords.CH; 
-        const checkZone = (pid: string, isOpp: boolean) => {
+        
+        // ▼▼▼ 修正箇所: pid 引数を削除 ▼▼▼
+        const checkZone = (isOpp: boolean) => {
             const yBase = isOpp ? 0 : midY;
             if (checkDist(coords.getLeaderX(W), isOpp ? coords.getY(2) : yBase + coords.getY(2) + coords.CH/2) < THRESHOLD) return 'leader';
             if (checkDist(coords.getTrashX(W), isOpp ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2) < THRESHOLD) return 'trash';
@@ -160,7 +162,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        const detectedZone = checkZone(destPid, destPid === 'p2');
+        // ▼▼▼ 修正箇所: 呼び出し元も引数を削除 ▼▼▼
+        const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
