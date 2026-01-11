@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { API_CONFIG } from '../api/api.config';
 import './GameUI.css'; 
 
@@ -16,6 +16,15 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
+  
+  // ★追加: 画面幅によるモバイル判定
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchDecks = async () => {
@@ -48,7 +57,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     fetchDecks();
   }, []);
 
-  const styles = {
+  // ★修正: isMobile に応じてスタイルを動的に変更
+  const styles = useMemo(() => ({
     container: {
       minHeight: '100vh',
       width: '100vw',
@@ -60,7 +70,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       color: '#f0e6d2',
       fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif',
       position: 'relative' as const,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      padding: isMobile ? '20px' : '0' // モバイル時は余白確保
     },
     bgOverlay: {
       position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0,
@@ -69,35 +80,39 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       zIndex: 0
     },
     title: {
-      fontSize: 'clamp(40px, 8vw, 80px)',
+      // モバイル時はフォントサイズを小さく
+      fontSize: isMobile ? 'clamp(32px, 10vw, 50px)' : 'clamp(40px, 8vw, 80px)',
       fontWeight: '900',
-      marginBottom: '50px',
+      marginBottom: isMobile ? '30px' : '50px',
       background: 'linear-gradient(to bottom, #ffd700, #b8860b, #8b4513)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
       filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.8))',
-      letterSpacing: '6px',
+      letterSpacing: isMobile ? '2px' : '6px',
       zIndex: 1,
-      textTransform: 'uppercase' as const
+      textTransform: 'uppercase' as const,
+      textAlign: 'center' as const
     },
     panel: {
       background: '#f4e4bc',
       border: '6px solid #5d4037',
       boxShadow: '0 10px 40px rgba(0,0,0,0.7), inset 0 0 30px rgba(139, 69, 19, 0.2)',
       borderRadius: '8px',
-      padding: '40px',
+      padding: isMobile ? '20px' : '40px', // モバイル時はパディング縮小
       display: 'flex',
       flexDirection: 'column' as const,
-      gap: '30px',
-      width: '90%',
+      gap: isMobile ? '20px' : '30px',
+      width: '100%',
       maxWidth: '600px',
       zIndex: 1,
       position: 'relative' as const,
-      color: '#3e2723'
+      color: '#3e2723',
+      boxSizing: 'border-box' as const
     },
     rivet: (top: boolean, left: boolean) => ({
       position: 'absolute' as const,
-      width: '12px', height: '12px',
+      width: isMobile ? '8px' : '12px',
+      height: isMobile ? '8px' : '12px',
       borderRadius: '50%',
       background: 'linear-gradient(135deg, #ffd700, #8b4513)',
       boxShadow: '1px 1px 2px rgba(0,0,0,0.5)',
@@ -110,7 +125,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       display: 'flex', flexDirection: 'column' as const, gap: '8px'
     },
     label: {
-      fontSize: '16px', fontWeight: 'bold', color: '#5d4037',
+      fontSize: isMobile ? '14px' : '16px', fontWeight: 'bold', color: '#5d4037',
       textTransform: 'uppercase' as const, letterSpacing: '1px'
     },
     select: {
@@ -119,7 +134,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       color: '#3e2723',
       border: '2px solid #8b4513',
       borderRadius: '4px',
-      fontSize: '18px',
+      fontSize: isMobile ? '16px' : '18px',
       fontFamily: 'inherit',
       fontWeight: 'bold',
       outline: 'none',
@@ -128,15 +143,22 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     },
     vs: {
       textAlign: 'center' as const,
-      fontSize: '36px',
+      fontSize: isMobile ? '24px' : '36px',
       fontWeight: 'bold',
       color: '#8b0000',
       textShadow: '0 2px 0 rgba(0,0,0,0.2)',
-      margin: '-10px 0',
+      margin: isMobile ? '-5px 0' : '-10px 0',
       fontStyle: 'italic'
     },
     actions: {
-      display: 'flex', gap: '20px', marginTop: '30px', zIndex: 1, alignItems: 'center'
+      display: 'flex', 
+      flexDirection: isMobile ? 'column-reverse' as const : 'row' as const, // モバイルは縦並び(メインボタンを下に)
+      gap: isMobile ? '15px' : '20px', 
+      marginTop: isMobile ? '20px' : '30px', 
+      zIndex: 1, 
+      alignItems: 'center',
+      width: isMobile ? '100%' : 'auto',
+      maxWidth: '600px'
     },
     subBtn: {
       background: 'transparent',
@@ -148,13 +170,14 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       borderRadius: '4px',
       cursor: 'pointer',
       fontFamily: 'inherit',
-      textShadow: '0 1px 2px black'
+      textShadow: '0 1px 2px black',
+      width: isMobile ? '100%' : 'auto' // モバイル時は幅一杯
     },
     mainBtn: {
       background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)',
       border: '2px solid #ffeba7',
       padding: '18px 60px',
-      fontSize: '24px',
+      fontSize: isMobile ? '20px' : '24px',
       fontWeight: 'bold',
       color: '#fff',
       borderRadius: '4px',
@@ -162,9 +185,10 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       boxShadow: '0 5px 15px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
       textShadow: '0 2px 0 #3e2723',
       fontFamily: 'inherit',
-      letterSpacing: '2px'
+      letterSpacing: '2px',
+      width: isMobile ? '100%' : 'auto' // モバイル時は幅一杯
     }
-  };
+  }), [isMobile]);
 
   return (
     <div style={styles.container}>

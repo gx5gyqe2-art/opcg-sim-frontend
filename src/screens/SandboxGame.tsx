@@ -14,7 +14,7 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用パネル (DOMオーバーレイ) - 横スクロール版
+// 確認用パネル (DOMオーバーレイ)
 const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
     type: string, 
     cards: CardInstance[], 
@@ -94,8 +94,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
-  // ★追加: 視点切り替えフラグ (false: P1視点, true: P2視点)
-  const [isRotated, setIsRotated] = useState(false);
+  // ★修正: Stateではなく、現在のactive_player_idから動的に判定する
+  const isRotated = gameState?.turn_info?.active_player_id === 'p2';
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
@@ -204,12 +204,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         setInspecting({ type, cards, pid });
     };
 
-    // ★修正: 視点に応じて描画するプレイヤーを入れ替える
-    // 下側 (手前)
+    // 視点切り替えロジック (自動)
+    // 手番プレイヤーが常に下側（手前）に来る
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const bottomPid = isRotated ? 'p2' : 'p1';
     
-    // 上側 (奥)
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const topPid = isRotated ? 'p1' : 'p2';
 
@@ -231,7 +230,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState, inspecting, isRotated]); // isRotatedを依存に追加
+  }, [gameState, isPending, dragState, inspecting, isRotated]);
 
   // イベントリスナー
   useEffect(() => {
@@ -266,7 +265,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const coords = calculateCoordinates(W, H);
         const midY = H / 2;
 
-        // ★修正: 視点に基づいてドロップ先のプレイヤーIDを判定
+        // 視点に基づいてドロップ先のプレイヤーIDを判定
         const isTopArea = endPos.y < midY;
         let destPid = isTopArea 
             ? (isRotated ? 'p1' : 'p2') 
@@ -274,9 +273,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         
         let destZone = 'field'; 
 
-        // 相手陣地（奥側）へのドロップ禁止
-        // ※「相手」とは視点上の「奥側」を指す
-        // つまり isTopArea が true なら操作禁止
+        // 相手陣地（奥側）への操作禁止
         if (isTopArea) {
             setDragState(null);
             return;
@@ -290,7 +287,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
         const THRESHOLD = coords.CH; 
         
-        // ★修正: Y座標判定用のフラグを「奥側かどうか」で渡す
         const checkZone = (isTopSide: boolean) => {
             const yBase = isTopSide ? 0 : midY;
             const row2Y = isTopSide ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
@@ -312,12 +308,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ドン!!カードの処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-                // 付与判定 (奥側の座標計算はドラッグ不可にしたので手前側のみ計算すればOK)
-                // isTopArea=false (手前) なので yBase=midY
+                // 付与判定（手前側のみ）
                 const leaderX = coords.getLeaderX(W);
                 const leaderY = midY + coords.getY(2) + coords.CH/2;
                 
@@ -338,8 +332,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 }
             }
 
-            // 移動先判定: 手前側なので isTopSide=false
-            const dZone = checkZone(false);
+            const dZone = checkZone(false); // 手前側
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
             }
@@ -347,8 +340,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
-        // 通常カードの処理
-        const detectedZone = checkZone(false); // 手前側へのドロップなのでfalse
+        const detectedZone = checkZone(false); // 手前側
         if (detectedZone) destZone = detectedZone;
         
         if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
@@ -357,10 +349,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         }
 
         if (distFromStart < 10) {
-            // 現在の操作プレイヤーIDに対応するプレイヤーデータを取得
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             
-            // 山札/ライフ確認
             const findInStack = (p: any) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life };
@@ -404,7 +394,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [dragState, gameState, inspecting, isRotated]); // isRotatedを依存に追加
+  }, [dragState, gameState, inspecting, isRotated]);
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState) return;
@@ -457,14 +447,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 TOPへ
               </button>
               
-              {/* ★追加: 視点切り替えボタン */}
-              <button 
-                onClick={() => setIsRotated(!isRotated)}
-                style={{ zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(0, 0, 0, 0.6)', color: '#3498db', border: '1px solid #3498db', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                視点切替 ({isRotated ? 'P2' : 'P1'})
-              </button>
-
               <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                   Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
               </div>
