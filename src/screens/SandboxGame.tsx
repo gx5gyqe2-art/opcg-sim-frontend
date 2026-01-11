@@ -23,10 +23,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life' | 'trash', pid: string } | null>(null);
   
-  // ★追加: 表向きになっているカードIDの管理
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
 
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
+  
   const isRotated = gameState?.turn_info?.active_player_id === 'p2';
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
@@ -34,13 +34,14 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const inspectingCards = useMemo(() => {
       if (!inspecting || !gameState) return [];
       const p = inspecting.pid === 'p1' ? gameState.players.p1 : gameState.players.p2;
+      
       if (inspecting.type === 'deck') return p.zones.deck || [];
       if (inspecting.type === 'life') return p.zones.life || [];
       if (inspecting.type === 'trash') return p.zones.trash || [];
       return [];
   }, [gameState, inspecting]);
 
-  // ... (初期化処理、PixiJS Setupは変更なし、省略) ...
+  // 初期化
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -55,6 +56,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
+  // PixiJS Setup
   useEffect(() => {
     if (!pixiContainerRef.current) return;
     while (pixiContainerRef.current.firstChild) {
@@ -126,13 +128,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         ghost.alpha = 0.8;
         ghost.scale.set(1.1);
         app.stage.addChild(ghost);
-        setDragState({ card, sprite: ghost, startPos: startPoint });
+        setDragState({
+            card,
+            sprite: ghost,
+            startPos: startPoint
+        });
     };
 
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending) return;
         if (inspecting) return;
         if (dragState) return;
+
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
@@ -155,11 +162,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const overlay = createInspectOverlay(
             inspecting.type,
             inspectingCards,
-            revealedCardIds, // ★追加: 現在表向きのカードID
+            revealedCardIds,
             W, H,
             () => setInspecting(null),
-            (card, startPos) => startDrag(card, startPos),
-            (uuid) => { // ★追加: トグル用コールバック
+            (card, startPos) => {
+                startDrag(card, startPos);
+            },
+            (uuid) => {
                 const newSet = new Set(revealedCardIds);
                 if (newSet.has(uuid)) newSet.delete(uuid);
                 else newSet.add(uuid);
@@ -173,7 +182,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]); // revealedCardIdsを追加
+  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
 
   // イベントリスナー
   useEffect(() => {
@@ -301,17 +310,20 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             }
 
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            const findInStack = (p: any, pid: string) => {
+            
+            // 修正: pid 引数削除
+            const findInStack = (p: any) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' };
                 if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' };
                 return null;
             };
+            
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer, destPid);
+                const stackInfo = findInStack(currentPlayer);
                 if (stackInfo) {
                     setInspecting({ type: stackInfo.type as any, pid: destPid });
-                    setRevealedCardIds(new Set()); // ★追加: 開くたびに表向き状態リセット
+                    setRevealedCardIds(new Set());
                     setDragState(null);
                     return;
                 }
