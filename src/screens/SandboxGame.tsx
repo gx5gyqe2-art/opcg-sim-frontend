@@ -188,8 +188,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         if (inspecting) return;
         if (dragState) return;
 
-        // 対戦モード時の操作制限 (オプション: 厳密にするならここで相手のカードを弾く)
-        if (myPlayerId !== 'both' && card.owner_id && gameState.players[myPlayerId] && card.owner_id !== gameState.players[myPlayerId].name) {
+        // ■ 修正箇所: 対戦モード時の操作制限の型エラー修正 ■
+        const pid = myPlayerId;
+        // myPlayerIdが 'p1' か 'p2' であることを確認してからアクセスする
+        if ((pid === 'p1' || pid === 'p2') && card.owner_id && gameState.players[pid] && card.owner_id !== gameState.players[pid].name) {
            // 現状はサンドボックスの自由度優先で制限なしとするが、必要なら return;
         }
 
