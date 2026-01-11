@@ -81,36 +81,26 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const app = appRef.current;
     if (!app || !gameState) return;
 
-    // --- 修正箇所: 既存オブジェクトのクリーンアップ処理 ---
-    // 単純に destroy するとドラッグ中のスプライトも消えてしまうため、選別する
     const childrenToDestroy: PIXI.DisplayObject[] = [];
-    
-    // ステージ上の子要素を走査
-    // 注意: forEachなどで回しながら removeChild するとインデックスがずれるため、コピーまたは後ろから回す
     const children = [...app.stage.children];
     
     children.forEach(child => {
-      // ドラッグ中のスプライトなら、ステージから外すだけで destroy はしない
       if (dragState && child === dragState.sprite) {
         app.stage.removeChild(child);
       } else {
-        // それ以外は削除リストへ
         childrenToDestroy.push(child);
       }
     });
 
-    // 削除リストのオブジェクトを実際に削除・破棄
     childrenToDestroy.forEach(child => {
       app.stage.removeChild(child);
       child.destroy({ children: true });
     });
-    // ---------------------------------------------------
 
     const { width: W, height: H } = app.screen;
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
 
-    // 背景
     const bg = new PIXI.Graphics();
     bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
@@ -122,12 +112,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    // ドラッグ開始ハンドラ
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState) return;
 
         const globalPos = e.global.clone();
-        
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(globalPos.x, globalPos.y);
         ghost.alpha = 0.8;
@@ -142,7 +130,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    // ボード描画
     const p1Side = createSandboxBoardSide(gameState.players.p1, false, W, coords, onCardDown);
     p1Side.y = midY;
     app.stage.addChild(p1Side);
@@ -151,14 +138,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     p2Side.y = 0;
     app.stage.addChild(p2Side);
 
-    // ドラッグ中のスプライトを最前面に再追加
     if (dragState) {
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState]); // dragStateを依存配列に追加
+  }, [gameState, isPending, dragState]);
 
-  // グローバルイベントリスナー (Drag Move/Up)
+  // グローバルイベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -190,13 +176,26 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
         const THRESHOLD = coords.CH; 
         
+        // ▼▼▼ ゾーン判定の修正 ▼▼▼
         const checkZone = (isOpp: boolean) => {
             const yBase = isOpp ? 0 : midY;
-            if (checkDist(coords.getLeaderX(W), isOpp ? coords.getY(2) : yBase + coords.getY(2) + coords.CH/2) < THRESHOLD) return 'leader';
-            if (checkDist(coords.getTrashX(W), isOpp ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2) < THRESHOLD) return 'trash';
-            const handY = isOpp ? coords.getY(4) : yBase + coords.getY(4) + coords.CH/2;
-            if (Math.abs(handY - endPos.y) < coords.CH) return 'hand';
-            if (checkDist(coords.getDeckX(W), isOpp ? coords.getY(2) : yBase + coords.getY(2) + coords.CH/2) < THRESHOLD) return 'deck';
+            
+            // 座標定義（BoardSide.tsxの配置ロジックと一致させる）
+            const row2Y = isOpp ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
+            const row3Y = isOpp ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
+            const row4Y = isOpp ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
+
+            if (checkDist(coords.getLeaderX(W), row2Y) < THRESHOLD) return 'leader';
+            if (checkDist(coords.getTrashX(W), row3Y) < THRESHOLD) return 'trash';
+            if (checkDist(coords.getDeckX(W), row2Y) < THRESHOLD) return 'deck';
+            
+            if (Math.abs(row4Y - endPos.y) < coords.CH) return 'hand';
+
+            // ドン!!関連
+            if (checkDist(coords.getDonDeckX(W), row3Y) < THRESHOLD) return 'don_deck';
+            if (checkDist(coords.getDonActiveX(W), row3Y) < THRESHOLD) return 'don_active';
+            if (checkDist(coords.getDonRestX(W), row3Y) < THRESHOLD) return 'don_rested';
+
             return null;
         };
         
@@ -232,10 +231,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             console.error(e);
         } finally {
             setIsPending(false);
-            setDragState(null); // ここでStateをnullにする
-            // 注意: State更新後の再レンダリングでuseEffectが走り、dragState.sprite (null) は無視されるので、
-            // 古いスプライトは次回のクリーンアップで消えるか、手動で消す必要がある。
-            // 今回のロジックでは次回のuseEffectでchildrenToDestroyに含まれて消えるはず。
+            setDragState(null);
         }
     };
 
