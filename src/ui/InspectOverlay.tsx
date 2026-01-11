@@ -8,7 +8,7 @@ export const createInspectOverlay = (
   W: number,
   H: number,
   onClose: () => void,
-  onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void // 引数変更
+  onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void
 ) => {
   const container = new PIXI.Container();
 
@@ -73,45 +73,82 @@ export const createInspectOverlay = (
   const cardH = 84;
   const gap = 10;
 
-  // 操作判定用変数
+  // --- 操作判定用変数 ---
   let isScrolling = false;
   let startPos = { x: 0, y: 0 };
   let scrollStartX = 0;
-  let pendingCard: { card: CardInstance, e: PIXI.FederatedPointerEvent } | null = null; // spriteは不要
+  
+  // 判定待ちのカード情報
+  // flipAction: タップと判定された時に実行する「裏返し」関数
+  let pendingCard: { 
+      card: CardInstance, 
+      e: PIXI.FederatedPointerEvent,
+      flipAction: () => void 
+  } | null = null;
 
   const maxScroll = Math.max(0, cards.length * (cardW + gap) - (panelW - 30));
 
+  // カード生成ループ
   cards.forEach((card, i) => {
     const baseW = 100; 
     const baseH = 140;
     
-    // 強制的に表向き
-    const displayCard = { ...card, is_face_up: true };
-    const cardSprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
-    
-    const scale = cardH / baseH;
-    cardSprite.scale.set(scale);
-    
     const x = i * (cardW + gap) + cardW / 2;
     const y = cardH / 2;
-    cardSprite.position.set(x, y);
 
-    cardSprite.eventMode = 'static';
-    cardSprite.cursor = 'grab';
-    
-    cardSprite.on('pointerdown', (e) => {
-      e.stopPropagation();
-      // イベントをクローンせず、必要な座標情報だけを親の変数に保存する手もあるが
-      // 連続するイベント(move)で判定するために一時的に保持
-      // ただしe.clone()は無いので、この時点ではフラグとカード情報のみ持つ
-      pendingCard = { card, e: e }; 
-      startPos = { x: e.global.x, y: e.global.y };
-      scrollStartX = listContainer.x;
-      isScrolling = false;
-    });
+    // スプライト生成・入替用関数
+    const createSprite = (isFaceUp: boolean): PIXI.Container => {
+        const displayCard = { ...card, is_face_up: isFaceUp };
+        const sprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
+        
+        const scale = cardH / baseH;
+        sprite.scale.set(scale);
+        sprite.position.set(x, y);
+        sprite.eventMode = 'static';
+        sprite.cursor = 'grab';
 
-    listContainer.addChild(cardSprite);
+        sprite.on('pointerdown', (e) => {
+            e.stopPropagation();
+
+            // 裏向きの場合 -> 即座に表向きにする (ドラッグ開始はしない)
+            if (!isFaceUp) {
+                const newSprite = createSprite(true);
+                const index = listContainer.getChildIndex(sprite);
+                listContainer.removeChild(sprite);
+                listContainer.addChildAt(newSprite, index);
+                sprite.destroy({ children: true });
+                return;
+            }
+
+            // 表向きの場合 -> ドラッグ判定待ち (pending)
+            // タップ（移動なしで指を離す）なら裏向きに戻すアクションを登録
+            const flipBack = () => {
+                const newSprite = createSprite(false);
+                const index = listContainer.getChildIndex(sprite);
+                listContainer.removeChild(sprite);
+                listContainer.addChildAt(newSprite, index);
+                sprite.destroy({ children: true });
+            };
+
+            pendingCard = { 
+                card, 
+                e: e,
+                flipAction: flipBack 
+            };
+            startPos = { x: e.global.x, y: e.global.y };
+            scrollStartX = listContainer.x;
+            isScrolling = false;
+        });
+
+        return sprite;
+    };
+
+    // 初期状態は裏向き (false)
+    const initialSprite = createSprite(false);
+    listContainer.addChild(initialSprite);
   });
+
+  // --- パネル全体のイベント ---
 
   panel.on('pointerdown', (e) => {
     isScrolling = true; 
@@ -127,19 +164,19 @@ export const createInspectOverlay = (
     const dy = e.global.y - startPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
+    // 一定距離動いたら「ドラッグ」または「スクロール」と確定
     if (dist > 10) {
         if (pendingCard) {
             if (Math.abs(dy) > Math.abs(dx)) {
-                // 縦移動 -> ドラッグ開始
-                // イベントオブジェクトの代わりに開始座標(現在のマウス位置)を渡す
+                // 縦移動 -> カード取り出し (外部へ通知)
                 onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
-                pendingCard = null;
+                pendingCard = null; // ドラッグ開始したのでフリップアクションは破棄
                 isScrolling = false;
                 return;
             } else {
-                // 横移動 -> スクロール
+                // 横移動 -> スクロール開始
                 isScrolling = true;
-                pendingCard = null; 
+                pendingCard = null; // スクロールなのでフリップアクションは破棄
             }
         }
     }
@@ -153,6 +190,12 @@ export const createInspectOverlay = (
   });
 
   const endDrag = () => {
+      // 指を離した時、まだ pendingCard が残っている = 移動していない
+      // つまり「表向きカードのタップ」なので、裏向きに戻す
+      if (pendingCard) {
+          pendingCard.flipAction();
+      }
+
       isScrolling = false;
       pendingCard = null;
   };
