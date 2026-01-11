@@ -12,6 +12,7 @@ interface RoomInfo {
   p1_name: string;
   p2_name: string;
   turn: number;
+  created_at: string;
 }
 
 interface GameStartProps {
@@ -83,12 +84,20 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     }
   };
 
-  // 定期的にルーム一覧を更新 (5秒ごと)
   useEffect(() => {
     fetchRooms();
     const interval = setInterval(fetchRooms, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // 時刻フォーマット関数
+  const formatTime = (iso: string) => {
+      if (!iso || iso === 'N/A') return '';
+      try {
+          const d = new Date(iso);
+          return `${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+      } catch { return iso; }
+  };
 
   const styles = useMemo(() => ({
     container: {
@@ -328,14 +337,17 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
                             onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: room.game_id })}
                             className="room-item-hover"
                         >
-                            <span>Host: {room.p1_name} (Turn: {room.turn})</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span>Host: {room.p1_name} (Turn: {room.turn})</span>
+                                <span style={{ fontSize: '10px', color: '#888' }}>{formatTime(room.created_at)}</span>
+                            </div>
                             <span style={{ fontSize: '10px', background: '#3498db', padding: '2px 6px', borderRadius: 4, color: 'white' }}>JOIN</span>
                         </div>
                     ))
                 )}
             </div>
             
-            {/* ID手入力（念のため残す） */}
+            {/* ID手入力 */}
             <div style={{ display: 'flex', gap: 5 }}>
                 <input 
                   type="text" 

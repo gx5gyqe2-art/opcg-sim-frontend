@@ -188,14 +188,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         if (inspecting) return;
         if (dragState) return;
 
-        // ▼▼▼ 修正箇所: 型エラー回避のため、条件分岐を修正 ▼▼▼
+        // 操作制限
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
              const player = gameState.players[myPlayerId];
              if (card.owner_id && player && card.owner_id !== player.name) {
                  // 相手のカードを操作禁止にする場合はここで return
              }
         }
-        // ▲▲▲ 修正箇所ここまで ▲▲▲
 
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
@@ -413,6 +412,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
           setIsPending(false);
       }
   };
+
+  if (!gameState) {
+      return (
+          <div style={{ width: '100vw', height: '100vh', background: '#000', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+            <h2>Connecting to Sandbox...</h2>
+            {activeGameId && <p>Game ID: {activeGameId}</p>}
+          </div>
+      );
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
