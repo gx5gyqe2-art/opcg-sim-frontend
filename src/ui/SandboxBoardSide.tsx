@@ -8,8 +8,7 @@ export const createSandboxBoardSide = (
   isOpponent: boolean, 
   W: number, 
   coords: LayoutCoords, 
-  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void,
-  onInspect: (type: 'deck' | 'life', cards: CardInstance[]) => void
+  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -84,8 +83,7 @@ export const createSandboxBoardSide = (
   const lifeCard = { uuid: `life-${p.player_id}`, name: 'Life' } as any;
   const life = createCardContainer(lifeCard, coords.CW, coords.CH, { 
       ...getCardOpts(lifeCard), 
-      count: lifeList.length,
-      onClick: () => onInspect('life', lifeList)
+      count: lifeList.length
   });
   life.x = coords.getLifeX(W); life.y = r2Y;
   const topLife = lifeList.length > 0 ? lifeList[0] : null;
@@ -96,8 +94,7 @@ export const createSandboxBoardSide = (
   const deckList = z.deck || [];
   const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as any;
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, {
-      ...getCardOpts(deckCard),
-      onClick: () => onInspect('deck', deckList)
+      ...getCardOpts(deckCard)
   });
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   
@@ -156,21 +153,19 @@ export const createSandboxBoardSide = (
   if (topRestDon) setupInteractive(donRest, topRestDon);
   side.addChild(donRest);
 
-  // 手札（★修正: 枚数が多い場合に重ねて表示する）
+  // 手札（重ねて表示）
   const handList = z.hand || [];
-  const maxHandWidth = W * 0.9; // 画面幅の90%以内に収める
+  const maxHandWidth = W * 0.9;
   const cardWidth = coords.CW;
-  const totalWidthNeeded = handList.length * cardWidth + (handList.length - 1) * 10; // 通常の間隔
+  const totalWidthNeeded = handList.length * cardWidth + (handList.length - 1) * 10;
   
-  // 重ね合わせ計算
   let stepX = cardWidth + 10;
-  let startX = coords.getHandX(0, W); // デフォルトの開始位置（中央揃え想定）
+  let startX = coords.getHandX(0, W);
 
   if (totalWidthNeeded > maxHandWidth && handList.length > 1) {
       stepX = (maxHandWidth - cardWidth) / (handList.length - 1);
       startX = (W - maxHandWidth) / 2 + cardWidth / 2;
   } else if (handList.length > 0) {
-      // 通常配置（中央揃え）
       const contentWidth = (handList.length - 1) * stepX;
       startX = W / 2 - contentWidth / 2;
   }

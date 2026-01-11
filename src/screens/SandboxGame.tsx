@@ -14,7 +14,8 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-const InspectModal = ({ type, cards, onClose, onMove }: { type: string, cards: CardInstance[], onClose: () => void, onMove: (uuid: string, to: 'hand' | 'trash') => void }) => {
+// 確認用モーダル (To Life 追加)
+const InspectModal = ({ type, cards, onClose, onMove }: { type: string, cards: CardInstance[], onClose: () => void, onMove: (uuid: string, to: 'hand' | 'trash' | 'life') => void }) => {
     return (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ color: 'white', marginBottom: 20, fontSize: 24, fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</div>
@@ -27,7 +28,8 @@ const InspectModal = ({ type, cards, onClose, onMove }: { type: string, cards: C
                             onError={(e) => { e.currentTarget.style.display='none'; }}
                         />
                         <div style={{ position: 'absolute', bottom: 0, width: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <button onClick={() => onMove(c.uuid, 'hand')} style={{ fontSize: 10, background: '#3498db', color: 'white', border: 'none', cursor: 'pointer' }}>To Hand</button>
+                            <button onClick={() => onMove(c.uuid, 'hand')} style={{ fontSize: 10, background: '#3498db', color: 'white', border: 'none', cursor: 'pointer', marginBottom: 1 }}>To Hand</button>
+                            <button onClick={() => onMove(c.uuid, 'life')} style={{ fontSize: 10, background: '#f1c40f', color: 'black', border: 'none', cursor: 'pointer', marginBottom: 1 }}>To Life</button>
                             <button onClick={() => onMove(c.uuid, 'trash')} style={{ fontSize: 10, background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer' }}>To Trash</button>
                         </div>
                     </div>
@@ -133,6 +135,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
+    // 修正: 引数 container を削除
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState || inspecting) return;
 
@@ -150,20 +153,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    const handleInspect = (type: 'deck' | 'life', cards: CardInstance[], pid: string) => {
-        setInspecting({ type, cards, pid });
-    };
-
+    // SandboxBoardSideからは onInspect を削除
     const p1Side = createSandboxBoardSide(
-        gameState.players.p1, false, W, coords, onCardDown, 
-        (t, c) => handleInspect(t, c, 'p1')
+        gameState.players.p1, false, W, coords, onCardDown
     );
     p1Side.y = midY;
     app.stage.addChild(p1Side);
 
     const p2Side = createSandboxBoardSide(
-        gameState.players.p2, true, W, coords, onCardDown,
-        (t, c) => handleInspect(t, c, 'p2')
+        gameState.players.p2, true, W, coords, onCardDown
     );
     p2Side.y = 0;
     app.stage.addChild(p2Side);
@@ -181,7 +179,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const onPointerMove = (e: PointerEvent) => {
         if (!dragState) return;
         
-        // リーダーは固定
         if (dragState.card.type === 'LEADER') return;
 
         const newPos = { x: e.clientX, y: e.clientY };
@@ -195,10 +192,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const endPos = { x: e.clientX, y: e.clientY };
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
-        // 1. リーダーの特別処理
         if (card.type === 'LEADER') {
             if (distFromStart < 10) {
-                // クリックならレスト切替
                 handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             }
             setDragState(null);
@@ -212,7 +207,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         let destPid = endPos.y > midY ? 'p1' : 'p2';
         let destZone = 'field'; 
 
-        // 相手陣地へのドロップ禁止
         if (destPid === 'p2') {
             setDragState(null);
             return;
@@ -234,6 +228,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
             if (checkDist(coords.getLeaderX(W), row2Y) < THRESHOLD) return 'leader';
             if (checkDist(coords.getStageX(W), row2Y) < THRESHOLD) return 'stage';
+            // ★追加: ライフ
+            if (checkDist(coords.getLifeX(W), row2Y) < THRESHOLD) return 'life';
             if (checkDist(coords.getTrashX(W), row3Y) < THRESHOLD) return 'trash';
             if (checkDist(coords.getDeckX(W), row2Y) < THRESHOLD) return 'deck';
             
@@ -246,11 +242,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // 2. ドン!!カードの処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-                // 付与判定
                 const leaderX = coords.getLeaderX(W);
                 const leaderY = destPid === 'p2' ? (coords.midY - coords.getY(2) - coords.CH/2) : (midY + coords.getY(2) + coords.CH/2);
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
@@ -270,7 +264,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 }
             }
 
-            // 移動先判定: ドンエリアのみ許可
             const dZone = checkZone(destPid === 'p2');
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
@@ -279,21 +272,34 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
-        // 3. 通常カードの処理
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
-        // 通常カードがドンエリアに行かないように制限
         if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
             setDragState(null);
             return;
         }
 
         if (distFromStart < 10) {
-            // ★追加: 手札の場合はレスト切り替えしない
-            // 手札判定: gameStateから検索
-            const isInHand = gameState?.players.p1.zones.hand.some(c => c.uuid === card.uuid);
+            // ★追加: クリック時の確認ロジック
+            const p1 = gameState?.players.p1;
+            const p2 = gameState?.players.p2;
             
+            // カードが山札かライフにあるかチェック
+            const findInStack = (p: any, pid: string) => {
+                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck, pid };
+                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life, pid };
+                return null;
+            };
+            
+            const stackInfo = (p1 && findInStack(p1, 'p1')) || (p2 && findInStack(p2, 'p2'));
+            if (stackInfo) {
+                setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: stackInfo.pid });
+                setDragState(null);
+                return;
+            }
+
+            const isInHand = gameState?.players.p1.zones.hand.some(c => c.uuid === card.uuid);
             if (!isInHand) {
                 handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             }
@@ -334,7 +340,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       }
   };
 
-  const handleInspectMove = async (uuid: string, to: 'hand' | 'trash') => {
+  const handleInspectMove = async (uuid: string, to: 'hand' | 'trash' | 'life') => {
       if (!gameState || !inspecting) return;
       await handleAction('MOVE_CARD', {
           card_uuid: uuid,
