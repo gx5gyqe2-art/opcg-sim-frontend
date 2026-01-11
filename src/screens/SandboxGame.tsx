@@ -201,11 +201,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
         let destZone = 'field'; 
 
-        // 所有者と移動先のプレイヤーIDが不一致なら操作キャンセル（自分のカードは自分の盤面のみ）
+        // 所有権チェック
         if (card.owner_id) {
             const p1Name = gameState?.players.p1.name;
             const p2Name = gameState?.players.p2.name;
-            
             if (card.owner_id === p1Name && destPid === 'p2') {
                 setDragState(null);
                 return;
@@ -241,24 +240,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ドン処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-                // 付与先判定（座標計算はドロップエリアに応じて切り替える）
-                const yBase = isTopArea ? 0 : midY;
-                const leaderY = isTopArea ? (coords.midY - coords.getY(2) - coords.CH/2) : (yBase + coords.getY(2) + coords.CH/2);
-                
-                // リーダー付与
                 const leaderX = coords.getLeaderX(W);
+                const leaderY = midY + coords.getY(2) + coords.CH/2;
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
                      handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid });
                      setDragState(null);
                      return;
                 }
-                
-                // キャラ付与
-                const fieldY = isTopArea ? (coords.midY - coords.getY(1) - coords.CH/2) : (yBase + coords.getY(1) + coords.CH/2);
+                const fieldY = midY + coords.getY(1) + coords.CH/2;
                 const fieldCards = targetPlayer.zones.field;
                 for (let i = 0; i < fieldCards.length; i++) {
                     const cx = coords.getFieldX(i, W, coords.CW, fieldCards.length);
@@ -269,9 +261,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                     }
                 }
             }
-            
-            // ★修正: ドンエリア判定に isTopArea を渡す
-            const dZone = checkZone(isTopArea); 
+            const dZone = checkZone(false); 
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
             }
@@ -279,9 +269,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
-        // 通常カード処理
-        // ★修正: エリア判定に isTopArea を渡す
-        const detectedZone = checkZone(isTopArea); 
+        const detectedZone = checkZone(false); 
         if (detectedZone) destZone = detectedZone;
         
         if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
@@ -295,16 +283,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 return;
             }
 
-            // クリック時のインスペクター表示
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            const findInStack = (p: any, pid: string) => {
+            
+            // 修正: 引数 pid を削除
+            const findInStack = (p: any) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' };
                 if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' };
                 return null;
             };
+            
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer, destPid);
+                const stackInfo = findInStack(currentPlayer);
                 if (stackInfo) {
                     setInspecting({ type: stackInfo.type as any, pid: destPid });
                     setDragState(null);
