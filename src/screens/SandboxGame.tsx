@@ -114,15 +114,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    // 共通ドラッグ開始処理 (座標を受け取るように変更)
     const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(startPoint.x, startPoint.y);
         ghost.alpha = 0.8;
         ghost.scale.set(1.1);
-        
         app.stage.addChild(ghost);
-
         setDragState({
             card,
             sprite: ghost,
@@ -134,7 +131,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         if (isPending) return;
         if (inspecting) return;
         if (dragState) return;
-
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
@@ -161,7 +157,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             () => setInspecting(null),
             (card, startPos) => {
                 // Overlayからのドラッグ開始
-                startDrag(card, startPos);
+                // イベントオブジェクトの代わりに座標を渡すように修正済み
+                startDrag(card, { x: startPos.x, y: startPos.y });
             }
         );
         app.stage.addChild(overlay);
@@ -279,13 +276,16 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             }
 
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            const findInStack = (p: any, pid: string) => {
+            
+            // 修正: pid 引数を削除
+            const findInStack = (p: any) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' };
                 return null;
             };
+            
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer, destPid);
+                const stackInfo = findInStack(currentPlayer);
                 if (stackInfo) {
                     setInspecting({ type: stackInfo.type as any, pid: destPid });
                     setDragState(null);
