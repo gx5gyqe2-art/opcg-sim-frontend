@@ -20,7 +20,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
-  // 座標管理用のステート
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const { COLORS } = LAYOUT_CONSTANTS;
@@ -41,11 +40,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
-  // PixiJS初期化 & リサイズハンドラ
+  // PixiJS初期化
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
-    // 既存のCanvasがあれば削除
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
@@ -62,13 +60,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
-    // 初回座標計算
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
-      // リサイズ時に座標を再計算
       const newCoords = calculateCoordinates(window.innerWidth, window.innerHeight);
       setLayoutCoords(newCoords.turnEndPos);
     };
@@ -85,11 +81,30 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const app = appRef.current;
     if (!app || !gameState) return;
 
-    while (app.stage.children.length > 0) {
-      const c = app.stage.children[0];
-      app.stage.removeChild(c);
-      c.destroy({ children: true });
-    }
+    // --- 修正箇所: 既存オブジェクトのクリーンアップ処理 ---
+    // 単純に destroy するとドラッグ中のスプライトも消えてしまうため、選別する
+    const childrenToDestroy: PIXI.DisplayObject[] = [];
+    
+    // ステージ上の子要素を走査
+    // 注意: forEachなどで回しながら removeChild するとインデックスがずれるため、コピーまたは後ろから回す
+    const children = [...app.stage.children];
+    
+    children.forEach(child => {
+      // ドラッグ中のスプライトなら、ステージから外すだけで destroy はしない
+      if (dragState && child === dragState.sprite) {
+        app.stage.removeChild(child);
+      } else {
+        // それ以外は削除リストへ
+        childrenToDestroy.push(child);
+      }
+    });
+
+    // 削除リストのオブジェクトを実際に削除・破棄
+    childrenToDestroy.forEach(child => {
+      app.stage.removeChild(child);
+      child.destroy({ children: true });
+    });
+    // ---------------------------------------------------
 
     const { width: W, height: H } = app.screen;
     const coords = calculateCoordinates(W, H);
@@ -136,12 +151,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     p2Side.y = 0;
     app.stage.addChild(p2Side);
 
-    // ドラッグ中のスプライト維持
+    // ドラッグ中のスプライトを最前面に再追加
     if (dragState) {
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending]);
+  }, [gameState, isPending, dragState]); // dragStateを依存配列に追加
 
   // グローバルイベントリスナー (Drag Move/Up)
   useEffect(() => {
@@ -217,7 +232,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             console.error(e);
         } finally {
             setIsPending(false);
-            setDragState(null);
+            setDragState(null); // ここでStateをnullにする
+            // 注意: State更新後の再レンダリングでuseEffectが走り、dragState.sprite (null) は無視されるので、
+            // 古いスプライトは次回のクリーンアップで消えるか、手動で消す必要がある。
+            // 今回のロジックでは次回のuseEffectでchildrenToDestroyに含まれて消えるはず。
         }
     };
 
@@ -248,16 +266,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       
-      {/* 1. Canvas Layer */}
       <div 
         ref={pixiContainerRef} 
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} 
       />
 
-      {/* 2. UI Overlay Layer */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
           
-          {/* 左上: 戻るボタンなど */}
           <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}>
               <button 
                 onClick={onBack}
@@ -278,7 +293,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
               </div>
           </div>
 
-          {/* ターン終了ボタン */}
           <button 
             onClick={handleTurnEnd} 
             disabled={isPending}
