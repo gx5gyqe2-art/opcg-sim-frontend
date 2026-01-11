@@ -27,8 +27,7 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
             top: '60px', 
             left: '50%', 
             transform: 'translateX(-50%)', 
-            width: '90%', // 幅を少し広げる
-            // 高さ指定は削除または内容に合わせて調整
+            width: '90%', 
             backgroundColor: 'rgba(30, 30, 30, 0.95)', 
             zIndex: 200, 
             display: 'flex', 
@@ -37,7 +36,6 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
             border: '2px solid #555',
             boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }}>
-            {/* Header */}
             <div style={{ 
                 width: '100%', 
                 padding: '10px 15px', 
@@ -54,31 +52,24 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
                 <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
             </div>
             
-            {/* Content (横スクロール) */}
             <div style={{ 
                 display: 'flex', 
-                flexWrap: 'nowrap', // 折り返さない
+                flexWrap: 'nowrap', 
                 gap: '10px', 
                 padding: '15px', 
                 width: '100%', 
-                overflowX: 'auto', // 横スクロール有効化
+                overflowX: 'auto', 
                 overflowY: 'hidden',
-                justifyContent: 'flex-start', // 左詰め
+                justifyContent: 'flex-start',
                 alignItems: 'center',
                 boxSizing: 'border-box',
-                whiteSpace: 'nowrap', //念のため
-                minHeight: '120px' // スクロールバー考慮
+                whiteSpace: 'nowrap',
+                minHeight: '120px'
             }}>
                 {cards.map(c => (
                     <div 
                         key={c.uuid} 
-                        style={{ 
-                            position: 'relative', 
-                            width: '60px', 
-                            height: '84px', 
-                            cursor: 'grab',
-                            flexShrink: 0 // 縮小しない
-                        }}
+                        style={{ position: 'relative', width: '60px', height: '84px', cursor: 'grab', flexShrink: 0 }}
                         onPointerDown={(e) => onStartDrag(e, c)}
                     >
                         <img 
@@ -101,8 +92,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
-  
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
+  
+  // ★追加: 視点切り替えフラグ (false: P1視点, true: P2視点)
+  const [isRotated, setIsRotated] = useState(false);
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
@@ -156,6 +149,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, []);
 
+  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -206,24 +200,40 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    const p1Side = createSandboxBoardSide(
-        gameState.players.p1, false, W, coords, onCardDown
-    );
-    p1Side.y = midY;
-    app.stage.addChild(p1Side);
+    const handleInspect = (type: 'deck' | 'life', cards: CardInstance[], pid: string) => {
+        setInspecting({ type, cards, pid });
+    };
 
-    const p2Side = createSandboxBoardSide(
-        gameState.players.p2, true, W, coords, onCardDown
+    // ★修正: 視点に応じて描画するプレイヤーを入れ替える
+    // 下側 (手前)
+    const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
+    const bottomPid = isRotated ? 'p2' : 'p1';
+    
+    // 上側 (奥)
+    const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
+    const topPid = isRotated ? 'p1' : 'p2';
+
+    const bottomSide = createSandboxBoardSide(
+        bottomPlayer, false, W, coords, onCardDown, 
+        (t, c) => handleInspect(t, c, bottomPid)
     );
-    p2Side.y = 0;
-    app.stage.addChild(p2Side);
+    bottomSide.y = midY;
+    app.stage.addChild(bottomSide);
+
+    const topSide = createSandboxBoardSide(
+        topPlayer, true, W, coords, onCardDown,
+        (t, c) => handleInspect(t, c, topPid)
+    );
+    topSide.y = 0;
+    app.stage.addChild(topSide);
 
     if (dragState) {
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState, inspecting]);
+  }, [gameState, isPending, dragState, inspecting, isRotated]); // isRotatedを依存に追加
 
+  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -256,10 +266,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const coords = calculateCoordinates(W, H);
         const midY = H / 2;
 
-        let destPid = endPos.y > midY ? 'p1' : 'p2';
+        // ★修正: 視点に基づいてドロップ先のプレイヤーIDを判定
+        const isTopArea = endPos.y < midY;
+        let destPid = isTopArea 
+            ? (isRotated ? 'p1' : 'p2') 
+            : (isRotated ? 'p2' : 'p1');
+        
         let destZone = 'field'; 
 
-        if (destPid === 'p2') {
+        // 相手陣地（奥側）へのドロップ禁止
+        // ※「相手」とは視点上の「奥側」を指す
+        // つまり isTopArea が true なら操作禁止
+        if (isTopArea) {
             setDragState(null);
             return;
         }
@@ -272,11 +290,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
         const THRESHOLD = coords.CH; 
         
-        const checkZone = (isOpp: boolean) => {
-            const yBase = isOpp ? 0 : midY;
-            const row2Y = isOpp ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
-            const row3Y = isOpp ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
-            const row4Y = isOpp ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
+        // ★修正: Y座標判定用のフラグを「奥側かどうか」で渡す
+        const checkZone = (isTopSide: boolean) => {
+            const yBase = isTopSide ? 0 : midY;
+            const row2Y = isTopSide ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
+            const row3Y = isTopSide ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
+            const row4Y = isTopSide ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
 
             if (checkDist(coords.getLeaderX(W), row2Y) < THRESHOLD) return 'leader';
             if (checkDist(coords.getStageX(W), row2Y) < THRESHOLD) return 'stage';
@@ -293,17 +312,21 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
+        // ドン!!カードの処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
+                // 付与判定 (奥側の座標計算はドラッグ不可にしたので手前側のみ計算すればOK)
+                // isTopArea=false (手前) なので yBase=midY
                 const leaderX = coords.getLeaderX(W);
-                const leaderY = destPid === 'p2' ? (coords.midY - coords.getY(2) - coords.CH/2) : (midY + coords.getY(2) + coords.CH/2);
+                const leaderY = midY + coords.getY(2) + coords.CH/2;
+                
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
                      handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid });
                      setDragState(null);
                      return;
                 }
-                const fieldY = destPid === 'p2' ? (coords.midY - coords.getY(1) - coords.CH/2) : (midY + coords.getY(1) + coords.CH/2);
+                const fieldY = midY + coords.getY(1) + coords.CH/2;
                 const fieldCards = targetPlayer.zones.field;
                 for (let i = 0; i < fieldCards.length; i++) {
                     const cx = coords.getFieldX(i, W, coords.CW, fieldCards.length);
@@ -315,7 +338,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 }
             }
 
-            const dZone = checkZone(destPid === 'p2');
+            // 移動先判定: 手前側なので isTopSide=false
+            const dZone = checkZone(false);
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
             }
@@ -323,7 +347,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
-        const detectedZone = checkZone(destPid === 'p2');
+        // 通常カードの処理
+        const detectedZone = checkZone(false); // 手前側へのドロップなのでfalse
         if (detectedZone) destZone = detectedZone;
         
         if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
@@ -332,29 +357,31 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         }
 
         if (distFromStart < 10) {
-            const p1 = gameState?.players.p1;
-            const p2 = gameState?.players.p2;
+            // 現在の操作プレイヤーIDに対応するプレイヤーデータを取得
+            const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             
-            const findInStack = (p: any, pid: string) => {
-                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck, pid };
-                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life, pid };
+            // 山札/ライフ確認
+            const findInStack = (p: any) => {
+                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck };
+                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life };
                 return null;
             };
             
-            const stackInfo = (p1 && findInStack(p1, 'p1')) || (p2 && findInStack(p2, 'p2'));
-            if (stackInfo) {
-                setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: stackInfo.pid });
-                setDragState(null);
-                return;
+            if (currentPlayer) {
+                const stackInfo = findInStack(currentPlayer);
+                if (stackInfo) {
+                    setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: destPid });
+                    setDragState(null);
+                    return;
+                }
             }
 
-            // インスペクターからの操作中はクリック判定でレストしない
             if (inspecting) {
                 setDragState(null);
                 return;
             }
 
-            const isInHand = gameState?.players.p1.zones.hand.some(c => c.uuid === card.uuid);
+            const isInHand = currentPlayer?.zones.hand.some(c => c.uuid === card.uuid);
             if (!isInHand) {
                 handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             }
@@ -377,7 +404,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [dragState, gameState, inspecting]);
+  }, [dragState, gameState, inspecting, isRotated]); // isRotatedを依存に追加
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState) return;
@@ -429,6 +456,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
               >
                 TOPへ
               </button>
+              
+              {/* ★追加: 視点切り替えボタン */}
+              <button 
+                onClick={() => setIsRotated(!isRotated)}
+                style={{ zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(0, 0, 0, 0.6)', color: '#3498db', border: '1px solid #3498db', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
+                視点切替 ({isRotated ? 'P2' : 'P1'})
+              </button>
+
               <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                   Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
               </div>
