@@ -5,7 +5,8 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
 import { apiClient } from '../api/client';
-import type { GameState, CardInstance } from '../game/types';
+import type { GameState, CardInstance, BoardCard } from '../game/types';
+import { API_CONFIG } from '../api/api.config';
 
 type DragState = {
   card: CardInstance;
@@ -13,12 +14,38 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
+// 確認用モーダルコンポーネント
+const InspectModal = ({ type, cards, onClose, onMove }: { type: string, cards: CardInstance[], onClose: () => void, onMove: (uuid: string, to: 'hand' | 'trash') => void }) => {
+    return (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: 'white', marginBottom: 20, fontSize: 24, fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: '80%', maxHeight: '60%', overflowY: 'auto', justifyContent: 'center' }}>
+                {cards.map(c => (
+                    <div key={c.uuid} style={{ position: 'relative', width: 80, height: 112 }}>
+                        <img 
+                            src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
+                            style={{ width: '100%', height: '100%', borderRadius: 4 }}
+                            onError={(e) => { e.currentTarget.style.display='none'; }}
+                        />
+                        <div style={{ position: 'absolute', bottom: 0, width: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <button onClick={() => onMove(c.uuid, 'hand')} style={{ fontSize: 10, background: '#3498db', color: 'white', border: 'none', cursor: 'pointer' }}>To Hand</button>
+                            <button onClick={() => onMove(c.uuid, 'trash')} style={{ fontSize: 10, background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer' }}>To Trash</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <button onClick={onClose} style={{ marginTop: 20, padding: '10px 30px', fontSize: 18, cursor: 'pointer' }}>Close</button>
+        </div>
+    );
+};
+
 export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
+  const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
   
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
@@ -83,7 +110,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
     const childrenToDestroy: PIXI.DisplayObject[] = [];
     const children = [...app.stage.children];
-    
     children.forEach(child => {
       if (dragState && child === dragState.sprite) {
         app.stage.removeChild(child);
@@ -91,7 +117,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         childrenToDestroy.push(child);
       }
     });
-
     childrenToDestroy.forEach(child => {
       app.stage.removeChild(child);
       child.destroy({ children: true });
@@ -112,15 +137,14 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
-        if (isPending || dragState) return;
+    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => {
+        if (isPending || dragState || inspecting) return;
 
         const globalPos = e.global.clone();
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(globalPos.x, globalPos.y);
         ghost.alpha = 0.8;
         ghost.scale.set(1.1);
-        
         app.stage.addChild(ghost);
 
         setDragState({
@@ -130,11 +154,22 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    const p1Side = createSandboxBoardSide(gameState.players.p1, false, W, coords, onCardDown);
+    const handleInspect = (type: 'deck' | 'life', cards: CardInstance[], pid: string) => {
+        setInspecting({ type, cards, pid });
+    };
+
+    // ボード描画
+    const p1Side = createSandboxBoardSide(
+        gameState.players.p1, false, W, coords, onCardDown, 
+        (t, c) => handleInspect(t, c, 'p1')
+    );
     p1Side.y = midY;
     app.stage.addChild(p1Side);
 
-    const p2Side = createSandboxBoardSide(gameState.players.p2, true, W, coords, onCardDown);
+    const p2Side = createSandboxBoardSide(
+        gameState.players.p2, true, W, coords, onCardDown,
+        (t, c) => handleInspect(t, c, 'p2')
+    );
     p2Side.y = 0;
     app.stage.addChild(p2Side);
 
@@ -142,9 +177,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState]);
+  }, [gameState, isPending, dragState, inspecting]);
 
-  // グローバルイベントリスナー
+  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -176,22 +211,19 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
         const THRESHOLD = coords.CH; 
         
-        // ▼▼▼ ゾーン判定の修正 ▼▼▼
         const checkZone = (isOpp: boolean) => {
             const yBase = isOpp ? 0 : midY;
-            
-            // 座標定義（BoardSide.tsxの配置ロジックと一致させる）
             const row2Y = isOpp ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
             const row3Y = isOpp ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
             const row4Y = isOpp ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
 
             if (checkDist(coords.getLeaderX(W), row2Y) < THRESHOLD) return 'leader';
+            if (checkDist(coords.getStageX(W), row2Y) < THRESHOLD) return 'stage'; // ★追加: ステージ
             if (checkDist(coords.getTrashX(W), row3Y) < THRESHOLD) return 'trash';
             if (checkDist(coords.getDeckX(W), row2Y) < THRESHOLD) return 'deck';
             
             if (Math.abs(row4Y - endPos.y) < coords.CH) return 'hand';
 
-            // ドン!!関連
             if (checkDist(coords.getDonDeckX(W), row3Y) < THRESHOLD) return 'don_deck';
             if (checkDist(coords.getDonActiveX(W), row3Y) < THRESHOLD) return 'don_active';
             if (checkDist(coords.getDonRestX(W), row3Y) < THRESHOLD) return 'don_rested';
@@ -199,40 +231,57 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
+        // ★追加: ドン!!付与判定 (キャラクターへのドロップ)
+        if (card.card_id === "DON") { // ドンカードの場合
+            // フィールドのカードとの距離を確認
+            const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+            if (targetPlayer) {
+                const fieldCards = targetPlayer.zones.field;
+                const fieldY = destPid === 'p2' ? 
+                    (coords.midY - coords.getY(1) - coords.CH/2) : 
+                    (midY + coords.getY(1) + coords.CH/2);
+                
+                // リーダーもチェック
+                const leaderX = coords.getLeaderX(W);
+                const leaderY = destPid === 'p2' ? 
+                    (coords.midY - coords.getY(2) - coords.CH/2) : 
+                    (midY + coords.getY(2) + coords.CH/2);
+                
+                if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
+                     // Leader attach
+                     handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid });
+                     setDragState(null);
+                     return;
+                }
+
+                // Field attach
+                for (let i = 0; i < fieldCards.length; i++) {
+                    const cx = coords.getFieldX(i, W, coords.CW, fieldCards.length);
+                    if (checkDist(cx, fieldY) < THRESHOLD) {
+                        handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: fieldCards[i].uuid });
+                        setDragState(null);
+                        return;
+                    }
+                }
+            }
+        }
+
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
         if (distFromStart < 10) {
-            setIsPending(true);
-            try {
-                const res = await apiClient.sendSandboxAction(gameState!.game_id, {
-                    action_type: 'TOGGLE_REST',
-                    card_uuid: card.uuid
-                });
-                setGameState(res.state);
-            } finally {
-                setIsPending(false);
-                setDragState(null);
-            }
+            handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            setDragState(null);
             return;
         }
 
-        setIsPending(true);
-        try {
-            const res = await apiClient.sendSandboxAction(gameState!.game_id, {
-                action_type: 'MOVE_CARD',
-                card_uuid: card.uuid,
-                dest_player_id: destPid,
-                dest_zone: destZone
-            });
-            setGameState(res.state);
-        } catch(e) {
-            console.error(e);
-        } finally {
-            setIsPending(false);
-            setDragState(null);
-        }
+        handleAction('MOVE_CARD', {
+            card_uuid: card.uuid,
+            dest_player_id: destPid,
+            dest_zone: destZone
+        });
+        setDragState(null);
     };
 
     window.addEventListener('pointermove', onPointerMove);
@@ -244,43 +293,46 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, [dragState, gameState]);
 
-  const handleTurnEnd = async () => {
-    if (!gameState || isPending) return;
-    setIsPending(true);
-    try {
-        const res = await apiClient.sendSandboxAction(gameState.game_id, {
-            action_type: 'TURN_END'
-        });
-        setGameState(res.state);
-    } catch(e) {
-        console.error("Turn end failed", e);
-    } finally {
-        setIsPending(false);
-    }
+  const handleAction = async (type: string, params: any) => {
+      if (isPending || !gameState) return;
+      setIsPending(true);
+      try {
+          const res = await apiClient.sendSandboxAction(gameState.game_id, {
+              action_type: type,
+              ...params
+          });
+          setGameState(res.state);
+      } catch(e) {
+          console.error(e);
+      } finally {
+          setIsPending(false);
+      }
+  };
+
+  const handleInspectMove = async (uuid: string, to: 'hand' | 'trash') => {
+      if (!gameState || !inspecting) return;
+      // Inspecting state clears automatically via re-render or we keep it?
+      // Better to keep it open, but we need to update state.
+      // For simplicity, close it, or update it if we had realtime updates.
+      // Here just execute action.
+      await handleAction('MOVE_CARD', {
+          card_uuid: uuid,
+          dest_player_id: inspecting.pid,
+          dest_zone: to
+      });
+      setInspecting(null); // Close after move
   };
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       
-      <div 
-        ref={pixiContainerRef} 
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} 
-      />
+      <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
-          
           <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}>
               <button 
                 onClick={onBack}
-                style={{
-                  zIndex: Z_INDEX.OVERLAY + 20,
-                  background: 'rgba(0, 0, 0, 0.6)',
-                  color: 'white',
-                  border: '1px solid #555',
-                  borderRadius: '4px',
-                  padding: '5px 10px',
-                  cursor: 'pointer'
-                }}
+                style={{ zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}
               >
                 TOPへ
               </button>
@@ -290,7 +342,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
           </div>
 
           <button 
-            onClick={handleTurnEnd} 
+            onClick={() => handleAction('TURN_END', {})}
             disabled={isPending}
             style={{
               position: 'absolute',
@@ -300,19 +352,23 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
               transform: 'translateY(-50%)',
               padding: '10px 20px',
               backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '5px',
-              cursor: isPending ? 'not-allowed' : 'pointer', 
-              zIndex: Z_INDEX.NOTIFICATION, 
-              fontWeight: 'bold',
-              pointerEvents: 'auto'
+              color: 'white', border: 'none', borderRadius: '5px', cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold', pointerEvents: 'auto'
             }}
           >
             {isPending ? '送信中...' : 'ターン終了'}
           </button>
-
       </div>
+
+      {inspecting && (
+          <div style={{ pointerEvents: 'auto' }}>
+              <InspectModal 
+                  type={inspecting.type} 
+                  cards={inspecting.cards} 
+                  onClose={() => setInspecting(null)} 
+                  onMove={handleInspectMove}
+              />
+          </div>
+      )}
 
     </div>
   );

@@ -8,7 +8,8 @@ export const createSandboxBoardSide = (
   isOpponent: boolean, 
   W: number, 
   coords: LayoutCoords, 
-  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void
+  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void,
+  onInspect: (type: 'deck' | 'life', cards: CardInstance[]) => void // ★追加
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -60,12 +61,12 @@ export const createSandboxBoardSide = (
   const r3Y = getAdjustedY(3);
   const r4Y = getAdjustedY(4);
 
-  // リーダー
+  // リーダー (★修正: setupInteractive を削除し、移動不可にする)
   if (p.leader) {
     const ldr = createCardContainer(p.leader, coords.CW, coords.CH, getCardOpts(p.leader));
     ldr.x = coords.getLeaderX(W); 
     ldr.y = r2Y;
-    setupInteractive(ldr, p.leader);
+    // リーダーは固定なのでドラッグ設定しない
     side.addChild(ldr);
   }
 
@@ -78,22 +79,31 @@ export const createSandboxBoardSide = (
     side.addChild(stg);
   }
 
-  // ライフ
+  // ライフ (★修正: クリックで中身確認)
+  const lifeList = z.life || [];
   const lifeCard = { uuid: `life-${p.player_id}`, name: 'Life' } as any;
-  const life = createCardContainer(lifeCard, coords.CW, coords.CH, { ...getCardOpts(lifeCard), count: z.life?.length || 0 });
+  const life = createCardContainer(lifeCard, coords.CW, coords.CH, { 
+      ...getCardOpts(lifeCard), 
+      count: lifeList.length,
+      onClick: () => onInspect('life', lifeList) // クリックで確認
+  });
   life.x = coords.getLifeX(W); life.y = r2Y;
-  const topLife = z.life && z.life.length > 0 ? z.life[0] : null;
+  // 一番上もドラッグは可能にしておく（そのまま手札に加えたい場合など）
+  // ただし確認モーダルがメインならドラッグは不要かもしれないが、一応残す
+  const topLife = lifeList.length > 0 ? lifeList[0] : null;
   if (topLife) setupInteractive(life, topLife); 
   side.addChild(life);
 
-  // デッキ
+  // デッキ (★修正: クリックで中身確認)
+  const deckList = z.deck || [];
   const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as any;
-  const deck = createCardContainer(deckCard, coords.CW, coords.CH, getCardOpts(deckCard));
+  const deck = createCardContainer(deckCard, coords.CW, coords.CH, {
+      ...getCardOpts(deckCard),
+      onClick: () => onInspect('deck', deckList) // クリックで確認
+  });
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   
-  const deckList = z.deck || [];
   const topDeck = deckList.length > 0 ? deckList[0] : null;
-  
   if (topDeck) setupInteractive(deck, topDeck);
   side.addChild(deck);
 
@@ -109,7 +119,6 @@ export const createSandboxBoardSide = (
   side.addChild(trash);
 
   // ドン!!デッキ
-  // ★変更: ドンデッキのカードリストを取得し、一番上のカードを操作可能にする
   const donDeckList = z.don_deck || []; 
   const donDeckCount = (p as any).don_deck_count ?? donDeckList.length;
 
@@ -120,7 +129,6 @@ export const createSandboxBoardSide = (
   );
   donDeck.x = coords.getDonDeckX(W); donDeck.y = r3Y;
 
-  // ★追加: 一番上のドン!!カードがあればインタラクションを設定
   const topDon = donDeckList.length > 0 ? donDeckList[0] : null;
   if (topDon) setupInteractive(donDeck, topDon);
 
