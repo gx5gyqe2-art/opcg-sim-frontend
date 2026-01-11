@@ -8,8 +8,8 @@ export const createSandboxBoardSide = (
   isOpponent: boolean, 
   W: number, 
   coords: LayoutCoords, 
-  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void
-  // 第6引数 onInspect を削除
+  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void,
+  hideHand: boolean = false 
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -175,9 +175,16 @@ export const createSandboxBoardSide = (
   }
 
   handList.forEach((c: CardInstance, i: number) => {
-    const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
+    // hideHandがtrueなら、カード情報を上書きして「裏面」にする
+    const renderCard = hideHand 
+        ? { ...c, is_face_up: false, card_id: undefined, name: 'Card' } 
+        : c;
+
+    const card = createCardContainer(renderCard, coords.CW, coords.CH, getCardOpts(renderCard));
     card.x = startX + i * stepX;
     card.y = r4Y;
+    
+    // イベント自体は元のカードオブジェクト(UUID等)で行う
     setupInteractive(card, c);
     side.addChild(card);
   });

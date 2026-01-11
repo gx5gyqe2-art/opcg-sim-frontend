@@ -7,6 +7,13 @@ interface DeckOption {
   name: string;
 }
 
+interface RoomInfo {
+  game_id: string;
+  p1_name: string;
+  p2_name: string;
+  turn: number;
+}
+
 interface GameStartProps {
   onStart: (
     p1: string, 
@@ -19,9 +26,10 @@ interface GameStartProps {
 
 const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
+  const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
-  const [joinGameId, setJoinGameId] = useState('');
+  const [manualGameId, setManualGameId] = useState('');
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -62,6 +70,26 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     fetchDecks();
   }, []);
 
+  // ルーム一覧取得関数
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/sandbox/list`);
+      const data = await res.json();
+      if (data.success) {
+        setRooms(data.games);
+      }
+    } catch (e) {
+      console.error("Failed to load rooms", e);
+    }
+  };
+
+  // 定期的にルーム一覧を更新 (5秒ごと)
+  useEffect(() => {
+    fetchRooms();
+    const interval = setInterval(fetchRooms, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const styles = useMemo(() => ({
     container: {
       minHeight: '100vh',
@@ -87,7 +115,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
     title: {
       fontSize: isMobile ? 'clamp(32px, 10vw, 50px)' : 'clamp(40px, 8vw, 80px)',
       fontWeight: '900',
-      marginBottom: isMobile ? '30px' : '50px',
+      marginBottom: isMobile ? '20px' : '40px',
       background: 'linear-gradient(to bottom, #ffd700, #b8860b, #8b4513)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
@@ -196,6 +224,25 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
       letterSpacing: '2px',
       width: isMobile ? '100%' : 'auto',
       boxSizing: 'border-box' as const
+    },
+    roomList: {
+      width: '100%',
+      maxHeight: '150px',
+      overflowY: 'auto' as const,
+      background: '#222',
+      border: '1px solid #555',
+      borderRadius: '4px',
+      padding: '5px'
+    },
+    roomItem: {
+      padding: '8px',
+      borderBottom: '1px solid #444',
+      cursor: 'pointer',
+      color: '#ddd',
+      fontSize: '14px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
     }
   }), [isMobile]);
 
@@ -257,31 +304,54 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder }) => {
            </button>
         </div>
 
-        {/* オンライン対戦用 */}
-        <div style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'center' }}>
+        {/* オンライン対戦用エリア */}
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ color: '#aaa', fontSize: '12px', fontWeight: 'bold' }}>ONLINE BATTLE</div>
+            
             <button 
               onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1' })}
-              style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db', fontSize: '14px' }}
+              style={{ ...styles.subBtn, width: '100%', borderColor: '#3498db', color: '#3498db', fontSize: '14px' }}
               className="hover-scale"
             >
-              部屋作成 (P1)
+              新規ルーム作成 (Host P1)
             </button>
-            <div style={{ flex: 1, display: 'flex', gap: 5 }}>
+
+            {/* ルームリスト */}
+            <div style={styles.roomList}>
+                {rooms.length === 0 ? (
+                    <div style={{ padding: 10, color: '#666', textAlign: 'center' }}>ルームがありません</div>
+                ) : (
+                    rooms.map(room => (
+                        <div 
+                            key={room.game_id} 
+                            style={styles.roomItem}
+                            onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: room.game_id })}
+                            className="room-item-hover"
+                        >
+                            <span>Host: {room.p1_name} (Turn: {room.turn})</span>
+                            <span style={{ fontSize: '10px', background: '#3498db', padding: '2px 6px', borderRadius: 4, color: 'white' }}>JOIN</span>
+                        </div>
+                    ))
+                )}
+            </div>
+            
+            {/* ID手入力（念のため残す） */}
+            <div style={{ display: 'flex', gap: 5 }}>
                 <input 
                   type="text" 
-                  placeholder="Game ID"
-                  value={joinGameId}
-                  onChange={(e) => setJoinGameId(e.target.value)}
-                  style={{ width: '100%', padding: '5px', borderRadius: 4, border: '1px solid #555', background: '#222', color: '#fff' }}
+                  placeholder="Manual Game ID"
+                  value={manualGameId}
+                  onChange={(e) => setManualGameId(e.target.value)}
+                  style={{ flex: 1, padding: '5px', borderRadius: 4, border: '1px solid #555', background: '#222', color: '#fff' }}
                 />
                 <button
                   onClick={() => {
-                      if(!joinGameId) return alert("IDを入力してください");
-                      onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: joinGameId });
+                      if(!manualGameId) return alert("IDを入力してください");
+                      onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: manualGameId });
                   }}
                   style={{ ...styles.subBtn, padding: '5px 10px', fontSize: '12px', minWidth: 'fit-content' }}
                 >
-                  参加
+                  ID参加
                 </button>
             </div>
         </div>

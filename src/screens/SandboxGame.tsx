@@ -17,7 +17,7 @@ type DragState = {
 interface SandboxGameProps {
   p1Deck: string;
   p2Deck: string;
-  gameId?: string; // 参加する場合のID
+  gameId?: string; 
   myPlayerId?: string; // 'p1' | 'p2' | 'both'
   onBack: () => void;
 }
@@ -37,7 +37,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
 
-  // 視点ロジック: 対戦モードなら自分の視点に固定、ソロならターンプレイヤー基準
+  // 視点ロジック
   const isRotated = useMemo(() => {
     if (myPlayerId === 'p2') return true;
     if (myPlayerId === 'p1') return false;
@@ -73,7 +73,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         // WebSocket接続
         if (currentId) {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // ローカル開発用ポート考慮 (Backendが8000ポートの場合)
+            // ローカル開発用ポート考慮
             const host = window.location.port === '5173' ? `${window.location.hostname}:8000` : window.location.host;
             const wsUrl = `${protocol}//${host}/ws/sandbox/${currentId}`;
             
@@ -188,11 +188,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         if (inspecting) return;
         if (dragState) return;
 
-        // ■ 修正箇所: 対戦モード時の操作制限の型エラー修正 ■
-        const pid = myPlayerId;
-        // myPlayerIdが 'p1' か 'p2' であることを確認してからアクセスする
-        if ((pid === 'p1' || pid === 'p2') && card.owner_id && gameState.players[pid] && card.owner_id !== gameState.players[pid].name) {
-           // 現状はサンドボックスの自由度優先で制限なしとするが、必要なら return;
+        // 対戦モード時の操作制限 (オプション)
+        if (myPlayerId !== 'both' && card.owner_id && gameState.players[myPlayerId] && card.owner_id !== gameState.players[myPlayerId].name) {
+           // 現状はサンドボックスの自由度優先で制限なしとする
         }
 
         startDrag(card, { x: e.global.x, y: e.global.y });
@@ -201,14 +199,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
 
+    const isOnlineBattle = myPlayerId !== 'both';
+
+    // 自分側 (手札隠さない)
     const bottomSide = createSandboxBoardSide(
-        bottomPlayer, false, W, coords, onCardDown
+        bottomPlayer, false, W, coords, onCardDown, false
     );
     bottomSide.y = midY;
     app.stage.addChild(bottomSide);
 
+    // 相手側 (対戦中なら手札を隠す)
     const topSide = createSandboxBoardSide(
-        topPlayer, true, W, coords, onCardDown
+        topPlayer, true, W, coords, onCardDown, isOnlineBattle
     );
     topSide.y = 0;
     app.stage.addChild(topSide);
