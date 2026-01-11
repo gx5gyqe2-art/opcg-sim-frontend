@@ -24,10 +24,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
-  
-  // 【追加】カウンターの一括処理用キュー
   const [counterQueue, setCounterQueue] = useState<string[]>([]);
-  
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const { COLORS } = LAYOUT_CONSTANTS;
@@ -42,10 +39,8 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     pendingRequest
   );
 
-  // 【追加】自動送信ループの制御
   useEffect(() => {
     const processQueue = async () => {
-      // キューに残弾があり、通信中でなく、かつカウンター選択フェイズが継続している場合に送信
       if (
         counterQueue.length > 0 && 
         !isPending && 
@@ -61,7 +56,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
           payload: { remaining: rest.length }
         });
 
-        // サーバーから返ってくる新しい pendingRequest.request_id を使うことが重要
         await sendBattleAction(pendingRequest.action as any, nextUuid, pendingRequest.request_id);
       }
     };
@@ -75,7 +69,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     const battleActionTypes = Object.values(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES);
     
     if (isCounter && selectedUuids.length > 0) {
-      // 【変更】カウンターの場合は最初の1枚を送り、残りをキューに入れる
       const [first, ...rest] = selectedUuids;
       setCounterQueue(rest);
       await sendBattleAction(pendingRequest.action as any, first, pendingRequest.request_id);
@@ -142,7 +135,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     if (!pendingRequest || !gameState?.game_id || isPending) return;
     const currentRequestId = pendingRequest.request_id;
     setPendingRequest(null);
-    setCounterQueue([]); // パス時はキューもクリア
+    setCounterQueue([]);
     await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
   };
 
@@ -291,15 +284,13 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     onBack();
   };
 
-  // 【変更】カウンターの場合もモーダルを表示対象にする
   const isCounterAction = pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER;
   const showSearchModal = 
     (pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT || isCounterAction) &&
-    counterQueue.length === 0; // 送信ループ中はモーダルを隠す
+    counterQueue.length === 0;
     
   const constraints = pendingRequest?.constraints || {};
 
-  // 【変更】候補カードの抽出ロジック（バックエンドから candidates が来ない場合に対応）
   const modalCandidates = pendingRequest?.candidates || (
     (gameState && pendingRequest?.selectable_uuids) ? 
       [
@@ -331,12 +322,43 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         </div>
       )}
 
-      {/* 通知バー（ループ中やアクション待ちの表示） */}
+      {isAttackTargeting && (
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
+          攻撃対象を選択してください
+          <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
+        </div>
+      )}
+
       {(pendingRequest || counterQueue.length > 0) && !isAttackTargeting && !showSearchModal && pendingRequest?.action !== 'MAIN_ACTION' && (
         <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG, padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}` }}>
           <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
             {counterQueue.length > 0 ? `カウンター適用中... (残り ${counterQueue.length}枚)` : `[${pendingRequest?.action}] ${pendingRequest?.message}`}
           </div>
+
+          {(pendingRequest as any)?.options && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+              {(pendingRequest as any).options.map((label: string, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => handleOptionSelect(idx)}
+                  disabled={isPending}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: COLORS.BTN_PRIMARY,
+                    color: 'white',
+                    border: '1px solid white',
+                    borderRadius: '4px',
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {pendingRequest?.can_skip && counterQueue.length === 0 && (
             <button onClick={handlePass} disabled={isPending} style={{ padding: '8px 24px', backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER, color: 'white', border: 'none', borderRadius: '4px', cursor: isPending ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
               {isPending ? '送信中...' : 'パス'}
@@ -345,7 +367,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
         </div>
       )}
 
-      {/* ターン終了ボタン */}
       {(pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
         <button onClick={handleTurnEnd} disabled={isPending} style={{ position: 'absolute', left: layoutCoords ? `${layoutCoords.x}px` : 'auto', top: layoutCoords ? `${layoutCoords.y}px` : '50%', right: layoutCoords ? 'auto' : '20px', transform: 'translateY(-50%)', padding: '10px 20px', backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, color: 'white', border: 'none', borderRadius: '5px', cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold' }}>
           {isPending ? '送信中...' : 'ターン終了'}
@@ -356,7 +377,6 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
       <CardDetailSheet card={selectedCard.card} location={selectedCard.location} isMyTurn={selectedCard.isMyTurn} activeDonCount={activeDonCount} onAction={handleAction} onClose={() => { setIsDetailMode(false); setSelectedCard(null); }} />
     )}
 
-    {/* 【変更】カウンター時もモーダルを利用 */}
     {showSearchModal && modalCandidates.length > 0 && (
       <CardSelectModal
         candidates={modalCandidates}
