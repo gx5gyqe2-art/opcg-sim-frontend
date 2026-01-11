@@ -25,6 +25,20 @@ interface DeckData {
   don_uuids: string[];
 }
 
+// フィルタ設定の型定義 (複数選択対応)
+interface FilterState {
+  color: string[];
+  type: string[];
+  attribute: string[];
+  trait: string;
+  counter: string[];
+  cost: string[];
+  power: string[];
+  trigger: string[];
+  set: string;
+  sort: string;
+}
+
 // --- 共通: 画像表示コンポーネント ---
 const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
   const [imgError, setImgError] = useState(false);
@@ -64,49 +78,86 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
   );
 };
 
-// --- 共通: カード詳細画面 ---
+// --- 共通: カード詳細画面 (画像拡大・スワイプ対応版) ---
 const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate }: {
   card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void
 }) => {
   const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png`;
+
+  // --- スワイプ処理 ---
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const minSwipeDistance = 50; // スワイプと判定する最小距離
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (onNavigate) {
+      if (isLeftSwipe) onNavigate(1);  // 右から左へスワイプ -> 次へ
+      if (isRightSwipe) onNavigate(-1); // 左から右へスワイプ -> 前へ
+    }
+  };
+
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px', width: '100%', maxWidth: '400px', justifyContent: 'center' }}>
-        {onNavigate && <button onClick={() => onNavigate(-1)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '40px', cursor: 'pointer', padding: '10px' }}>‹</button>}
-        <div style={{ width: '240px', position: 'relative' }}>
-          <img 
-            src={imageUrl} alt={card.name} 
-            style={{ width: '100%', borderRadius: '10px', border: '2px solid #fff' }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; e.currentTarget.parentElement!.innerHTML = `<div style="width:240px;height:336px;background:#444;color:white;display:flex;align-items:center;justify-content:center;border:2px solid #fff;border-radius:10px;">${card.name}</div>`; }}
-          />
-        </div>
-        {onNavigate && <button onClick={() => onNavigate(1)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '40px', cursor: 'pointer', padding: '10px' }}>›</button>}
+    <div 
+      // タッチイベントをコンテナ全体で受け取る
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{ 
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+        background: 'rgba(0,0,0,0.95)', zIndex: 100, 
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+        padding: '20px', touchAction: 'none' // スクロール阻害防止
+      }}
+    >
+      {/* 画像エリア: ボタンを廃止し、画像を大きく表示 */}
+      <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'center', width: '100%' }}>
+        <img 
+          src={imageUrl} alt={card.name} 
+          style={{ 
+            height: '55vh',       // 画面高さの55%を使う
+            maxHeight: '600px',   // 最大高さ制限
+            maxWidth: '90vw',     // 横幅は画面幅の90%まで
+            objectFit: 'contain', // アスペクト比を維持
+            borderRadius: '12px', 
+            border: '2px solid #fff',
+            boxShadow: '0 0 20px rgba(0,0,0,0.8)'
+          }}
+          onError={(e) => { 
+            (e.target as HTMLImageElement).style.display = 'none'; 
+            e.currentTarget.parentElement!.innerHTML = `<div style="width:300px;height:420px;background:#444;color:white;display:flex;align-items:center;justify-content:center;border:2px solid #fff;border-radius:10px;font-size:20px;">${card.name}</div>`; 
+          }}
+        />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' }}>
-        <button onClick={() => onCountChange(-1)} disabled={currentCount <= 0} style={{ width: '60px', height: '60px', borderRadius: '50%', border: 'none', background: currentCount > 0 ? '#e74c3c' : '#555', color: 'white', fontSize: '24px', cursor: 'pointer' }}>－</button>
-        <div style={{ fontSize: '48px', fontWeight: 'bold', color: 'white', width: '80px', textAlign: 'center' }}>{currentCount}</div>
-        <button onClick={() => onCountChange(1)} disabled={currentCount >= 4} style={{ width: '60px', height: '60px', borderRadius: '50%', border: 'none', background: currentCount < 4 ? '#3498db' : '#555', color: 'white', fontSize: '24px', cursor: 'pointer' }}>＋</button>
+
+      {/* 操作ボタン */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '40px' }}>
+        <button onClick={() => onCountChange(-1)} disabled={currentCount <= 0} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount > 0 ? '#e74c3c' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>－</button>
+        <div style={{ fontSize: '64px', fontWeight: 'bold', color: 'white', width: '80px', textAlign: 'center', textShadow: '0 2px 4px black' }}>{currentCount}</div>
+        <button onClick={() => onCountChange(1)} disabled={currentCount >= 4} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount < 4 ? '#3498db' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>＋</button>
       </div>
-      <button onClick={onClose} style={{ padding: '15px 40px', fontSize: '18px', background: 'transparent', border: '1px solid #fff', color: 'white', borderRadius: '30px', cursor: 'pointer' }}>閉じる</button>
+
+      <button onClick={onClose} style={{ padding: '12px 50px', fontSize: '16px', background: 'rgba(255,255,255,0.1)', border: '1px solid #888', color: '#ddd', borderRadius: '30px', cursor: 'pointer' }}>閉じる</button>
+      
+      {onNavigate && <div style={{ position: 'absolute', bottom: '20px', color: '#666', fontSize: '12px' }}>↔ Swipe to Navigate</div>}
     </div>
   );
 };
 
-// --- フィルタ設定の型定義 ---
-interface FilterState {
-  color: string[];
-  type: string[];
-  attribute: string[];
-  trait: string; // ドロップダウンのため単一選択のまま
-  counter: string[];
-  cost: string[];
-  power: string[];
-  trigger: string[];
-  set: string; // ドロップダウンのため単一選択のまま
-  sort: string;
-}
-
-// --- フィルタモーダル ---
+// --- 新規: フィルタモーダルコンポーネント (複数選択対応) ---
 const FilterModal = ({ 
   filters, 
   setFilters, 
@@ -604,7 +655,13 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
 
       {/* Modals */}
       {viewingCard && mode === 'main' && (
-        <CardDetailScreen card={viewingCard} currentCount={currentDeck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} onNavigate={handleNavigate} />
+        <CardDetailScreen 
+          card={viewingCard} 
+          currentCount={currentDeck.card_uuids.filter(id => id === viewingCard.uuid).length} 
+          onCountChange={(diff) => handleCountChange(viewingCard, diff)} 
+          onClose={() => setViewingCard(null)} 
+          onNavigate={handleNavigate} 
+        />
       )}
 
       {showFilterModal && (
