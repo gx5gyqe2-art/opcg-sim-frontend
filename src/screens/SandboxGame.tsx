@@ -20,7 +20,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
-  // RealGameと同様に座標管理用のステートを追加
+  // 座標管理用のステート
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const { COLORS } = LAYOUT_CONSTANTS;
@@ -62,7 +62,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
-    // 初回座標計算 (RealGameと同様)
+    // 初回座標計算
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
@@ -245,15 +245,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     }
   };
 
-  const btnStyle: React.CSSProperties = {
-    background: '#555',
-    color: 'white',
-    border: '1px solid #555',
-    borderRadius: '4px',
-    padding: '5px 10px',
-    cursor: 'pointer'
-  };
-
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       
@@ -287,7 +278,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
               </div>
           </div>
 
-          {/* ターン終了ボタン (RealGameと同じ配置ロジック) */}
+          {/* ターン終了ボタン */}
           <button 
             onClick={handleTurnEnd} 
             disabled={isPending}
@@ -305,7 +296,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
               cursor: isPending ? 'not-allowed' : 'pointer', 
               zIndex: Z_INDEX.NOTIFICATION, 
               fontWeight: 'bold',
-              pointerEvents: 'auto' // UI Overlay配下なので必須
+              pointerEvents: 'auto'
             }}
           >
             {isPending ? '送信中...' : 'ターン終了'}
