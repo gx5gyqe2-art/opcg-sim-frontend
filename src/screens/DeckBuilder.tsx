@@ -92,7 +92,21 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
   );
 };
 
-// --- 新規: フィルタモーダルコンポーネント ---
+// --- フィルタ設定の型定義 ---
+interface FilterState {
+  color: string[];
+  type: string[];
+  attribute: string[];
+  trait: string; // ドロップダウンのため単一選択のまま
+  counter: string[];
+  cost: string[];
+  power: string[];
+  trigger: string[];
+  set: string; // ドロップダウンのため単一選択のまま
+  sort: string;
+}
+
+// --- フィルタモーダル ---
 const FilterModal = ({ 
   filters, 
   setFilters, 
@@ -101,8 +115,8 @@ const FilterModal = ({
   onClose,
   onReset
 }: { 
-  filters: any, 
-  setFilters: (f: any) => void, 
+  filters: FilterState, 
+  setFilters: (f: FilterState) => void, 
   traitList: string[],
   setList: string[],
   onClose: () => void,
@@ -112,6 +126,17 @@ const FilterModal = ({
   const SectionTitle = ({ children }: { children: string }) => (
     <div style={{ color: '#aaa', fontSize: '12px', marginTop: '15px', marginBottom: '8px', fontWeight: 'bold' }}>{children}</div>
   );
+
+  // 複数選択用のトグル関数
+  const toggle = (key: keyof FilterState, value: string) => {
+    const current = filters[key];
+    if (Array.isArray(current)) {
+      const newArray = current.includes(value)
+        ? current.filter(v => v !== value)
+        : [...current, value];
+      setFilters({ ...filters, [key]: newArray });
+    }
+  };
 
   const FilterBtn = ({ label, active, onClick, color }: { label: string, active: boolean, onClick: () => void, color?: string }) => (
     <button 
@@ -132,23 +157,26 @@ const FilterModal = ({
     </button>
   );
 
-  const ColorBtn = ({ colorKey, label, colorCode }: { colorKey: string, label: string, colorCode: string }) => (
-    <div 
-      title={label}
-      onClick={() => setFilters({ ...filters, color: filters.color === colorKey ? 'ALL' : colorKey })}
-      style={{
-        width: '40px', height: '40px', borderRadius: '50%',
-        background: colorCode,
-        border: filters.color === colorKey ? '3px solid white' : '2px solid transparent',
-        boxShadow: filters.color === colorKey ? '0 0 10px white' : 'none',
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'black', fontWeight: 'bold', fontSize: '10px',
-        opacity: (filters.color === 'ALL' || filters.color === colorKey) ? 1 : 0.4
-      }}
-    >
-      {filters.color === colorKey && "✓"}
-    </div>
-  );
+  const ColorBtn = ({ colorKey, label, colorCode }: { colorKey: string, label: string, colorCode: string }) => {
+    const isActive = filters.color.includes(colorKey);
+    return (
+      <div 
+        title={label}
+        onClick={() => toggle('color', colorKey)}
+        style={{
+          width: '40px', height: '40px', borderRadius: '50%',
+          background: colorCode,
+          border: isActive ? '3px solid white' : '2px solid transparent',
+          boxShadow: isActive ? '0 0 10px white' : 'none',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'black', fontWeight: 'bold', fontSize: '10px',
+          opacity: (filters.color.length === 0 || isActive) ? 1 : 0.4
+        }}
+      >
+        {isActive && "✓"}
+      </div>
+    );
+  };
 
   return (
     <div style={{ 
@@ -169,7 +197,7 @@ const FilterModal = ({
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
           
-          <SectionTitle>色 (COLOR)</SectionTitle>
+          <SectionTitle>色 (COLOR) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <ColorBtn colorKey="Red" label="赤" colorCode="#e74c3c" />
             <ColorBtn colorKey="Green" label="緑" colorCode="#27ae60" />
@@ -179,46 +207,46 @@ const FilterModal = ({
             <ColorBtn colorKey="Yellow" label="黄" colorCode="#f1c40f" />
           </div>
 
-          <SectionTitle>コスト (COST)</SectionTitle>
+          <SectionTitle>コスト (COST) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(10)].map((_, i) => (
               <FilterBtn 
                 key={i} 
                 label={`${i+1}`} 
-                active={filters.cost === `${i+1}`} 
-                onClick={() => setFilters({ ...filters, cost: filters.cost === `${i+1}` ? 'ALL' : `${i+1}` })} 
+                active={filters.cost.includes(`${i+1}`)} 
+                onClick={() => toggle('cost', `${i+1}`)} 
               />
             ))}
-            <FilterBtn label="10+" active={filters.cost === '10'} onClick={() => setFilters({ ...filters, cost: filters.cost === '10' ? 'ALL' : '10' })} />
+            <FilterBtn label="10+" active={filters.cost.includes('10')} onClick={() => toggle('cost', '10')} />
           </div>
 
-          <SectionTitle>種類 (TYPE)</SectionTitle>
+          <SectionTitle>種類 (TYPE) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <FilterBtn label="キャラ" active={filters.type === 'CHARACTER'} onClick={() => setFilters({ ...filters, type: filters.type === 'CHARACTER' ? 'ALL' : 'CHARACTER' })} />
-            <FilterBtn label="イベント" active={filters.type === 'EVENT'} onClick={() => setFilters({ ...filters, type: filters.type === 'EVENT' ? 'ALL' : 'EVENT' })} />
-            <FilterBtn label="ステージ" active={filters.type === 'STAGE'} onClick={() => setFilters({ ...filters, type: filters.type === 'STAGE' ? 'ALL' : 'STAGE' })} />
+            <FilterBtn label="キャラ" active={filters.type.includes('CHARACTER')} onClick={() => toggle('type', 'CHARACTER')} />
+            <FilterBtn label="イベント" active={filters.type.includes('EVENT')} onClick={() => toggle('type', 'EVENT')} />
+            <FilterBtn label="ステージ" active={filters.type.includes('STAGE')} onClick={() => toggle('type', 'STAGE')} />
           </div>
 
-          <SectionTitle>カウンター (COUNTER)</SectionTitle>
+          <SectionTitle>カウンター (COUNTER) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <FilterBtn label="なし" active={filters.counter === 'NONE'} onClick={() => setFilters({ ...filters, counter: filters.counter === 'NONE' ? 'ALL' : 'NONE' })} />
-            <FilterBtn label="+1000" active={filters.counter === '1000'} onClick={() => setFilters({ ...filters, counter: filters.counter === '1000' ? 'ALL' : '1000' })} />
-            <FilterBtn label="+2000" active={filters.counter === '2000'} onClick={() => setFilters({ ...filters, counter: filters.counter === '2000' ? 'ALL' : '2000' })} />
+            <FilterBtn label="なし" active={filters.counter.includes('NONE')} onClick={() => toggle('counter', 'NONE')} />
+            <FilterBtn label="+1000" active={filters.counter.includes('1000')} onClick={() => toggle('counter', '1000')} />
+            <FilterBtn label="+2000" active={filters.counter.includes('2000')} onClick={() => toggle('counter', '2000')} />
           </div>
 
           <SectionTitle>トリガー (TRIGGER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <FilterBtn label="あり" active={filters.trigger === 'HAS'} onClick={() => setFilters({ ...filters, trigger: filters.trigger === 'HAS' ? 'ALL' : 'HAS' })} />
-            <FilterBtn label="なし" active={filters.trigger === 'NONE'} onClick={() => setFilters({ ...filters, trigger: filters.trigger === 'NONE' ? 'ALL' : 'NONE' })} />
+            <FilterBtn label="あり" active={filters.trigger.includes('HAS')} onClick={() => toggle('trigger', 'HAS')} />
+            <FilterBtn label="なし" active={filters.trigger.includes('NONE')} onClick={() => toggle('trigger', 'NONE')} />
           </div>
 
-          <SectionTitle>属性 (ATTRIBUTE)</SectionTitle>
+          <SectionTitle>属性 (ATTRIBUTE) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['打', '斬', '特', '射', '知'].map(attr => (
               <FilterBtn 
                 key={attr} label={attr} 
-                active={filters.attribute === attr} 
-                onClick={() => setFilters({ ...filters, attribute: filters.attribute === attr ? 'ALL' : attr })} 
+                active={filters.attribute.includes(attr)} 
+                onClick={() => toggle('attribute', attr)} 
               />
             ))}
           </div>
@@ -341,15 +369,15 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
 // --- 4. カタログ画面 (FilterModal対応版) ---
 const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void }) => {
-  const [filters, setFilters] = useState({
-    color: 'ALL',
-    type: 'ALL',
-    attribute: 'ALL',
+  const [filters, setFilters] = useState<FilterState>({
+    color: [],
+    type: [],
+    attribute: [],
     trait: 'ALL',
-    counter: 'ALL',
-    cost: 'ALL',
-    power: 'ALL',
-    trigger: 'ALL',
+    counter: [],
+    cost: [],
+    power: [],
+    trigger: [],
     set: 'ALL',
     sort: 'COST'
   });
@@ -371,9 +399,9 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
     return Array.from(sets).sort();
   }, [allCards]);
 
-  // ▼▼▼ 修正: 色名正規化用のヘルパー関数 ▼▼▼
+  // ▼▼▼ 色名正規化用のヘルパー関数 ▼▼▼
   const normalizeColor = (c: string) => {
-    const s = c.trim().toLowerCase(); // 空白除去と小文字化
+    const s = c.trim().toLowerCase(); 
     const map: Record<string, string> = {
       '赤': 'red', 'red': 'red',
       '緑': 'green', 'green': 'green',
@@ -384,70 +412,87 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
     };
     return map[s] || s;
   };
-  // ▲▲▲ 修正ここまで ▲▲▲
 
   const filtered = useMemo(() => {
     let res = allCards;
     
-    // ▼▼▼ 修正: 色の正規化を取り入れたロジック ▼▼▼
+    // --- リーダーによる色制限 ---
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    
-    // リーダーの色を分解し、すべて正規化（英語小文字）する
     const leaderColors = (leaderCard?.color || [])
       .flatMap(c => c.split(/[\/／]/))
       .map(c => normalizeColor(c));
 
     if (mode === 'main') {
       res = res.filter(c => c.type !== 'LEADER');
-      
-      // リーダーが選択されている場合、リーダーの色に基づく厳密なフィルタリングを適用
-      // ルール: デッキに入れられるカードは、そのカードの全ての色がリーダーの色に含まれていなければならない
       if (leaderColors.length > 0) {
         res = res.filter(c => {
-           // カードの色も同様に分解して正規化する
            const cardColors = (c.color || [])
              .flatMap(cc => cc.split(/[\/／]/))
              .map(cc => normalizeColor(cc));
-           
-           // 正規化した状態で包含チェックを行う
-           // 例: リーダー(red,blue) -> カード(red):OK, カード(blue):OK, カード(red,blue):OK, カード(red,black):NG
            return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
         });
       }
     } else {
       res = res.filter(c => c.type === 'LEADER');
     }
-    // ▲▲▲ 修正ここまで ▲▲▲
 
-    // Filters
-    if (filters.color !== 'ALL') {
-        const target = filters.color.toLowerCase();
-        const colorMap: Record<string, string> = { 'red': '赤', 'green': '緑', 'blue': '青', 'purple': '紫', 'black': '黒', 'yellow': '黄' };
-        const jpColor = colorMap[target] || target;
-        res = res.filter(c => c.color && c.color.some(cc => { const l = String(cc).toLowerCase(); return l.includes(target) || l.includes(jpColor); }));
+    // --- 複数選択フィルタの適用 (OR条件) ---
+    
+    if (filters.color.length > 0) {
+        // フィルタで選択された色（正規化済みと仮定）のいずれかを含んでいればOK
+        const selected = filters.color.map(c => normalizeColor(c));
+        res = res.filter(c => 
+          c.color && c.color.some(cc => { 
+            const norm = normalizeColor(cc);
+            return selected.includes(norm);
+          })
+        );
     }
-    if (filters.type !== 'ALL') res = res.filter(c => c.type === filters.type);
-    if (filters.attribute !== 'ALL') res = res.filter(c => c.attributes?.includes(filters.attribute));
-    if (filters.trait !== 'ALL') res = res.filter(c => c.traits?.some(t => t.includes(filters.trait)));
-    if (filters.counter !== 'ALL') {
-      if (filters.counter === 'NONE') res = res.filter(c => !c.counter);
-      else res = res.filter(c => c.counter === parseInt(filters.counter));
+
+    if (filters.type.length > 0) {
+      res = res.filter(c => filters.type.includes(c.type));
     }
-    if (filters.cost !== 'ALL') {
-      const val = parseInt(filters.cost);
-      if (val >= 10) res = res.filter(c => (c.cost || 0) >= 10);
-      else res = res.filter(c => c.cost === val);
+
+    if (filters.attribute.length > 0) {
+      res = res.filter(c => c.attributes?.some(attr => filters.attribute.includes(attr)));
     }
-    if (filters.power !== 'ALL') {
-      const val = parseInt(filters.power);
-      if (val >= 10000) res = res.filter(c => (c.power || 0) >= 10000);
-      else res = res.filter(c => c.power === val);
+
+    if (filters.trait !== 'ALL') {
+      res = res.filter(c => c.traits?.some(t => t.includes(filters.trait)));
     }
-    if (filters.trigger !== 'ALL') {
-      if (filters.trigger === 'HAS') res = res.filter(c => !!c.trigger_text);
-      if (filters.trigger === 'NONE') res = res.filter(c => !c.trigger_text);
+
+    if (filters.counter.length > 0) {
+      res = res.filter(c => {
+        if (filters.counter.includes('NONE') && !c.counter) return true;
+        if (c.counter && filters.counter.includes(c.counter.toString())) return true;
+        return false;
+      });
     }
-    if (filters.set !== 'ALL') res = res.filter(c => c.uuid.startsWith(filters.set));
+
+    if (filters.cost.length > 0) {
+      res = res.filter(c => {
+        const costVal = c.cost || 0;
+        if (filters.cost.includes('10') && costVal >= 10) return true;
+        return filters.cost.includes(costVal.toString());
+      });
+    }
+
+    if (filters.power.length > 0) {
+      // ※ PowerフィルタのUI実装はまだないがロジックのみ対応
+      res = res.filter(c => filters.power.includes((c.power || 0).toString())); 
+    }
+
+    if (filters.trigger.length > 0) {
+      res = res.filter(c => {
+        if (filters.trigger.includes('HAS') && !!c.trigger_text) return true;
+        if (filters.trigger.includes('NONE') && !c.trigger_text) return true;
+        return false;
+      });
+    }
+
+    if (filters.set !== 'ALL') {
+      res = res.filter(c => c.uuid.startsWith(filters.set));
+    }
 
     // Text Search
     if (searchText) {
@@ -499,6 +544,13 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
   };
 
   const displayCards = filtered.slice(0, displayLimit);
+  
+  // フィルタがアクティブかどうかの判定（アイコン表示用）
+  const isFilterActive = Object.entries(filters).some(([key, val]) => {
+    if (key === 'sort') return val !== 'COST';
+    if (Array.isArray(val)) return val.length > 0;
+    return val !== 'ALL';
+  });
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
@@ -523,7 +575,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
           onClick={() => setShowFilterModal(true)}
           style={{ 
             padding: '10px', borderRadius: '50%', border: 'none', 
-            background: (Object.values(filters).some(v => v !== 'ALL' && v !== 'COST') || filters.sort !== 'COST') ? '#3498db' : '#444', 
+            background: isFilterActive ? '#3498db' : '#444', 
             color: 'white', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}
         >
@@ -562,7 +614,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
           traitList={traitList}
           setList={setList}
           onClose={() => setShowFilterModal(false)}
-          onReset={() => setFilters({ color: 'ALL', type: 'ALL', attribute: 'ALL', trait: 'ALL', counter: 'ALL', cost: 'ALL', power: 'ALL', trigger: 'ALL', set: 'ALL', sort: 'COST' })}
+          onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })}
         />
       )}
     </div>
