@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
@@ -19,8 +19,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
+  
+  // RealGameと同様に座標管理用のステートを追加
+  const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const { COLORS } = LAYOUT_CONSTANTS;
+  const { Z_INDEX } = LAYOUT_PARAMS;
 
   // ゲーム初期化
   useEffect(() => {
@@ -37,11 +41,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
-  // PixiJS初期化
+  // PixiJS初期化 & リサイズハンドラ
   useEffect(() => {
     if (!pixiContainerRef.current) return;
 
-    // 既存のCanvasがあれば削除（二重描画防止）
+    // 既存のCanvasがあれば削除
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
@@ -58,8 +62,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
+    // 初回座標計算 (RealGameと同様)
+    const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
+    setLayoutCoords(coords.turnEndPos);
+
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
+      // リサイズ時に座標を再計算
+      const newCoords = calculateCoordinates(window.innerWidth, window.innerHeight);
+      setLayoutCoords(newCoords.turnEndPos);
     };
     window.addEventListener('resize', handleResize);
 
@@ -219,7 +230,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, [dragState, gameState]);
 
-  // ▼▼▼ ターン終了ハンドラ ▼▼▼
   const handleTurnEnd = async () => {
     if (!gameState || isPending) return;
     setIsPending(true);
@@ -236,14 +246,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   };
 
   const btnStyle: React.CSSProperties = {
-    padding: '10px 20px',
-    background: '#3498db',
+    background: '#555',
     color: 'white',
-    border: 'none',
+    border: '1px solid #555',
     borderRadius: '4px',
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.3)'
+    padding: '5px 10px',
+    cursor: 'pointer'
   };
 
   return (
@@ -255,27 +263,53 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} 
       />
 
-      {/* 2. UI Overlay Layer (Canvas操作を邪魔しないように pointerEvents: none を設定) */}
+      {/* 2. UI Overlay Layer */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
           
-          {/* 左上: 情報表示 (ボタンは操作可能に) */}
-          <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 10, pointerEvents: 'auto' }}>
-              <button onClick={onBack} style={{...btnStyle, background: '#555'}}>Exit</button>
+          {/* 左上: 戻るボタンなど */}
+          <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}>
+              <button 
+                onClick={onBack}
+                style={{
+                  zIndex: Z_INDEX.OVERLAY + 20,
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  color: 'white',
+                  border: '1px solid #555',
+                  borderRadius: '4px',
+                  padding: '5px 10px',
+                  cursor: 'pointer'
+                }}
+              >
+                TOPへ
+              </button>
               <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                   Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
               </div>
           </div>
 
-          {/* 右下: ターン終了ボタン (ボタンは操作可能に) */}
-          <div style={{ position: 'absolute', bottom: 20, right: 20, pointerEvents: 'auto' }}>
-              <button 
-                onClick={handleTurnEnd} 
-                style={{ ...btnStyle, background: '#e74c3c' }} 
-                disabled={isPending}
-              >
-                ターン終了
-              </button>
-          </div>
+          {/* ターン終了ボタン (RealGameと同じ配置ロジック) */}
+          <button 
+            onClick={handleTurnEnd} 
+            disabled={isPending}
+            style={{
+              position: 'absolute',
+              left: layoutCoords ? `${layoutCoords.x}px` : 'auto',
+              top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+              right: layoutCoords ? 'auto' : '20px',
+              transform: 'translateY(-50%)',
+              padding: '10px 20px',
+              backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '5px',
+              cursor: isPending ? 'not-allowed' : 'pointer', 
+              zIndex: Z_INDEX.NOTIFICATION, 
+              fontWeight: 'bold',
+              pointerEvents: 'auto' // UI Overlay配下なので必須
+            }}
+          >
+            {isPending ? '送信中...' : 'ターン終了'}
+          </button>
 
       </div>
 
