@@ -77,7 +77,12 @@ export const createInspectOverlay = (
     const baseW = 100; 
     const baseH = 140;
     
-    const cardSprite = createCardContainer(card, baseW, baseH, { onClick: () => {} });
+    // ★修正: 確認用なので強制的に表向きにする
+    // 元のcardオブジェクトを変更せず、表示用の一時オブジェクトを作成
+    const displayCard = { ...card, is_face_up: true };
+    
+    // createCardContainerには表向きのデータ(displayCard)を渡す
+    const cardSprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
     
     const scale = cardH / baseH;
     cardSprite.scale.set(scale);
@@ -91,6 +96,9 @@ export const createInspectOverlay = (
     cardSprite.cursor = 'grab';
     
     cardSprite.on('pointerdown', (e) => {
+      // ドラッグ開始時は元のデータ(card)を渡す（移動処理などで正しく扱うため）
+      // ただしゴースト表示時も表向きにしたい場合は、onCardDown側で対処するか、
+      // ここで displayCard を渡しても良いが、uuid等は同じなので問題ないはず
       onCardDown(e, card, cardSprite);
     });
 
