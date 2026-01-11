@@ -14,7 +14,7 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用パネル (DOMオーバーレイ)
+// 確認用パネル (DOMオーバーレイ) - 横スクロール版
 const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
     type: string, 
     cards: CardInstance[], 
@@ -36,6 +36,7 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
             border: '2px solid #555',
             boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }}>
+            {/* Header */}
             <div style={{ 
                 width: '100%', 
                 padding: '10px 15px', 
@@ -52,6 +53,7 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
                 <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
             </div>
             
+            {/* Content (横スクロール) */}
             <div style={{ 
                 display: 'flex', 
                 flexWrap: 'nowrap', 
@@ -69,7 +71,13 @@ const InspectPanel = ({ type, cards, onClose, onStartDrag }: {
                 {cards.map(c => (
                     <div 
                         key={c.uuid} 
-                        style={{ position: 'relative', width: '60px', height: '84px', cursor: 'grab', flexShrink: 0 }}
+                        style={{ 
+                            position: 'relative', 
+                            width: '60px', 
+                            height: '84px', 
+                            cursor: 'grab',
+                            flexShrink: 0 
+                        }}
                         onPointerDown={(e) => onStartDrag(e, c)}
                     >
                         <img 
@@ -94,7 +102,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
-  // ★修正: Stateではなく、現在のactive_player_idから動的に判定する
+  // 自動視点切り替え
   const isRotated = gameState?.turn_info?.active_player_id === 'p2';
 
   const { COLORS } = LAYOUT_CONSTANTS;
@@ -204,24 +212,23 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         setInspecting({ type, cards, pid });
     };
 
-    // 視点切り替えロジック (自動)
-    // 手番プレイヤーが常に下側（手前）に来る
+    // 視点切り替えロジック
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const bottomPid = isRotated ? 'p2' : 'p1';
     
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const topPid = isRotated ? 'p1' : 'p2';
 
+    // 修正: 引数を5つに減らしました (handleInspectコールバックを削除)
     const bottomSide = createSandboxBoardSide(
-        bottomPlayer, false, W, coords, onCardDown, 
-        (t, c) => handleInspect(t, c, bottomPid)
+        bottomPlayer, false, W, coords, onCardDown
     );
     bottomSide.y = midY;
     app.stage.addChild(bottomSide);
 
+    // 修正: 引数を5つに減らしました
     const topSide = createSandboxBoardSide(
-        topPlayer, true, W, coords, onCardDown,
-        (t, c) => handleInspect(t, c, topPid)
+        topPlayer, true, W, coords, onCardDown
     );
     topSide.y = 0;
     app.stage.addChild(topSide);
@@ -265,7 +272,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const coords = calculateCoordinates(W, H);
         const midY = H / 2;
 
-        // 視点に基づいてドロップ先のプレイヤーIDを判定
         const isTopArea = endPos.y < midY;
         let destPid = isTopArea 
             ? (isRotated ? 'p1' : 'p2') 
@@ -273,7 +279,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         
         let destZone = 'field'; 
 
-        // 相手陣地（奥側）への操作禁止
         if (isTopArea) {
             setDragState(null);
             return;
@@ -311,7 +316,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-                // 付与判定（手前側のみ）
                 const leaderX = coords.getLeaderX(W);
                 const leaderY = midY + coords.getY(2) + coords.CH/2;
                 
@@ -332,7 +336,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 }
             }
 
-            const dZone = checkZone(false); // 手前側
+            const dZone = checkZone(false); 
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
             }
@@ -340,7 +344,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return;
         }
 
-        const detectedZone = checkZone(false); // 手前側
+        const detectedZone = checkZone(false); 
         if (detectedZone) destZone = detectedZone;
         
         if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
@@ -351,16 +355,16 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         if (distFromStart < 10) {
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             
-            const findInStack = (p: any) => {
-                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck };
-                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life };
+            const findInStack = (p: any, pid: string) => {
+                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck, pid };
+                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life, pid };
                 return null;
             };
             
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer);
+                const stackInfo = findInStack(currentPlayer, destPid);
                 if (stackInfo) {
-                    setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: destPid });
+                    setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: stackInfo.pid });
                     setDragState(null);
                     return;
                 }
@@ -446,7 +450,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
               >
                 TOPへ
               </button>
-              
               <div style={{ color: 'white', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '4px', display: 'flex', alignItems: 'center' }}>
                   Turn: {gameState?.turn_info?.turn_count} ({gameState?.turn_info?.active_player_id?.toUpperCase()})
               </div>
