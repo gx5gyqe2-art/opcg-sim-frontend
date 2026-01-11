@@ -22,7 +22,8 @@ export const createSandboxBoardSide = (
     }
   };
 
-  const getCardOpts = (c: Partial<CardInstance>) => ({ 
+  // 修正1: 引数 c を _c に変更して unused エラーを回避
+  const getCardOpts = (_c: Partial<CardInstance>) => ({ 
     onClick: () => {}, 
     isOpponent: isOpponent 
   });
@@ -90,7 +91,11 @@ export const createSandboxBoardSide = (
   const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as any;
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, getCardOpts(deckCard));
   deck.x = coords.getDeckX(W); deck.y = r2Y;
-  const topDeck = p.zones.deck && p.zones.deck.length > 0 ? p.zones.deck[0] : null;
+  
+  // 修正2: p.zones (z) に deck が定義されていないため、any キャストでアクセス
+  const zAny = z as any;
+  const topDeck = zAny.deck && zAny.deck.length > 0 ? zAny.deck[0] : null;
+  
   if (topDeck) setupInteractive(deck, topDeck);
   side.addChild(deck);
 
