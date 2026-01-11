@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react'; // ★修正: Reactをインポート
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -14,7 +14,7 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用パネル (DOMオーバーレイ) - 横スクロール版
+// 確認用パネル (DOMオーバーレイ)
 const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
     type: string, 
     cards: CardInstance[], 
@@ -100,6 +100,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
+  
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   // 自動視点切り替え
@@ -208,25 +209,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    const handleInspect = (type: 'deck' | 'life', cards: CardInstance[], pid: string) => {
-        setInspecting({ type, cards, pid });
-    };
-
     // 視点切り替えロジック
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
-    const bottomPid = isRotated ? 'p2' : 'p1';
-    
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
-    const topPid = isRotated ? 'p1' : 'p2';
 
-    // 修正: 引数を5つに減らしました (handleInspectコールバックを削除)
+    // ボード描画 (引数は5つ)
     const bottomSide = createSandboxBoardSide(
         bottomPlayer, false, W, coords, onCardDown
     );
     bottomSide.y = midY;
     app.stage.addChild(bottomSide);
 
-    // 修正: 引数を5つに減らしました
     const topSide = createSandboxBoardSide(
         topPlayer, true, W, coords, onCardDown
     );
@@ -273,12 +266,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const midY = H / 2;
 
         const isTopArea = endPos.y < midY;
+        // 視点に応じてドロップ先のPIDを決定
+        // 手前(isTopArea=false)は、isRotatedならp2, そうでなければp1
         let destPid = isTopArea 
             ? (isRotated ? 'p1' : 'p2') 
             : (isRotated ? 'p2' : 'p1');
         
         let destZone = 'field'; 
 
+        // 相手陣地（奥側）への操作禁止
         if (isTopArea) {
             setDragState(null);
             return;
