@@ -22,7 +22,7 @@ export const createSandboxBoardSide = (
     }
   };
 
-  // 修正1: 引数 c を _c に変更して unused エラーを回避
+  // 修正: 未使用引数 c を _c に変更してエラー回避
   const getCardOpts = (_c: Partial<CardInstance>) => ({ 
     onClick: () => {}, 
     isOpponent: isOpponent 
@@ -92,7 +92,7 @@ export const createSandboxBoardSide = (
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, getCardOpts(deckCard));
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   
-  // 修正2: p.zones (z) に deck が定義されていないため、any キャストでアクセス
+  // 修正: zonesの型定義にdeckがないため、anyキャストでアクセス
   const zAny = z as any;
   const topDeck = zAny.deck && zAny.deck.length > 0 ? zAny.deck[0] : null;
   
