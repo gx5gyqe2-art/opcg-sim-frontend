@@ -21,7 +21,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
-  // 状態管理: どのゾーンを見ているかと、その所有者IDのみ保持
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', pid: string } | null>(null);
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
@@ -29,7 +28,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
 
-  // inspectingCards の計算
   const inspectingCards = useMemo(() => {
       if (!inspecting || !gameState) return [];
       const p = inspecting.pid === 'p1' ? gameState.players.p1 : gameState.players.p2;
@@ -38,7 +36,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       return [];
   }, [gameState, inspecting]);
 
-  // 初期化
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -53,7 +50,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
-  // PixiJS Setup
   useEffect(() => {
     if (!pixiContainerRef.current) return;
     while (pixiContainerRef.current.firstChild) {
@@ -85,7 +81,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, []);
 
-  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -108,7 +103,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
 
-    // 背景 & 境界線
     const bg = new PIXI.Graphics();
     bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
@@ -120,21 +114,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    // ドラッグ開始ハンドラ
-    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
-        if (isPending) return;
-        if (inspecting) return;
-        if (dragState) return;
-
-        startDrag(e, card);
-    };
-
-    // 共通ドラッグ開始処理
-    const startDrag = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
-        const globalPos = e.global.clone();
-        
+    // 共通ドラッグ開始処理 (座標を受け取るように変更)
+    const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
-        ghost.position.set(globalPos.x, globalPos.y);
+        ghost.position.set(startPoint.x, startPoint.y);
         ghost.alpha = 0.8;
         ghost.scale.set(1.1);
         
@@ -143,11 +126,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         setDragState({
             card,
             sprite: ghost,
-            startPos: globalPos
+            startPos: startPoint
         });
     };
 
-    // ボード描画 (引数を5つに修正)
+    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
+        if (isPending) return;
+        if (inspecting) return;
+        if (dragState) return;
+
+        startDrag(card, { x: e.global.x, y: e.global.y });
+    };
+
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
 
@@ -163,15 +153,15 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     topSide.y = 0;
     app.stage.addChild(topSide);
 
-    // インスペクターオーバーレイ
     if (inspecting) {
         const overlay = createInspectOverlay(
             inspecting.type,
             inspectingCards,
             W, H,
             () => setInspecting(null),
-            (e, card) => {
-                startDrag(e, card);
+            (card, startPos) => {
+                // Overlayからのドラッグ開始
+                startDrag(card, startPos);
             }
         );
         app.stage.addChild(overlay);
@@ -183,7 +173,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards]);
 
-  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -202,7 +191,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const endPos = { x: e.clientX, y: e.clientY };
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
-        // リーダー処理
         if (card.type === 'LEADER') {
             if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null);
@@ -247,7 +235,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ドン処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
@@ -292,16 +279,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             }
 
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            
-            // 修正: pid 引数を削除
-            const findInStack = (p: any) => {
+            const findInStack = (p: any, pid: string) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' };
                 return null;
             };
-            
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer);
+                const stackInfo = findInStack(currentPlayer, destPid);
                 if (stackInfo) {
                     setInspecting({ type: stackInfo.type as any, pid: destPid });
                     setDragState(null);

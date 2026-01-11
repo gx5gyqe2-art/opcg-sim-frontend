@@ -1,6 +1,5 @@
 import * as PIXI from 'pixi.js';
 import { createCardContainer } from './CardRenderer';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
 
 export const createInspectOverlay = (
@@ -9,11 +8,11 @@ export const createInspectOverlay = (
   W: number,
   H: number,
   onClose: () => void,
-  onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, sprite: PIXI.Container) => void
+  onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void // 引数変更
 ) => {
   const container = new PIXI.Container();
 
-  // 1. 背景 (全画面クリックで閉じる)
+  // 1. 背景
   const bg = new PIXI.Graphics();
   bg.beginFill(0x000000, 0.7);
   bg.drawRect(0, 0, W, H);
@@ -35,7 +34,6 @@ export const createInspectOverlay = (
   panel.endFill();
   panel.position.set(panelX, panelY);
   panel.eventMode = 'static'; 
-  // パネル自体のクリックは背景に伝播させない
   panel.on('pointerdown', (e) => e.stopPropagation());
   
   container.addChild(panel);
@@ -59,11 +57,10 @@ export const createInspectOverlay = (
   closeBtn.on('pointerdown', onClose);
   panel.addChild(closeBtn);
 
-  // 5. カードリスト（横スクロールコンテナ）
+  // 5. カードリスト
   const listContainer = new PIXI.Container();
   listContainer.position.set(15, 50);
   
-  // マスク
   const mask = new PIXI.Graphics();
   mask.beginFill(0xffffff);
   mask.drawRect(0, 0, panelW - 30, panelH - 60);
@@ -76,12 +73,11 @@ export const createInspectOverlay = (
   const cardH = 84;
   const gap = 10;
 
-  // --- 操作判定用変数 ---
+  // 操作判定用変数
   let isScrolling = false;
   let startPos = { x: 0, y: 0 };
   let scrollStartX = 0;
-  // 押下中のカード情報
-  let pendingCard: { card: CardInstance, sprite: PIXI.Container, e: PIXI.FederatedPointerEvent } | null = null;
+  let pendingCard: { card: CardInstance, e: PIXI.FederatedPointerEvent } | null = null; // spriteは不要
 
   const maxScroll = Math.max(0, cards.length * (cardW + gap) - (panelW - 30));
 
@@ -89,7 +85,7 @@ export const createInspectOverlay = (
     const baseW = 100; 
     const baseH = 140;
     
-    // 確認用なので表向きにする
+    // 強制的に表向き
     const displayCard = { ...card, is_face_up: true };
     const cardSprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
     
@@ -103,27 +99,27 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
-    // カード押下時: 即座にドラッグせず、判定待ち状態にする
     cardSprite.on('pointerdown', (e) => {
       e.stopPropagation();
-      pendingCard = { card, sprite: cardSprite, e: e.clone() }; // イベントをクローンして保持
+      // イベントをクローンせず、必要な座標情報だけを親の変数に保存する手もあるが
+      // 連続するイベント(move)で判定するために一時的に保持
+      // ただしe.clone()は無いので、この時点ではフラグとカード情報のみ持つ
+      pendingCard = { card, e: e }; 
       startPos = { x: e.global.x, y: e.global.y };
       scrollStartX = listContainer.x;
-      isScrolling = false; // まだスクロール確定ではない
+      isScrolling = false;
     });
 
     listContainer.addChild(cardSprite);
   });
 
-  // パネル背景（カード以外）を押した場合
   panel.on('pointerdown', (e) => {
-    isScrolling = true; // カード以外なら即スクロールモード
+    isScrolling = true; 
     startPos = { x: e.global.x, y: e.global.y };
     scrollStartX = listContainer.x;
     pendingCard = null;
   });
 
-  // グローバルムーブイベント（ドラッグ判定）
   panel.on('globalpointermove', (e) => {
     if (!pendingCard && !isScrolling) return;
 
@@ -131,30 +127,25 @@ export const createInspectOverlay = (
     const dy = e.global.y - startPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // 閾値 (10px) を超えたら判定
     if (dist > 10) {
-        // カードを押下中で、まだモード未確定の場合
         if (pendingCard) {
-            // 縦移動が大きい -> カード取り出しドラッグ開始
             if (Math.abs(dy) > Math.abs(dx)) {
-                // ここで外部のドラッグ開始処理を呼ぶ
-                // 保持していたイベント情報を使って開始位置を補正
-                onCardDown(e, pendingCard.card, pendingCard.sprite);
+                // 縦移動 -> ドラッグ開始
+                // イベントオブジェクトの代わりに開始座標(現在のマウス位置)を渡す
+                onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
                 pendingCard = null;
                 isScrolling = false;
                 return;
             } else {
-                // 横移動が大きい -> スクロールモードへ移行
+                // 横移動 -> スクロール
                 isScrolling = true;
-                pendingCard = null; // カードドラッグはキャンセル
+                pendingCard = null; 
             }
         }
     }
 
-    // スクロール処理
     if (isScrolling) {
         let newX = scrollStartX + dx;
-        // 範囲制限 (バウンスなし)
         if (newX > 0) newX = 0;
         if (newX < -maxScroll) newX = -maxScroll;
         listContainer.x = newX;
