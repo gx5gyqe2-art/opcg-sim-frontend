@@ -21,10 +21,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   
-  // 状態管理
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life' | 'trash', pid: string } | null>(null);
-  const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
+  // ★追加: 表向きになっているカードIDの管理
+  const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
+
+  const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   const isRotated = gameState?.turn_info?.active_player_id === 'p2';
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
@@ -32,14 +34,13 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const inspectingCards = useMemo(() => {
       if (!inspecting || !gameState) return [];
       const p = inspecting.pid === 'p1' ? gameState.players.p1 : gameState.players.p2;
-      
       if (inspecting.type === 'deck') return p.zones.deck || [];
       if (inspecting.type === 'life') return p.zones.life || [];
       if (inspecting.type === 'trash') return p.zones.trash || [];
       return [];
   }, [gameState, inspecting]);
 
-  // 初期化
+  // ... (初期化処理、PixiJS Setupは変更なし、省略) ...
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -54,7 +55,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
-  // PixiJS Setup
   useEffect(() => {
     if (!pixiContainerRef.current) return;
     while (pixiContainerRef.current.firstChild) {
@@ -91,7 +91,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const app = appRef.current;
     if (!app || !gameState) return;
 
-    // クリーンアップ
     const childrenToDestroy: PIXI.DisplayObject[] = [];
     const children = [...app.stage.children];
     children.forEach(child => {
@@ -110,7 +109,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
 
-    // 背景
     const bg = new PIXI.Graphics();
     bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
@@ -122,28 +120,19 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    // 共通ドラッグ開始処理
     const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(startPoint.x, startPoint.y);
         ghost.alpha = 0.8;
         ghost.scale.set(1.1);
-        
         app.stage.addChild(ghost);
-
-        setDragState({
-            card,
-            sprite: ghost,
-            startPos: startPoint
-        });
+        setDragState({ card, sprite: ghost, startPos: startPoint });
     };
 
-    // ボードからのドラッグ開始
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending) return;
         if (inspecting) return;
         if (dragState) return;
-
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
@@ -162,15 +151,19 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     topSide.y = 0;
     app.stage.addChild(topSide);
 
-    // インスペクター
     if (inspecting) {
         const overlay = createInspectOverlay(
             inspecting.type,
             inspectingCards,
+            revealedCardIds, // ★追加: 現在表向きのカードID
             W, H,
             () => setInspecting(null),
-            (card, startPos) => {
-                startDrag(card, startPos);
+            (card, startPos) => startDrag(card, startPos),
+            (uuid) => { // ★追加: トグル用コールバック
+                const newSet = new Set(revealedCardIds);
+                if (newSet.has(uuid)) newSet.delete(uuid);
+                else newSet.add(uuid);
+                setRevealedCardIds(newSet);
             }
         );
         app.stage.addChild(overlay);
@@ -180,7 +173,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         app.stage.addChild(dragState.sprite);
     }
 
-  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards]);
+  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]); // revealedCardIdsを追加
 
   // イベントリスナー
   useEffect(() => {
@@ -215,7 +208,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
         let destZone = 'field'; 
 
-        // 移動制限
         if (card.owner_id) {
             const p1Name = gameState?.players.p1.name;
             const p2Name = gameState?.players.p2.name;
@@ -255,7 +247,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ドン処理
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
@@ -287,7 +278,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                     }
                 }
             }
-            
             const dZone = checkZone(isTopArea); 
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
@@ -311,19 +301,17 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             }
 
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            
-            // ★修正: 未使用引数 pid を削除
-            const findInStack = (p: any) => {
+            const findInStack = (p: any, pid: string) => {
                 if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' };
                 if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' };
                 if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' };
                 return null;
             };
-            
             if (currentPlayer) {
-                const stackInfo = findInStack(currentPlayer);
+                const stackInfo = findInStack(currentPlayer, destPid);
                 if (stackInfo) {
                     setInspecting({ type: stackInfo.type as any, pid: destPid });
+                    setRevealedCardIds(new Set()); // ★追加: 開くたびに表向き状態リセット
                     setDragState(null);
                     return;
                 }

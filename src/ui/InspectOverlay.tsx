@@ -5,10 +5,12 @@ import type { CardInstance } from '../game/types';
 export const createInspectOverlay = (
   type: string,
   cards: CardInstance[],
+  revealedCardIds: Set<string>, // ★追加: 表向きIDリスト
   W: number,
   H: number,
   onClose: () => void,
-  onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void
+  onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
+  onToggleReveal: (uuid: string) => void // ★追加: フリップ用コールバック
 ) => {
   const container = new PIXI.Container();
 
@@ -38,7 +40,7 @@ export const createInspectOverlay = (
   
   container.addChild(panel);
 
-  // 3. ヘッダーテキスト
+  // 3. ヘッダー
   const titleStyle = new PIXI.TextStyle({
     fontFamily: 'Arial',
     fontSize: 18,
@@ -73,18 +75,11 @@ export const createInspectOverlay = (
   const cardH = 84;
   const gap = 10;
 
-  // --- 操作判定用変数 ---
+  // 操作判定用
   let isScrolling = false;
   let startPos = { x: 0, y: 0 };
   let scrollStartX = 0;
-  
-  // 判定待ちのカード情報
-  // flipAction: タップと判定された時に実行する「裏返し」関数
-  let pendingCard: { 
-      card: CardInstance, 
-      e: PIXI.FederatedPointerEvent,
-      flipAction: () => void 
-  } | null = null;
+  let pendingCard: { card: CardInstance, e: PIXI.FederatedPointerEvent } | null = null;
 
   const maxScroll = Math.max(0, cards.length * (cardW + gap) - (panelW - 30));
 
@@ -93,63 +88,35 @@ export const createInspectOverlay = (
     const baseW = 100; 
     const baseH = 140;
     
+    // ★修正: Setに含まれているか、または元々表向きなら表にする
+    const isFaceUp = revealedCardIds.has(card.uuid) || card.is_face_up;
+    const displayCard = { ...card, is_face_up: isFaceUp };
+
+    const cardSprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
+    
+    const scale = cardH / baseH;
+    cardSprite.scale.set(scale);
+    
     const x = i * (cardW + gap) + cardW / 2;
     const y = cardH / 2;
+    cardSprite.position.set(x, y);
 
-    // スプライト生成・入替用関数
-    const createSprite = (isFaceUp: boolean): PIXI.Container => {
-        const displayCard = { ...card, is_face_up: isFaceUp };
-        const sprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
-        
-        const scale = cardH / baseH;
-        sprite.scale.set(scale);
-        sprite.position.set(x, y);
-        sprite.eventMode = 'static';
-        sprite.cursor = 'grab';
+    cardSprite.eventMode = 'static';
+    cardSprite.cursor = 'grab';
+    
+    cardSprite.on('pointerdown', (e) => {
+      e.stopPropagation();
+      // ドラッグ判定待ち開始
+      pendingCard = { card, e }; 
+      startPos = { x: e.global.x, y: e.global.y };
+      scrollStartX = listContainer.x;
+      isScrolling = false;
+    });
 
-        sprite.on('pointerdown', (e) => {
-            e.stopPropagation();
-
-            // 裏向きの場合 -> 即座に表向きにする (ドラッグ開始はしない)
-            if (!isFaceUp) {
-                const newSprite = createSprite(true);
-                const index = listContainer.getChildIndex(sprite);
-                listContainer.removeChild(sprite);
-                listContainer.addChildAt(newSprite, index);
-                sprite.destroy({ children: true });
-                return;
-            }
-
-            // 表向きの場合 -> ドラッグ判定待ち (pending)
-            // タップ（移動なしで指を離す）なら裏向きに戻すアクションを登録
-            const flipBack = () => {
-                const newSprite = createSprite(false);
-                const index = listContainer.getChildIndex(sprite);
-                listContainer.removeChild(sprite);
-                listContainer.addChildAt(newSprite, index);
-                sprite.destroy({ children: true });
-            };
-
-            pendingCard = { 
-                card, 
-                e: e,
-                flipAction: flipBack 
-            };
-            startPos = { x: e.global.x, y: e.global.y };
-            scrollStartX = listContainer.x;
-            isScrolling = false;
-        });
-
-        return sprite;
-    };
-
-    // 初期状態は裏向き (false)
-    const initialSprite = createSprite(false);
-    listContainer.addChild(initialSprite);
+    listContainer.addChild(cardSprite);
   });
 
-  // --- パネル全体のイベント ---
-
+  // パネル操作イベント
   panel.on('pointerdown', (e) => {
     isScrolling = true; 
     startPos = { x: e.global.x, y: e.global.y };
@@ -164,19 +131,31 @@ export const createInspectOverlay = (
     const dy = e.global.y - startPos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // 一定距離動いたら「ドラッグ」または「スクロール」と確定
     if (dist > 10) {
         if (pendingCard) {
+            // 現在のカードが裏向きの場合、ドラッグさせずにめくるだけにしたい場合はここで制御可能
+            // 今回は「表ならドラッグ、裏ならめくる」という挙動にするため、
+            // revealedCardIds に入っているかチェックする
+            const isRevealed = revealedCardIds.has(pendingCard.card.uuid);
+
             if (Math.abs(dy) > Math.abs(dx)) {
-                // 縦移動 -> カード取り出し (外部へ通知)
-                onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
-                pendingCard = null; // ドラッグ開始したのでフリップアクションは破棄
-                isScrolling = false;
+                // 縦移動 -> ドラッグ試行
+                if (isRevealed) {
+                    // 表向きならドラッグ開始
+                    onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
+                    pendingCard = null;
+                    isScrolling = false;
+                } else {
+                    // 裏向きならドラッグ不可（スクロールもキャンセル）
+                    // ここでめくっても良いが、タップ判定に任せるのが自然
+                    pendingCard = null;
+                    isScrolling = false;
+                }
                 return;
             } else {
-                // 横移動 -> スクロール開始
+                // 横移動 -> スクロール
                 isScrolling = true;
-                pendingCard = null; // スクロールなのでフリップアクションは破棄
+                pendingCard = null; 
             }
         }
     }
@@ -190,10 +169,10 @@ export const createInspectOverlay = (
   });
 
   const endDrag = () => {
-      // 指を離した時、まだ pendingCard が残っている = 移動していない
-      // つまり「表向きカードのタップ」なので、裏向きに戻す
+      // 指を離した時、まだ pendingCard が残っている = タップ
       if (pendingCard) {
-          pendingCard.flipAction();
+          // トグル処理呼び出し
+          onToggleReveal(pendingCard.card.uuid);
       }
 
       isScrolling = false;
