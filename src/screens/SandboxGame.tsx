@@ -176,7 +176,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const onPointerMove = (e: PointerEvent) => {
         if (!dragState) return;
         
-        // リーダーは移動しない（固定）
+        // ★修正: リーダーは見た目上移動させない（固定）
         if (dragState.card.type === 'LEADER') return;
 
         const newPos = { x: e.clientX, y: e.clientY };
@@ -190,9 +190,10 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const endPos = { x: e.clientX, y: e.clientY };
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
-        // 1. リーダーの特別処理 (移動不可, クリックでレストのみ)
+        // 1. リーダーの特別処理
         if (card.type === 'LEADER') {
             if (distFromStart < 10) {
+                // クリックならレスト切替
                 handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             }
             setDragState(null);
@@ -205,6 +206,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
         let destPid = endPos.y > midY ? 'p1' : 'p2';
         let destZone = 'field'; 
+
+        // ★追加: 相手陣地へのドロップ禁止
+        if (destPid === 'p2') {
+            setDragState(null);
+            return;
+        }
 
         const checkDist = (tx: number, ty: number) => {
             const dx = tx - endPos.x;
@@ -234,11 +241,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // 2. ドン!!カードの特別処理
-        if (card.type === 'DON') {
+        // 2. ドン!!カードの処理
+        if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-                // 付与判定 (リーダーまたはフィールド)
+                // 付与判定
                 const leaderX = coords.getLeaderX(W);
                 const leaderY = destPid === 'p2' ? (coords.midY - coords.getY(2) - coords.CH/2) : (midY + coords.getY(2) + coords.CH/2);
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
@@ -258,7 +265,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                 }
             }
 
-            // 移動先判定 (ドンはドンエリアのみ)
+            // 移動先判定: ドンエリアのみ許可
             const dZone = checkZone(destPid === 'p2');
             if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
                 handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
@@ -271,6 +278,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
+        // ★追加: 通常カードがドンエリアに行かないように制限
+        if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
+            setDragState(null);
+            return;
+        }
+
         if (distFromStart < 10) {
             handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null);

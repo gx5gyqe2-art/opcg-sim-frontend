@@ -34,7 +34,6 @@ export const createSandboxBoardSide = (
     container.on('pointerdown', (e) => onCardDown(e, card, container));
   };
 
-  // ステージカードの特定
   let stageCard = p.stage;
   let fieldCards = [...(z.field || [])]; 
 
@@ -67,7 +66,7 @@ export const createSandboxBoardSide = (
     const ldr = createCardContainer(p.leader, coords.CW, coords.CH, getCardOpts(p.leader));
     ldr.x = coords.getLeaderX(W); 
     ldr.y = r2Y;
-    // リーダーもレスト操作のためにインタラクションを有効化（移動はSandboxGame側で制限）
+    // ★修正: リーダーの操作イベントを復活（移動制限はSandboxGame側で行う）
     setupInteractive(ldr, p.leader);
     side.addChild(ldr);
   }
@@ -91,7 +90,6 @@ export const createSandboxBoardSide = (
   });
   life.x = coords.getLifeX(W); life.y = r2Y;
   const topLife = lifeList.length > 0 ? lifeList[0] : null;
-  // 移動も可能にするならセット、確認のみなら外す（今回は確認優先だが移動も可とする）
   if (topLife) setupInteractive(life, topLife); 
   side.addChild(life);
 
