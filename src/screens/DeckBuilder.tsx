@@ -374,24 +374,31 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
   const filtered = useMemo(() => {
     let res = allCards;
     
-    // ▼▼▼ 追加: リーダーの色によるフィルタリングロジック ▼▼▼
+    // ▼▼▼ 修正: リーダーの色によるフィルタリングロジック (混色対応) ▼▼▼
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    const leaderColors = leaderCard?.color || [];
+    // スラッシュ区切りの色情報を分解してフラットな配列にする
+    const leaderColors = (leaderCard?.color || [])
+      .flatMap(c => c.split(/[\/／]/)); 
 
     if (mode === 'main') {
       res = res.filter(c => c.type !== 'LEADER');
-      
+
       // リーダーが選択されている場合、リーダーの色に基づく厳密なフィルタリングを適用
       // ルール: デッキに入れられるカードは、そのカードの全ての色がリーダーの色に含まれていなければならない
       if (leaderColors.length > 0) {
-        res = res.filter(c => 
-          c.color && c.color.length > 0 && c.color.every(cc => leaderColors.includes(cc))
-        );
+        res = res.filter(c => {
+           // カードの色も同様に分解してチェック
+           const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/));
+           
+           // カードの全ての色がリーダーの色に含まれているかチェック
+           // 例: リーダー(赤/青) -> カード(赤):OK, カード(青):OK, カード(赤/青):OK, カード(赤/黒):NG
+           return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
+        });
       }
     } else {
       res = res.filter(c => c.type === 'LEADER');
     }
-    // ▲▲▲ 追加ここまで ▲▲▲
+    // ▲▲▲ 修正ここまで ▲▲▲
 
     // Filters
     if (filters.color !== 'ALL') {
