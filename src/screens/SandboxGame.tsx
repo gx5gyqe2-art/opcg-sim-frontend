@@ -45,6 +45,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
+  
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const { COLORS } = LAYOUT_CONSTANTS;
@@ -66,9 +67,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   useEffect(() => {
     if (!pixiContainerRef.current) return;
+
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
+
     const app = new PIXI.Application({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -77,6 +80,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
     });
+
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
@@ -89,6 +93,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       setLayoutCoords(newCoords.turnEndPos);
     };
     window.addEventListener('resize', handleResize);
+
     return () => {
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
@@ -176,7 +181,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const onPointerMove = (e: PointerEvent) => {
         if (!dragState) return;
         
-        // ★修正: リーダーは見た目上移動させない（固定）
+        // リーダーは固定
         if (dragState.card.type === 'LEADER') return;
 
         const newPos = { x: e.clientX, y: e.clientY };
@@ -207,7 +212,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         let destPid = endPos.y > midY ? 'p1' : 'p2';
         let destZone = 'field'; 
 
-        // ★追加: 相手陣地へのドロップ禁止
+        // 相手陣地へのドロップ禁止
         if (destPid === 'p2') {
             setDragState(null);
             return;
@@ -278,14 +283,20 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
-        // ★追加: 通常カードがドンエリアに行かないように制限
+        // 通常カードがドンエリアに行かないように制限
         if (['don_deck', 'don_active', 'don_rested'].includes(destZone)) {
             setDragState(null);
             return;
         }
 
         if (distFromStart < 10) {
-            handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            // ★追加: 手札の場合はレスト切り替えしない
+            // 手札判定: gameStateから検索
+            const isInHand = gameState?.players.p1.zones.hand.some(c => c.uuid === card.uuid);
+            
+            if (!isInHand) {
+                handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            }
             setDragState(null);
             return;
         }

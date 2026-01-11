@@ -66,7 +66,6 @@ export const createSandboxBoardSide = (
     const ldr = createCardContainer(p.leader, coords.CW, coords.CH, getCardOpts(p.leader));
     ldr.x = coords.getLeaderX(W); 
     ldr.y = r2Y;
-    // ★修正: リーダーの操作イベントを復活（移動制限はSandboxGame側で行う）
     setupInteractive(ldr, p.leader);
     side.addChild(ldr);
   }
@@ -157,11 +156,28 @@ export const createSandboxBoardSide = (
   if (topRestDon) setupInteractive(donRest, topRestDon);
   side.addChild(donRest);
 
-  // 手札
+  // 手札（★修正: 枚数が多い場合に重ねて表示する）
   const handList = z.hand || [];
+  const maxHandWidth = W * 0.9; // 画面幅の90%以内に収める
+  const cardWidth = coords.CW;
+  const totalWidthNeeded = handList.length * cardWidth + (handList.length - 1) * 10; // 通常の間隔
+  
+  // 重ね合わせ計算
+  let stepX = cardWidth + 10;
+  let startX = coords.getHandX(0, W); // デフォルトの開始位置（中央揃え想定）
+
+  if (totalWidthNeeded > maxHandWidth && handList.length > 1) {
+      stepX = (maxHandWidth - cardWidth) / (handList.length - 1);
+      startX = (W - maxHandWidth) / 2 + cardWidth / 2;
+  } else if (handList.length > 0) {
+      // 通常配置（中央揃え）
+      const contentWidth = (handList.length - 1) * stepX;
+      startX = W / 2 - contentWidth / 2;
+  }
+
   handList.forEach((c: CardInstance, i: number) => {
     const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
-    card.x = coords.getHandX(i, W);
+    card.x = startX + i * stepX;
     card.y = r4Y;
     setupInteractive(card, c);
     side.addChild(card);
