@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { logger } from '../utils/logger';
 import { API_CONFIG } from '../api/api.config';
 
-// --- 型定義 ---
 interface CardData {
   uuid: string;
   name: string;
@@ -25,7 +24,6 @@ interface DeckData {
   don_uuids: string[];
 }
 
-// --- 共通: 画像表示コンポーネント ---
 const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
   const [imgError, setImgError] = useState(false);
   const imageUrl = card.uuid ? `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png` : null;
@@ -64,7 +62,6 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
   );
 };
 
-// --- 共通: カード詳細画面 ---
 const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate }: {
   card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void
 }) => {
@@ -92,7 +89,6 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
   );
 };
 
-// --- 新規: フィルタモーダルコンポーネント ---
 const FilterModal = ({ 
   filters, 
   setFilters, 
@@ -134,7 +130,7 @@ const FilterModal = ({
 
   const ColorBtn = ({ colorKey, label, colorCode }: { colorKey: string, label: string, colorCode: string }) => (
     <div 
-      title={label} // 修正箇所: 未使用だった label を title 属性として使用
+      title={label} 
       onClick={() => setFilters({ ...filters, color: filters.color === colorKey ? 'ALL' : colorKey })}
       style={{
         width: '40px', height: '40px', borderRadius: '50%',
@@ -160,13 +156,11 @@ const FilterModal = ({
         width: '85%', maxWidth: '350px', background: '#222', height: '100%', 
         display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 15px rgba(0,0,0,0.5)'
       }}>
-        {/* Header */}
         <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>フィルタ設定</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
 
-        {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
           
           <SectionTitle>色 (COLOR)</SectionTitle>
@@ -245,7 +239,6 @@ const FilterModal = ({
 
         </div>
 
-        {/* Footer */}
         <div style={{ padding: '15px', borderTop: '1px solid #444', display: 'flex', gap: '10px' }}>
           <button onClick={onReset} style={{ flex: 1, padding: '12px', borderRadius: '4px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer' }}>リセット</button>
           <button onClick={onClose} style={{ flex: 2, padding: '12px', borderRadius: '4px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
@@ -255,8 +248,6 @@ const FilterModal = ({
   );
 };
 
-
-// --- 1. デッキ一覧画面 (変更なし) ---
 const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
@@ -286,7 +277,6 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: Dec
   );
 };
 
-// --- 2. デッキ編集画面 (変更なし) ---
 const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCatalog }: { deck: DeckData, allCards: CardData[], onUpdateDeck: (d: DeckData) => void, onSave: () => void, onBack: () => void, onOpenCatalog: (mode: 'leader' | 'main') => void }) => {
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
   const groupedCards = useMemo(() => {
@@ -339,7 +329,6 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
   );
 };
 
-// --- 4. カタログ画面 (FilterModal対応版) ---
 const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void }) => {
   const [filters, setFilters] = useState({
     color: 'ALL',
@@ -373,11 +362,21 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
 
   const filtered = useMemo(() => {
     let res = allCards;
-    // Mode
-    if (mode === 'leader') res = res.filter(c => c.type === 'LEADER');
-    else res = res.filter(c => c.type !== 'LEADER');
+    
+    const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
+    const leaderColors = leaderCard?.color || [];
 
-    // Filters
+    if (mode === 'main') {
+      res = res.filter(c => c.type !== 'LEADER');
+      if (leaderColors.length > 0) {
+        res = res.filter(c => 
+          c.color && c.color.every(cc => leaderColors.includes(cc))
+        );
+      }
+    } else {
+      res = res.filter(c => c.type === 'LEADER');
+    }
+
     if (filters.color !== 'ALL') {
         const target = filters.color.toLowerCase();
         const colorMap: Record<string, string> = { 'red': '赤', 'green': '緑', 'blue': '青', 'purple': '紫', 'black': '黒', 'yellow': '黄' };
@@ -407,7 +406,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
     }
     if (filters.set !== 'ALL') res = res.filter(c => c.uuid.startsWith(filters.set));
 
-    // Text Search
     if (searchText) {
       const lower = searchText.toLowerCase();
       res = res.filter(c => 
@@ -419,7 +417,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
       );
     }
 
-    // Sort
     res = [...res].sort((a, b) => {
       if (filters.sort === 'COST') return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
       if (filters.sort === 'POWER') return (a.power || 0) - (b.power || 0) || a.uuid.localeCompare(b.uuid);
@@ -427,7 +424,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
     });
 
     return res;
-  }, [allCards, filters, mode, searchText]);
+  }, [allCards, filters, mode, searchText, currentDeck.leader_id]);
 
   useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
 
@@ -461,11 +458,9 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
       
-      {/* Header Bar */}
       <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'flex', gap: '10px', alignItems: 'center' }}>
         <button onClick={onClose} style={{ padding: '8px 12px', borderRadius: '4px', border: 'none', background: '#555', color: 'white', cursor: 'pointer' }}>完了</button>
         
-        {/* Search Bar */}
         <div style={{ flex: 1, position: 'relative' }}>
           <input 
             placeholder="キーワード検索 (名前, 効果など)" 
@@ -476,7 +471,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
           <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#777' }}>🔍</span>
         </div>
 
-        {/* Filter Button */}
         <button 
           onClick={() => setShowFilterModal(true)}
           style={{ 
@@ -489,13 +483,11 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
         </button>
       </div>
 
-      {/* Info Bar */}
       <div style={{ padding: '5px 15px', background: '#2a2a2a', color: '#aaa', fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
         <span>{mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
         <span>Hit: {filtered.length}枚</span>
       </div>
 
-      {/* Card Grid */}
       <div 
         onScroll={handleScroll} 
         style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}
@@ -508,7 +500,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
         {displayLimit < filtered.length && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#666' }}>Reading more...</div>}
       </div>
 
-      {/* Modals */}
       {viewingCard && mode === 'main' && (
         <CardDetailScreen card={viewingCard} currentCount={currentDeck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} onNavigate={handleNavigate} />
       )}
@@ -527,7 +518,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
   );
 };
 
-// --- 親コンポーネント (Main) ---
 export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
   const [mode, setMode] = useState<'list' | 'edit' | 'catalog'>('list');
   const [catalogMode, setCatalogMode] = useState<'leader' | 'main'>('main');
