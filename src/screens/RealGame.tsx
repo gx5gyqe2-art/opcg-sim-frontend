@@ -294,9 +294,9 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
           </div>
           {pendingRequest.options && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-              {pendingRequest.options.map((label: string, idx: number) => (
+              {pendingRequest.options.map((option, idx) => (
                 <button key={idx} onClick={() => handleOptionSelect(idx)} disabled={isPending} style={{ padding: '8px 16px', backgroundColor: COLORS.BTN_PRIMARY, color: 'white', border: '1px solid white', borderRadius: '4px', cursor: isPending ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 'bold' }}>
-                  {label}
+                  {option.label}
                 </button>
               ))}
             </div>
