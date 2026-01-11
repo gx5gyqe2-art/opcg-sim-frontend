@@ -9,7 +9,7 @@ export const createSandboxBoardSide = (
   W: number, 
   coords: LayoutCoords, 
   onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void,
-  onInspect: (type: 'deck' | 'life', cards: CardInstance[]) => void // ★追加
+  onInspect: (type: 'deck' | 'life', cards: CardInstance[]) => void
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -34,6 +34,7 @@ export const createSandboxBoardSide = (
     container.on('pointerdown', (e) => onCardDown(e, card, container));
   };
 
+  // ステージカードの特定
   let stageCard = p.stage;
   let fieldCards = [...(z.field || [])]; 
 
@@ -61,12 +62,13 @@ export const createSandboxBoardSide = (
   const r3Y = getAdjustedY(3);
   const r4Y = getAdjustedY(4);
 
-  // リーダー (★修正: setupInteractive を削除し、移動不可にする)
+  // リーダー
   if (p.leader) {
     const ldr = createCardContainer(p.leader, coords.CW, coords.CH, getCardOpts(p.leader));
     ldr.x = coords.getLeaderX(W); 
     ldr.y = r2Y;
-    // リーダーは固定なのでドラッグ設定しない
+    // リーダーもレスト操作のためにインタラクションを有効化（移動はSandboxGame側で制限）
+    setupInteractive(ldr, p.leader);
     side.addChild(ldr);
   }
 
@@ -79,27 +81,26 @@ export const createSandboxBoardSide = (
     side.addChild(stg);
   }
 
-  // ライフ (★修正: クリックで中身確認)
+  // ライフ
   const lifeList = z.life || [];
   const lifeCard = { uuid: `life-${p.player_id}`, name: 'Life' } as any;
   const life = createCardContainer(lifeCard, coords.CW, coords.CH, { 
       ...getCardOpts(lifeCard), 
       count: lifeList.length,
-      onClick: () => onInspect('life', lifeList) // クリックで確認
+      onClick: () => onInspect('life', lifeList)
   });
   life.x = coords.getLifeX(W); life.y = r2Y;
-  // 一番上もドラッグは可能にしておく（そのまま手札に加えたい場合など）
-  // ただし確認モーダルがメインならドラッグは不要かもしれないが、一応残す
   const topLife = lifeList.length > 0 ? lifeList[0] : null;
+  // 移動も可能にするならセット、確認のみなら外す（今回は確認優先だが移動も可とする）
   if (topLife) setupInteractive(life, topLife); 
   side.addChild(life);
 
-  // デッキ (★修正: クリックで中身確認)
+  // デッキ
   const deckList = z.deck || [];
   const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as any;
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, {
       ...getCardOpts(deckCard),
-      onClick: () => onInspect('deck', deckList) // クリックで確認
+      onClick: () => onInspect('deck', deckList)
   });
   deck.x = coords.getDeckX(W); deck.y = r2Y;
   

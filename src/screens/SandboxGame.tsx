@@ -5,7 +5,7 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
 import { apiClient } from '../api/client';
-import type { GameState, CardInstance } from '../game/types'; // BoardCard を削除
+import type { GameState, CardInstance } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
 
 type DragState = {
@@ -14,7 +14,6 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用モーダルコンポーネント
 const InspectModal = ({ type, cards, onClose, onMove }: { type: string, cards: CardInstance[], onClose: () => void, onMove: (uuid: string, to: 'hand' | 'trash') => void }) => {
     return (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -46,13 +45,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life', cards: CardInstance[], pid: string } | null>(null);
-  
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
 
-  // ゲーム初期化
   useEffect(() => {
     const initGame = async () => {
       try {
@@ -67,14 +64,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     initGame();
   }, []);
 
-  // PixiJS初期化
   useEffect(() => {
     if (!pixiContainerRef.current) return;
-
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
-
     const app = new PIXI.Application({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -83,7 +77,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
     });
-
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
@@ -96,14 +89,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       setLayoutCoords(newCoords.turnEndPos);
     };
     window.addEventListener('resize', handleResize);
-
     return () => {
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
   }, []);
 
-  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -137,7 +128,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    // 修正: 引数 container を削除
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState || inspecting) return;
 
@@ -159,7 +149,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         setInspecting({ type, cards, pid });
     };
 
-    // ボード描画
     const p1Side = createSandboxBoardSide(
         gameState.players.p1, false, W, coords, onCardDown, 
         (t, c) => handleInspect(t, c, 'p1')
@@ -180,13 +169,16 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   }, [gameState, isPending, dragState, inspecting]);
 
-  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
 
     const onPointerMove = (e: PointerEvent) => {
         if (!dragState) return;
+        
+        // リーダーは移動しない（固定）
+        if (dragState.card.type === 'LEADER') return;
+
         const newPos = { x: e.clientX, y: e.clientY };
         dragState.sprite.position.set(newPos.x, newPos.y);
     };
@@ -194,8 +186,18 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     const onPointerUp = async (e: PointerEvent) => {
         if (!dragState) return;
         
-        const endPos = { x: e.clientX, y: e.clientY };
         const card = dragState.card;
+        const endPos = { x: e.clientX, y: e.clientY };
+        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
+
+        // 1. リーダーの特別処理 (移動不可, クリックでレストのみ)
+        if (card.type === 'LEADER') {
+            if (distFromStart < 10) {
+                handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            }
+            setDragState(null);
+            return;
+        }
         
         const { width: W, height: H } = app.screen;
         const coords = calculateCoordinates(W, H);
@@ -232,26 +234,20 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
             return null;
         };
         
-        // ドン!!付与判定
-        if (card.card_id === "DON") {
+        // 2. ドン!!カードの特別処理
+        if (card.type === 'DON') {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-                const fieldCards = targetPlayer.zones.field;
-                const fieldY = destPid === 'p2' ? 
-                    (coords.midY - coords.getY(1) - coords.CH/2) : 
-                    (midY + coords.getY(1) + coords.CH/2);
-                
+                // 付与判定 (リーダーまたはフィールド)
                 const leaderX = coords.getLeaderX(W);
-                const leaderY = destPid === 'p2' ? 
-                    (coords.midY - coords.getY(2) - coords.CH/2) : 
-                    (midY + coords.getY(2) + coords.CH/2);
-                
+                const leaderY = destPid === 'p2' ? (coords.midY - coords.getY(2) - coords.CH/2) : (midY + coords.getY(2) + coords.CH/2);
                 if (targetPlayer.leader && checkDist(leaderX, leaderY) < THRESHOLD) {
                      handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid });
                      setDragState(null);
                      return;
                 }
-
+                const fieldY = destPid === 'p2' ? (coords.midY - coords.getY(1) - coords.CH/2) : (midY + coords.getY(1) + coords.CH/2);
+                const fieldCards = targetPlayer.zones.field;
                 for (let i = 0; i < fieldCards.length; i++) {
                     const cx = coords.getFieldX(i, W, coords.CW, fieldCards.length);
                     if (checkDist(cx, fieldY) < THRESHOLD) {
@@ -261,12 +257,20 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
                     }
                 }
             }
+
+            // 移動先判定 (ドンはドンエリアのみ)
+            const dZone = checkZone(destPid === 'p2');
+            if (dZone === 'don_active' || dZone === 'don_rested' || dZone === 'don_deck') {
+                handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
+            }
+            setDragState(null);
+            return;
         }
 
+        // 3. 通常カードの処理
         const detectedZone = checkZone(destPid === 'p2');
         if (detectedZone) destZone = detectedZone;
         
-        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
         if (distFromStart < 10) {
             handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null);
