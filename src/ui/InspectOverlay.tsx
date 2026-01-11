@@ -5,12 +5,12 @@ import type { CardInstance } from '../game/types';
 export const createInspectOverlay = (
   type: string,
   cards: CardInstance[],
-  revealedCardIds: Set<string>, // ★追加: 表向きIDリスト
+  revealedCardIds: Set<string>, // ★追加: 表向きになっているカードのID
   W: number,
   H: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
-  onToggleReveal: (uuid: string) => void // ★追加: フリップ用コールバック
+  onToggleReveal: (uuid: string) => void // ★追加: めくる/戻すための関数
 ) => {
   const container = new PIXI.Container();
 
@@ -40,7 +40,7 @@ export const createInspectOverlay = (
   
   container.addChild(panel);
 
-  // 3. ヘッダー
+  // 3. ヘッダーテキスト
   const titleStyle = new PIXI.TextStyle({
     fontFamily: 'Arial',
     fontSize: 18,
@@ -75,7 +75,7 @@ export const createInspectOverlay = (
   const cardH = 84;
   const gap = 10;
 
-  // 操作判定用
+  // 操作判定用変数
   let isScrolling = false;
   let startPos = { x: 0, y: 0 };
   let scrollStartX = 0;
@@ -83,12 +83,12 @@ export const createInspectOverlay = (
 
   const maxScroll = Math.max(0, cards.length * (cardW + gap) - (panelW - 30));
 
-  // カード生成ループ
   cards.forEach((card, i) => {
     const baseW = 100; 
     const baseH = 140;
     
-    // ★修正: Setに含まれているか、または元々表向きなら表にする
+    // ★修正: State (revealedCardIds) に基づいて表向きかを決定
+    // トラッシュなどは元々 is_face_up=True なので、それも考慮
     const isFaceUp = revealedCardIds.has(card.uuid) || card.is_face_up;
     const displayCard = { ...card, is_face_up: isFaceUp };
 
@@ -106,7 +106,6 @@ export const createInspectOverlay = (
     
     cardSprite.on('pointerdown', (e) => {
       e.stopPropagation();
-      // ドラッグ判定待ち開始
       pendingCard = { card, e }; 
       startPos = { x: e.global.x, y: e.global.y };
       scrollStartX = listContainer.x;
@@ -133,27 +132,24 @@ export const createInspectOverlay = (
 
     if (dist > 10) {
         if (pendingCard) {
-            // 現在のカードが裏向きの場合、ドラッグさせずにめくるだけにしたい場合はここで制御可能
-            // 今回は「表ならドラッグ、裏ならめくる」という挙動にするため、
-            // revealedCardIds に入っているかチェックする
-            const isRevealed = revealedCardIds.has(pendingCard.card.uuid);
-
+            // ドラッグ開始判定
             if (Math.abs(dy) > Math.abs(dx)) {
                 // 縦移動 -> ドラッグ試行
+                // 現在表向きならドラッグ許可、裏向きなら操作キャンセル
+                const isRevealed = revealedCardIds.has(pendingCard.card.uuid) || pendingCard.card.is_face_up;
+                
                 if (isRevealed) {
-                    // 表向きならドラッグ開始
                     onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
                     pendingCard = null;
                     isScrolling = false;
                 } else {
-                    // 裏向きならドラッグ不可（スクロールもキャンセル）
-                    // ここでめくっても良いが、タップ判定に任せるのが自然
+                    // 裏向きのままドラッグしようとした -> キャンセル
                     pendingCard = null;
                     isScrolling = false;
                 }
                 return;
             } else {
-                // 横移動 -> スクロール
+                // 横移動 -> スクロール開始
                 isScrolling = true;
                 pendingCard = null; 
             }
@@ -171,7 +167,7 @@ export const createInspectOverlay = (
   const endDrag = () => {
       // 指を離した時、まだ pendingCard が残っている = タップ
       if (pendingCard) {
-          // トグル処理呼び出し
+          // トグル処理呼び出し (表<->裏)
           onToggleReveal(pendingCard.card.uuid);
       }
 
