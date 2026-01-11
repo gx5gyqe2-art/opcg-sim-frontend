@@ -14,28 +14,72 @@ type DragState = {
   startPos: { x: number, y: number };
 } | null;
 
-// 確認用モーダル (To Life 追加)
-const InspectModal = ({ type, cards, onClose, onMove }: { type: string, cards: CardInstance[], onClose: () => void, onMove: (uuid: string, to: 'hand' | 'trash' | 'life') => void }) => {
+// 確認用パネル (DOMオーバーレイ)
+const InspectPanel = ({ type, cards, onClose, onStartDrag }: { 
+    type: string, 
+    cards: CardInstance[], 
+    onClose: () => void, 
+    onStartDrag: (e: React.PointerEvent, card: CardInstance) => void 
+}) => {
     return (
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ color: 'white', marginBottom: 20, fontSize: 24, fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxWidth: '80%', maxHeight: '60%', overflowY: 'auto', justifyContent: 'center' }}>
+        <div style={{ 
+            position: 'absolute', 
+            top: '60px', 
+            left: '50%', 
+            transform: 'translateX(-50%)', 
+            width: '80%', 
+            maxHeight: '50vh', // 下半分をフィールド操作用に空ける
+            backgroundColor: 'rgba(30, 30, 30, 0.95)', 
+            zIndex: 200, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            borderRadius: '8px',
+            border: '2px solid #555',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+        }}>
+            {/* Header */}
+            <div style={{ 
+                width: '100%', 
+                padding: '10px 15px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                borderBottom: '1px solid #555',
+                background: '#444',
+                borderTopLeftRadius: '6px',
+                borderTopRightRadius: '6px',
+                boxSizing: 'border-box'
+            }}>
+                <span style={{ color: 'white', fontWeight: 'bold' }}>{type.toUpperCase()} ({cards.length})</span>
+                <button onClick={onClose} style={{ cursor: 'pointer', background: 'transparent', border: 'none', color: '#aaa', fontSize: '24px', lineHeight: '1' }}>×</button>
+            </div>
+            
+            {/* Content */}
+            <div style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: '10px', 
+                padding: '15px', 
+                width: '100%', 
+                overflowY: 'auto',
+                justifyContent: 'center',
+                boxSizing: 'border-box'
+            }}>
                 {cards.map(c => (
-                    <div key={c.uuid} style={{ position: 'relative', width: 80, height: 112 }}>
+                    <div 
+                        key={c.uuid} 
+                        style={{ position: 'relative', width: '60px', height: '84px', cursor: 'grab' }}
+                        onPointerDown={(e) => onStartDrag(e, c)} // ドラッグ開始
+                    >
                         <img 
                             src={`${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`} 
-                            style={{ width: '100%', height: '100%', borderRadius: 4 }}
-                            onError={(e) => { e.currentTarget.style.display='none'; }}
+                            style={{ width: '100%', height: '100%', borderRadius: '4px', pointerEvents: 'none', userSelect: 'none' }} 
+                            alt={c.name}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display='none'; }}
                         />
-                        <div style={{ position: 'absolute', bottom: 0, width: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <button onClick={() => onMove(c.uuid, 'hand')} style={{ fontSize: 10, background: '#3498db', color: 'white', border: 'none', cursor: 'pointer', marginBottom: 1 }}>To Hand</button>
-                            <button onClick={() => onMove(c.uuid, 'life')} style={{ fontSize: 10, background: '#f1c40f', color: 'black', border: 'none', cursor: 'pointer', marginBottom: 1 }}>To Life</button>
-                            <button onClick={() => onMove(c.uuid, 'trash')} style={{ fontSize: 10, background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer' }}>To Trash</button>
-                        </div>
                     </div>
                 ))}
             </div>
-            <button onClick={onClose} style={{ marginTop: 20, padding: '10px 30px', fontSize: 18, cursor: 'pointer' }}>Close</button>
         </div>
     );
 };
@@ -102,6 +146,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     };
   }, []);
 
+  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -135,7 +180,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
     border.lineTo(W, midY);
     app.stage.addChild(border);
 
-    // 修正: 引数 container を削除
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState || inspecting) return;
 
@@ -153,15 +197,20 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         });
     };
 
-    // SandboxBoardSideからは onInspect を削除
+    const handleInspect = (type: 'deck' | 'life', cards: CardInstance[], pid: string) => {
+        setInspecting({ type, cards, pid });
+    };
+
     const p1Side = createSandboxBoardSide(
-        gameState.players.p1, false, W, coords, onCardDown
+        gameState.players.p1, false, W, coords, onCardDown, 
+        (t, c) => handleInspect(t, c, 'p1')
     );
     p1Side.y = midY;
     app.stage.addChild(p1Side);
 
     const p2Side = createSandboxBoardSide(
-        gameState.players.p2, true, W, coords, onCardDown
+        gameState.players.p2, true, W, coords, onCardDown,
+        (t, c) => handleInspect(t, c, 'p2')
     );
     p2Side.y = 0;
     app.stage.addChild(p2Side);
@@ -172,6 +221,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
   }, [gameState, isPending, dragState, inspecting]);
 
+  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -228,7 +278,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
             if (checkDist(coords.getLeaderX(W), row2Y) < THRESHOLD) return 'leader';
             if (checkDist(coords.getStageX(W), row2Y) < THRESHOLD) return 'stage';
-            // ★追加: ライフ
             if (checkDist(coords.getLifeX(W), row2Y) < THRESHOLD) return 'life';
             if (checkDist(coords.getTrashX(W), row3Y) < THRESHOLD) return 'trash';
             if (checkDist(coords.getDeckX(W), row2Y) < THRESHOLD) return 'deck';
@@ -281,20 +330,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         }
 
         if (distFromStart < 10) {
-            // ★追加: クリック時の確認ロジック
-            const p1 = gameState?.players.p1;
-            const p2 = gameState?.players.p2;
-            
-            // カードが山札かライフにあるかチェック
-            const findInStack = (p: any, pid: string) => {
-                if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck', list: p.zones.deck, pid };
-                if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life', list: p.zones.life, pid };
-                return null;
-            };
-            
-            const stackInfo = (p1 && findInStack(p1, 'p1')) || (p2 && findInStack(p2, 'p2'));
-            if (stackInfo) {
-                setInspecting({ type: stackInfo.type as any, cards: stackInfo.list, pid: stackInfo.pid });
+            // インスペクターからのドラッグの場合はクリック判定を無視して何もしない
+            // (インスペクターからフィールドへの「置きクリック」防止)
+            if (inspecting) {
                 setDragState(null);
                 return;
             }
@@ -322,7 +360,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [dragState, gameState]);
+  }, [dragState, gameState, inspecting]); // inspectingを追加
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState) return;
@@ -340,14 +378,29 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
       }
   };
 
-  const handleInspectMove = async (uuid: string, to: 'hand' | 'trash' | 'life') => {
-      if (!gameState || !inspecting) return;
-      await handleAction('MOVE_CARD', {
-          card_uuid: uuid,
-          dest_player_id: inspecting.pid,
-          dest_zone: to
+  // インスペクターからのドラッグ開始ハンドラ
+  const handleStartDragFromInspector = (e: React.PointerEvent, card: CardInstance) => {
+      e.preventDefault();
+      
+      // DOMイベントの座標を使用
+      const startPos = { x: e.clientX, y: e.clientY };
+      
+      const { width: W, height: H } = appRef.current!.screen;
+      const coords = calculateCoordinates(W, H);
+      
+      const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
+      ghost.position.set(startPos.x, startPos.y);
+      ghost.alpha = 0.8;
+      ghost.scale.set(1.1);
+      
+      appRef.current!.stage.addChild(ghost);
+      
+      setDragState({
+          card,
+          sprite: ghost,
+          startPos
       });
-      setInspecting(null);
+      // インスペクターを開いたままにする（連続操作などのため）
   };
 
   return (
@@ -388,11 +441,11 @@ export const SandboxGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck
 
       {inspecting && (
           <div style={{ pointerEvents: 'auto' }}>
-              <InspectModal 
+              <InspectPanel 
                   type={inspecting.type} 
                   cards={inspecting.cards} 
                   onClose={() => setInspecting(null)} 
-                  onMove={handleInspectMove}
+                  onStartDrag={handleStartDragFromInspector}
               />
           </div>
       )}
