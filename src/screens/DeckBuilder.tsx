@@ -371,27 +371,46 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
     return Array.from(sets).sort();
   }, [allCards]);
 
+  // ▼▼▼ 修正: 色名正規化用のヘルパー関数 ▼▼▼
+  const normalizeColor = (c: string) => {
+    const s = c.trim().toLowerCase(); // 空白除去と小文字化
+    const map: Record<string, string> = {
+      '赤': 'red', 'red': 'red',
+      '緑': 'green', 'green': 'green',
+      '青': 'blue', 'blue': 'blue',
+      '紫': 'purple', 'purple': 'purple',
+      '黒': 'black', 'black': 'black',
+      '黄': 'yellow', 'yellow': 'yellow',
+    };
+    return map[s] || s;
+  };
+  // ▲▲▲ 修正ここまで ▲▲▲
+
   const filtered = useMemo(() => {
     let res = allCards;
     
-    // ▼▼▼ 修正: リーダーの色によるフィルタリングロジック (混色対応) ▼▼▼
+    // ▼▼▼ 修正: 色の正規化を取り入れたロジック ▼▼▼
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    // スラッシュ区切りの色情報を分解してフラットな配列にする
+    
+    // リーダーの色を分解し、すべて正規化（英語小文字）する
     const leaderColors = (leaderCard?.color || [])
-      .flatMap(c => c.split(/[\/／]/)); 
+      .flatMap(c => c.split(/[\/／]/))
+      .map(c => normalizeColor(c));
 
     if (mode === 'main') {
       res = res.filter(c => c.type !== 'LEADER');
-
+      
       // リーダーが選択されている場合、リーダーの色に基づく厳密なフィルタリングを適用
       // ルール: デッキに入れられるカードは、そのカードの全ての色がリーダーの色に含まれていなければならない
       if (leaderColors.length > 0) {
         res = res.filter(c => {
-           // カードの色も同様に分解してチェック
-           const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/));
+           // カードの色も同様に分解して正規化する
+           const cardColors = (c.color || [])
+             .flatMap(cc => cc.split(/[\/／]/))
+             .map(cc => normalizeColor(cc));
            
-           // カードの全ての色がリーダーの色に含まれているかチェック
-           // 例: リーダー(赤/青) -> カード(赤):OK, カード(青):OK, カード(赤/青):OK, カード(赤/黒):NG
+           // 正規化した状態で包含チェックを行う
+           // 例: リーダー(red,blue) -> カード(red):OK, カード(blue):OK, カード(red,blue):OK, カード(red,black):NG
            return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
         });
       }
