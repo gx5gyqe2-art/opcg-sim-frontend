@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
 import { createCardContainer } from './CardRenderer';
 import type { CardInstance } from '../game/types';
-import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
+import { LAYOUT_PARAMS } from '../layout/layout.config';
 
 // オーバーレイコンテナに更新用メソッドを追加した型定義
 export interface InspectOverlayContainer extends PIXI.Container {
@@ -120,7 +120,7 @@ export const createInspectOverlay = (
     const isRevealed = type === 'trash' || type === 'hand' || revealedCardIds.has(card.uuid);
     const displayCard = { ...card, is_face_up: isRevealed };
     
-    // 【修正】ローカル定義した BASE_CARD_WIDTH, BASE_CARD_HEIGHT を使用
+    // 修正: ローカル定義した BASE_CARD_WIDTH, BASE_CARD_HEIGHT を使用
     const cardSprite = createCardContainer(displayCard, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, { 
       onClick: () => {}
     });
@@ -133,12 +133,10 @@ export const createInspectOverlay = (
       const cover = new PIXI.Graphics();
       cover.beginFill(0x34495e);
       cover.lineStyle(2, 0xecf0f1);
-      // 【修正】定数参照
       cover.drawRoundedRect(0, 0, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, 8);
       cover.endFill();
       const txt = new PIXI.Text("?", { fontSize: 60, fill: "white", fontWeight: 'bold' });
       txt.anchor.set(0.5);
-      // 【修正】定数参照
       txt.position.set(BASE_CARD_WIDTH/2, BASE_CARD_HEIGHT/2);
       cover.addChild(txt);
       cardSprite.addChild(cover);
@@ -146,12 +144,10 @@ export const createInspectOverlay = (
 
     const btn = new PIXI.Graphics();
     btn.beginFill(0x000000, 0.6);
-    // 【修正】定数参照
     btn.drawRoundedRect(10, BASE_CARD_HEIGHT - 40, BASE_CARD_WIDTH - 20, 30, 4);
     btn.endFill();
     const btnTxt = new PIXI.Text("Bot", { fontSize: 18, fill: 'white' });
     btnTxt.anchor.set(0.5);
-    // 【修正】定数参照
     btnTxt.position.set(BASE_CARD_WIDTH/2, BASE_CARD_HEIGHT - 25);
     btn.addChild(btnTxt);
     btn.eventMode = 'static';
@@ -163,7 +159,6 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
-    // 【修正】未使用変数 e を削除
     cardSprite.on('pointertap', () => {
       if (type !== 'trash') onToggleReveal(card.uuid);
     });
