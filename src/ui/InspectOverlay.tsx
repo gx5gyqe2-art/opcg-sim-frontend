@@ -28,13 +28,13 @@ export const createInspectOverlay = (
   container.addChild(bg);
 
   const panelW = W * 0.95;
-  const panelH = Math.min(H * 0.55, 420); 
+  const panelH = Math.min(H * 0.5, 380); 
   const panelX = (W - panelW) / 2;
-  const panelY = 50;
+  const panelY = 60;
 
   const panel = new PIXI.Graphics();
   panel.beginFill(0x1a1a1a, 0.98);
-  panel.lineStyle(2, 0x444444);
+  panel.lineStyle(2, 0x555555);
   panel.drawRoundedRect(0, 0, panelW, panelH, 12);
   panel.endFill();
   panel.position.set(panelX, panelY);
@@ -74,7 +74,7 @@ export const createInspectOverlay = (
   
   const mask = new PIXI.Graphics();
   mask.beginFill(0xffffff);
-  mask.drawRect(0, 0, panelW - 40, panelH - 120);
+  mask.drawRect(0, 0, panelW - 40, panelH - 60);
   mask.endFill();
   listContainer.mask = mask;
   panel.addChild(mask);
@@ -83,57 +83,13 @@ export const createInspectOverlay = (
   const cardW = 70;
   const cardH = 98;
   const gap = 20;
-  const innerW = cards.length * (cardW + gap);
-  const viewW = panelW - 40;
-  const maxScroll = Math.max(0, innerW - viewW);
+  const maxScroll = Math.max(0, cards.length * (cardW + gap) - (panelW - 40));
 
-  // --- スクロールバーの実装 ---
-  const barTrack = new PIXI.Graphics();
-  const barY = panelH - 45;
-  barTrack.beginFill(0x333333);
-  barTrack.drawRoundedRect(20, barY, viewW, 10, 5);
-  barTrack.endFill();
-  panel.addChild(barTrack);
+  let isScrolling = false;
+  let startPos = { x: 0, y: 0 };
+  let scrollStartX = 0;
+  let pendingCard: { card: CardInstance, index: number, e: PIXI.FederatedPointerEvent } | null = null;
 
-  const thumbW = Math.max(40, (viewW / innerW) * viewW);
-  const barThumb = new PIXI.Graphics();
-  barThumb.beginFill(0x888888);
-  barThumb.drawRoundedRect(0, 0, thumbW, 10, 5);
-  barThumb.endFill();
-  barThumb.position.set(20, barY);
-  barThumb.eventMode = 'static';
-  barThumb.cursor = 'pointer';
-  panel.addChild(barThumb);
-
-  const updateListPosFromThumb = (thumbX: number) => {
-    const ratio = (thumbX - 20) / (viewW - thumbW);
-    const newX = 20 - ratio * maxScroll;
-    listContainer.x = newX;
-    if (onScroll) onScroll(newX);
-  };
-
-  const updateThumbPosFromList = (listX: number) => {
-    const ratio = (20 - listX) / maxScroll;
-    const thumbX = 20 + ratio * (viewW - thumbW);
-    barThumb.x = thumbX;
-  };
-
-  updateThumbPosFromList(initialScrollX);
-
-  let thumbDragging = false;
-  barThumb.on('pointerdown', (e) => { e.stopPropagation(); thumbDragging = true; });
-  window.addEventListener('pointerup', () => { thumbDragging = false; });
-  window.addEventListener('pointermove', (e) => {
-    if (!thumbDragging) return;
-    const rect = panel.getBounds();
-    let newThumbX = (e.clientX - rect.x) - thumbW / 2;
-    if (newThumbX < 20) newThumbX = 20;
-    if (newThumbX > 20 + viewW - thumbW) newThumbX = 20 + viewW - thumbW;
-    barThumb.x = newThumbX;
-    updateListPosFromThumb(newThumbX);
-  });
-
-  // --- カード描画とドラッグ入れ替え ---
   cards.forEach((card, i) => {
     const baseW = 100; 
     const baseH = 140;
@@ -146,64 +102,91 @@ export const createInspectOverlay = (
     cardSprite.position.set(i * (cardW + gap) + cardW / 2, cardH / 2);
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
-
-    let cardDragging = false;
-    let dragStartPos = { x: 0, y: 0 };
-    let hasMoved = false;
-
+    
     cardSprite.on('pointerdown', (e) => {
       e.stopPropagation();
-      cardDragging = true;
-      dragStartPos = { x: e.global.x, y: e.global.y };
-      hasMoved = false;
-    });
-
-    cardSprite.on('globalpointermove', (e) => {
-      if (!cardDragging) return;
-      const dx = e.global.x - dragStartPos.x;
-      const dy = e.global.y - dragStartPos.y;
-      if (Math.sqrt(dx*dx + dy*dy) > 10) hasMoved = true;
-
-      if (hasMoved && Math.abs(dy) > Math.abs(dx) + 20 && isRevealed) {
-          onCardDown(card, { x: e.global.x, y: e.global.y });
-          cardDragging = false;
-      }
-    });
-
-    cardSprite.on('pointerup', (e) => {
-      if (!cardDragging) return;
-      if (hasMoved) {
-          const dx = e.global.x - dragStartPos.x;
-          const shift = Math.round(dx / (cardW + gap));
-          if (shift !== 0) {
-              const newIdx = Math.max(0, Math.min(cards.length - 1, i + shift));
-              onReorder(card.uuid, newIdx);
-          } else {
-              onToggleReveal(card.uuid);
-          }
-      } else {
-          onToggleReveal(card.uuid);
-      }
-      cardDragging = false;
+      pendingCard = { card, index: i, e }; 
+      startPos = { x: e.global.x, y: e.global.y };
+      scrollStartX = listContainer.x;
+      isScrolling = false;
     });
 
     const btn = new PIXI.Graphics();
-    btn.beginFill(0x2c3e50);
-    btn.lineStyle(1, 0x555555);
-    btn.drawRoundedRect(-45, 75, 90, 30, 4);
+    btn.beginFill(0x34495e);
+    btn.drawRoundedRect(-50, baseH / 2 + 10, 100, 40, 6);
     btn.endFill();
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
     btn.on('pointerdown', (e) => { e.stopPropagation(); onMoveToBottom(card.uuid); });
 
-    const btnText = new PIXI.Text(type === 'deck' ? 'デッキ下' : 'ライフ下', { fontSize: 18, fill: '#ffffff', fontWeight: 'bold' });
+    const btnText = new PIXI.Text(type === 'deck' ? 'デッキ下' : 'ライフ下', { fontSize: 22, fill: '#ffffff', fontWeight: 'bold' });
     btnText.anchor.set(0.5);
-    btnText.position.set(0, 90);
+    btnText.position.set(0, baseH / 2 + 30);
     btn.addChild(btnText);
     cardSprite.addChild(btn);
 
     listContainer.addChild(cardSprite);
   });
+
+  panel.on('pointerdown', (e) => {
+    isScrolling = true; 
+    startPos = { x: e.global.x, y: e.global.y };
+    scrollStartX = listContainer.x;
+    pendingCard = null;
+  });
+
+  panel.on('globalpointermove', (e) => {
+    if (!pendingCard && !isScrolling) return;
+    const dx = e.global.x - startPos.x;
+    const dy = e.global.y - startPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 10) {
+        if (pendingCard) {
+            if (Math.abs(dy) > Math.abs(dx) + 20) {
+                const currentFaceUp = (pendingCard.card as any).is_face_up;
+                const isRevealed = revealedCardIds.has(pendingCard.card.uuid) || currentFaceUp;
+                if (isRevealed) {
+                    onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
+                    pendingCard = null; isScrolling = false;
+                } else {
+                    pendingCard = null; isScrolling = false;
+                }
+                return;
+            } else {
+                isScrolling = false; 
+            }
+        }
+    }
+
+    if (isScrolling) {
+        let newX = scrollStartX + dx;
+        if (newX > 20) newX = 20;
+        if (newX < 20 - maxScroll) newX = 20 - maxScroll;
+        listContainer.x = newX;
+        if (onScroll) onScroll(newX);
+    }
+  });
+
+  const endDrag = (e: PIXI.FederatedPointerEvent) => {
+      if (pendingCard) {
+          const dx = e.global.x - startPos.x;
+          if (Math.abs(dx) > cardW / 2) {
+              const shift = Math.round(dx / (cardW + gap));
+              const newIdx = Math.max(0, Math.min(cards.length - 1, pendingCard.index + shift));
+              if (newIdx !== pendingCard.index) {
+                  onReorder(pendingCard.card.uuid, newIdx);
+                  pendingCard = null; return;
+              }
+          }
+          onToggleReveal(pendingCard.card.uuid);
+      }
+      isScrolling = false;
+      pendingCard = null;
+  };
+
+  panel.on('pointerup', endDrag);
+  panel.on('pointerupoutside', endDrag);
 
   return container;
 };

@@ -136,6 +136,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || inspecting || dragState) return;
+        if (card.type === 'LEADER') {
+            handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            return;
+        }
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
              const player = gameState.players[myPlayerId as 'p1' | 'p2'];
              if (card.owner_id && player && card.owner_id !== player.name) return;
