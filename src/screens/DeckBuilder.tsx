@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { logger } from '../utils/logger';
 import { API_CONFIG } from '../api/api.config';
 
-// --- 型定義 ---
 interface CardData {
   uuid: string;
   name: string;
@@ -25,7 +24,6 @@ interface DeckData {
   don_uuids: string[];
 }
 
-// フィルタ設定の型定義 (複数選択対応)
 interface FilterState {
   color: string[];
   type: string[];
@@ -39,7 +37,6 @@ interface FilterState {
   sort: string;
 }
 
-// --- 共通: 画像表示コンポーネント ---
 const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
   const [imgError, setImgError] = useState(false);
   const imageUrl = card.uuid ? `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png` : null;
@@ -78,16 +75,13 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
   );
 };
 
-// --- 共通: カード詳細画面 (画像拡大・スワイプ対応版) ---
-const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate }: {
-  card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void
+const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate, viewOnly }: {
+  card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void, viewOnly?: boolean
 }) => {
   const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png`;
-
-  // --- スワイプ処理 ---
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const minSwipeDistance = 50; // スワイプと判定する最小距離
+  const minSwipeDistance = 50;
 
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -103,16 +97,14 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
-    
     if (onNavigate) {
-      if (isLeftSwipe) onNavigate(1);  // 右から左へスワイプ -> 次へ
-      if (isRightSwipe) onNavigate(-1); // 左から右へスワイプ -> 前へ
+      if (isLeftSwipe) onNavigate(1);
+      if (isRightSwipe) onNavigate(-1);
     }
   };
 
   return (
     <div 
-      // タッチイベントをコンテナ全体で受け取る
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -120,18 +112,17 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
         background: 'rgba(0,0,0,0.95)', zIndex: 100, 
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
-        padding: '20px', touchAction: 'none' // スクロール阻害防止
+        padding: '20px', touchAction: 'none'
       }}
     >
-      {/* 画像エリア: ボタンを廃止し、画像を大きく表示 */}
       <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'center', width: '100%' }}>
         <img 
           src={imageUrl} alt={card.name} 
           style={{ 
-            height: '55vh',       // 画面高さの55%を使う
-            maxHeight: '600px',   // 最大高さ制限
-            maxWidth: '90vw',     // 横幅は画面幅の90%まで
-            objectFit: 'contain', // アスペクト比を維持
+            height: '55vh',
+            maxHeight: '600px',
+            maxWidth: '90vw',
+            objectFit: 'contain',
             borderRadius: '12px', 
             border: '2px solid #fff',
             boxShadow: '0 0 20px rgba(0,0,0,0.8)'
@@ -143,48 +134,29 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
         />
       </div>
 
-      {/* 操作ボタン */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '40px' }}>
-        <button onClick={() => onCountChange(-1)} disabled={currentCount <= 0} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount > 0 ? '#e74c3c' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>－</button>
-        <div style={{ fontSize: '64px', fontWeight: 'bold', color: 'white', width: '80px', textAlign: 'center', textShadow: '0 2px 4px black' }}>{currentCount}</div>
-        <button onClick={() => onCountChange(1)} disabled={currentCount >= 4} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount < 4 ? '#3498db' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>＋</button>
-      </div>
+      {!viewOnly && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '40px' }}>
+          <button onClick={() => onCountChange(-1)} disabled={currentCount <= 0} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount > 0 ? '#e74c3c' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>－</button>
+          <div style={{ fontSize: '64px', fontWeight: 'bold', color: 'white', width: '80px', textAlign: 'center', textShadow: '0 2px 4px black' }}>{currentCount}</div>
+          <button onClick={() => onCountChange(1)} disabled={currentCount >= 4} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount < 4 ? '#3498db' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>＋</button>
+        </div>
+      )}
 
       <button onClick={onClose} style={{ padding: '12px 50px', fontSize: '16px', background: 'rgba(255,255,255,0.1)', border: '1px solid #888', color: '#ddd', borderRadius: '30px', cursor: 'pointer' }}>閉じる</button>
-      
       {onNavigate && <div style={{ position: 'absolute', bottom: '20px', color: '#666', fontSize: '12px' }}>↔ Swipe to Navigate</div>}
     </div>
   );
 };
 
-// --- 新規: フィルタモーダルコンポーネント (複数選択対応) ---
-const FilterModal = ({ 
-  filters, 
-  setFilters, 
-  traitList,
-  setList,
-  onClose,
-  onReset
-}: { 
-  filters: FilterState, 
-  setFilters: (f: FilterState) => void, 
-  traitList: string[],
-  setList: string[],
-  onClose: () => void,
-  onReset: () => void
-}) => {
-  
+const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset }: { filters: FilterState, setFilters: (f: FilterState) => void, traitList: string[], setList: string[], onClose: () => void, onReset: () => void }) => {
   const SectionTitle = ({ children }: { children: string }) => (
     <div style={{ color: '#aaa', fontSize: '12px', marginTop: '15px', marginBottom: '8px', fontWeight: 'bold' }}>{children}</div>
   );
 
-  // 複数選択用のトグル関数
   const toggle = (key: keyof FilterState, value: string) => {
     const current = filters[key];
     if (Array.isArray(current)) {
-      const newArray = current.includes(value)
-        ? current.filter(v => v !== value)
-        : [...current, value];
+      const newArray = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
       setFilters({ ...filters, [key]: newArray });
     }
   };
@@ -230,24 +202,13 @@ const FilterModal = ({
   };
 
   return (
-    <div style={{ 
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-      background: 'rgba(0,0,0,0.8)', zIndex: 60, 
-      display: 'flex', justifyContent: 'flex-end' 
-    }}>
-      <div style={{ 
-        width: '85%', maxWidth: '350px', background: '#222', height: '100%', 
-        display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 15px rgba(0,0,0,0.5)'
-      }}>
-        {/* Header */}
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ width: '85%', maxWidth: '350px', background: '#222', height: '100%', display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 15px rgba(0,0,0,0.5)' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>フィルタ設定</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
-
-        {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-          
           <SectionTitle>色 (COLOR) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <ColorBtn colorKey="Red" label="赤" colorCode="#e74c3c" />
@@ -257,74 +218,48 @@ const FilterModal = ({
             <ColorBtn colorKey="Black" label="黒" colorCode="#34495e" />
             <ColorBtn colorKey="Yellow" label="黄" colorCode="#f1c40f" />
           </div>
-
           <SectionTitle>コスト (COST) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(10)].map((_, i) => (
-              <FilterBtn 
-                key={i} 
-                label={`${i+1}`} 
-                active={filters.cost.includes(`${i+1}`)} 
-                onClick={() => toggle('cost', `${i+1}`)} 
-              />
+              <FilterBtn key={i} label={`${i+1}`} active={filters.cost.includes(`${i+1}`)} onClick={() => toggle('cost', `${i+1}`)} />
             ))}
             <FilterBtn label="10+" active={filters.cost.includes('10')} onClick={() => toggle('cost', '10')} />
           </div>
-
           <SectionTitle>種類 (TYPE) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <FilterBtn label="リーダー" active={filters.type.includes('LEADER')} onClick={() => toggle('type', 'LEADER')} />
             <FilterBtn label="キャラ" active={filters.type.includes('CHARACTER')} onClick={() => toggle('type', 'CHARACTER')} />
             <FilterBtn label="イベント" active={filters.type.includes('EVENT')} onClick={() => toggle('type', 'EVENT')} />
             <FilterBtn label="ステージ" active={filters.type.includes('STAGE')} onClick={() => toggle('type', 'STAGE')} />
           </div>
-
           <SectionTitle>カウンター (COUNTER) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="なし" active={filters.counter.includes('NONE')} onClick={() => toggle('counter', 'NONE')} />
             <FilterBtn label="+1000" active={filters.counter.includes('1000')} onClick={() => toggle('counter', '1000')} />
             <FilterBtn label="+2000" active={filters.counter.includes('2000')} onClick={() => toggle('counter', '2000')} />
           </div>
-
           <SectionTitle>トリガー (TRIGGER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="あり" active={filters.trigger.includes('HAS')} onClick={() => toggle('trigger', 'HAS')} />
             <FilterBtn label="なし" active={filters.trigger.includes('NONE')} onClick={() => toggle('trigger', 'NONE')} />
           </div>
-
           <SectionTitle>属性 (ATTRIBUTE) - 複数選択可</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['打', '斬', '特', '射', '知'].map(attr => (
-              <FilterBtn 
-                key={attr} label={attr} 
-                active={filters.attribute.includes(attr)} 
-                onClick={() => toggle('attribute', attr)} 
-              />
+              <FilterBtn key={attr} label={attr} active={filters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
             ))}
           </div>
-
           <SectionTitle>収録セット (SET)</SectionTitle>
-          <select 
-            value={filters.set} 
-            onChange={(e) => setFilters({ ...filters, set: e.target.value })}
-            style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}
-          >
+          <select value={filters.set} onChange={(e) => setFilters({ ...filters, set: e.target.value })} style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}>
             <option value="ALL">すべて</option>
             {setList.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-
           <SectionTitle>特徴 (TRAITS)</SectionTitle>
-          <select 
-            value={filters.trait} 
-            onChange={(e) => setFilters({ ...filters, trait: e.target.value })}
-            style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}
-          >
+          <select value={filters.trait} onChange={(e) => setFilters({ ...filters, trait: e.target.value })} style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}>
             <option value="ALL">すべて</option>
             {traitList.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-
         </div>
-
-        {/* Footer */}
         <div style={{ padding: '15px', borderTop: '1px solid #444', display: 'flex', gap: '10px' }}>
           <button onClick={onReset} style={{ flex: 1, padding: '12px', borderRadius: '4px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer' }}>リセット</button>
           <button onClick={onClose} style={{ flex: 2, padding: '12px', borderRadius: '4px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
@@ -334,8 +269,6 @@ const FilterModal = ({
   );
 };
 
-
-// --- 1. デッキ一覧画面 (変更なし) ---
 const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
@@ -365,7 +298,6 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: Dec
   );
 };
 
-// --- 2. デッキ編集画面 (変更なし) ---
 const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCatalog }: { deck: DeckData, allCards: CardData[], onUpdateDeck: (d: DeckData) => void, onSave: () => void, onBack: () => void, onOpenCatalog: (mode: 'leader' | 'main') => void }) => {
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
   const groupedCards = useMemo(() => {
@@ -418,21 +350,10 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
   );
 };
 
-// --- 4. カタログ画面 (FilterModal対応版) ---
-const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void }) => {
+const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose, viewOnly }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void, viewOnly?: boolean }) => {
   const [filters, setFilters] = useState<FilterState>({
-    color: [],
-    type: [],
-    attribute: [],
-    trait: 'ALL',
-    counter: [],
-    cost: [],
-    power: [],
-    trigger: [],
-    set: 'ALL',
-    sort: 'COST'
+    color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST'
   });
-  
   const [searchText, setSearchText] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [displayLimit, setDisplayLimit] = useState(50);
@@ -450,68 +371,38 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
     return Array.from(sets).sort();
   }, [allCards]);
 
-  // ▼▼▼ 色名正規化用のヘルパー関数 ▼▼▼
   const normalizeColor = (c: string) => {
     const s = c.trim().toLowerCase(); 
-    const map: Record<string, string> = {
-      '赤': 'red', 'red': 'red',
-      '緑': 'green', 'green': 'green',
-      '青': 'blue', 'blue': 'blue',
-      '紫': 'purple', 'purple': 'purple',
-      '黒': 'black', 'black': 'black',
-      '黄': 'yellow', 'yellow': 'yellow',
-    };
+    const map: Record<string, string> = { '赤': 'red', 'red': 'red', '緑': 'green', 'green': 'green', '青': 'blue', 'blue': 'blue', '紫': 'purple', 'purple': 'purple', '黒': 'black', 'black': 'black', '黄': 'yellow', 'yellow': 'yellow' };
     return map[s] || s;
   };
 
   const filtered = useMemo(() => {
     let res = allCards;
-    
-    // --- リーダーによる色制限 ---
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    const leaderColors = (leaderCard?.color || [])
-      .flatMap(c => c.split(/[\/／]/))
-      .map(c => normalizeColor(c));
+    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[\/／]/)).map(c => normalizeColor(c));
 
     if (mode === 'main') {
-      res = res.filter(c => c.type !== 'LEADER');
-      if (leaderColors.length > 0) {
-        res = res.filter(c => {
-           const cardColors = (c.color || [])
-             .flatMap(cc => cc.split(/[\/／]/))
-             .map(cc => normalizeColor(cc));
-           return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
-        });
+      if (!viewOnly) {
+          res = res.filter(c => c.type !== 'LEADER');
+          if (leaderColors.length > 0) {
+            res = res.filter(c => {
+               const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/)).map(cc => normalizeColor(cc));
+               return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
+            });
+          }
       }
     } else {
       res = res.filter(c => c.type === 'LEADER');
     }
 
-    // --- 複数選択フィルタの適用 (OR条件) ---
-    
     if (filters.color.length > 0) {
-        // フィルタで選択された色（正規化済みと仮定）のいずれかを含んでいればOK
         const selected = filters.color.map(c => normalizeColor(c));
-        res = res.filter(c => 
-          c.color && c.color.some(cc => { 
-            const norm = normalizeColor(cc);
-            return selected.includes(norm);
-          })
-        );
+        res = res.filter(c => c.color && c.color.some(cc => selected.includes(normalizeColor(cc))));
     }
-
-    if (filters.type.length > 0) {
-      res = res.filter(c => filters.type.includes(c.type));
-    }
-
-    if (filters.attribute.length > 0) {
-      res = res.filter(c => c.attributes?.some(attr => filters.attribute.includes(attr)));
-    }
-
-    if (filters.trait !== 'ALL') {
-      res = res.filter(c => c.traits?.some(t => t.includes(filters.trait)));
-    }
-
+    if (filters.type.length > 0) res = res.filter(c => filters.type.includes(c.type));
+    if (filters.attribute.length > 0) res = res.filter(c => c.attributes?.some(attr => filters.attribute.includes(attr)));
+    if (filters.trait !== 'ALL') res = res.filter(c => c.traits?.some(t => t.includes(filters.trait)));
     if (filters.counter.length > 0) {
       res = res.filter(c => {
         if (filters.counter.includes('NONE') && !c.counter) return true;
@@ -519,7 +410,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
         return false;
       });
     }
-
     if (filters.cost.length > 0) {
       res = res.filter(c => {
         const costVal = c.cost || 0;
@@ -527,12 +417,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
         return filters.cost.includes(costVal.toString());
       });
     }
-
-    if (filters.power.length > 0) {
-      // ※ PowerフィルタのUI実装はまだないがロジックのみ対応
-      res = res.filter(c => filters.power.includes((c.power || 0).toString())); 
-    }
-
     if (filters.trigger.length > 0) {
       res = res.filter(c => {
         if (filters.trigger.includes('HAS') && !!c.trigger_text) return true;
@@ -540,32 +424,20 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
         return false;
       });
     }
+    if (filters.set !== 'ALL') res = res.filter(c => c.uuid.startsWith(filters.set));
 
-    if (filters.set !== 'ALL') {
-      res = res.filter(c => c.uuid.startsWith(filters.set));
-    }
-
-    // Text Search
     if (searchText) {
       const lower = searchText.toLowerCase();
-      res = res.filter(c => 
-        (c.name && c.name.toLowerCase().includes(lower)) ||
-        (c.text && c.text.toLowerCase().includes(lower)) ||
-        (c.attributes && c.attributes.some(a => a.toLowerCase().includes(lower))) ||
-        (c.type && c.type.toLowerCase().includes(lower)) ||
-        (c.traits && c.traits.some(t => t.toLowerCase().includes(lower)))
-      );
+      res = res.filter(c => (c.name && c.name.toLowerCase().includes(lower)) || (c.text && c.text.toLowerCase().includes(lower)) || (c.attributes && c.attributes.some(a => a.toLowerCase().includes(lower))) || (c.type && c.type.toLowerCase().includes(lower)) || (c.traits && c.traits.some(t => t.toLowerCase().includes(lower))));
     }
 
-    // Sort
     res = [...res].sort((a, b) => {
       if (filters.sort === 'COST') return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
       if (filters.sort === 'POWER') return (a.power || 0) - (b.power || 0) || a.uuid.localeCompare(b.uuid);
       return a.uuid.localeCompare(b.uuid);
     });
-
     return res;
-  }, [allCards, filters, mode, searchText, currentDeck.leader_id]);
+  }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
 
   useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
 
@@ -575,6 +447,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
   };
 
   const handleSelect = (card: CardData) => {
+    if (viewOnly) { setViewingCard(card); return; }
     if (mode === 'leader') { onUpdateDeck({ ...currentDeck, leader_id: card.uuid }); onClose(); }
     else { setViewingCard(card); }
   };
@@ -595,8 +468,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
   };
 
   const displayCards = filtered.slice(0, displayLimit);
-  
-  // フィルタがアクティブかどうかの判定（アイコン表示用）
   const isFilterActive = Object.entries(filters).some(([key, val]) => {
     if (key === 'sort') return val !== 'COST';
     if (Array.isArray(val)) return val.length > 0;
@@ -605,86 +476,48 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose 
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
-      
-      {/* Header Bar */}
       <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button onClick={onClose} style={{ padding: '8px 12px', borderRadius: '4px', border: 'none', background: '#555', color: 'white', cursor: 'pointer' }}>完了</button>
-        
-        {/* Search Bar */}
+        <button onClick={onClose} style={{ padding: '8px 12px', borderRadius: '4px', border: 'none', background: '#555', color: 'white', cursor: 'pointer' }}>{viewOnly ? '戻る' : '完了'}</button>
         <div style={{ flex: 1, position: 'relative' }}>
-          <input 
-            placeholder="キーワード検索 (名前, 効果など)" 
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '20px', border: 'none', background: '#222', color: 'white', boxSizing: 'border-box' }}
-          />
+          <input placeholder="キーワード検索" value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '20px', border: 'none', background: '#222', color: 'white', boxSizing: 'border-box' }} />
           <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#777' }}>🔍</span>
         </div>
-
-        {/* Filter Button */}
-        <button 
-          onClick={() => setShowFilterModal(true)}
-          style={{ 
-            padding: '10px', borderRadius: '50%', border: 'none', 
-            background: isFilterActive ? '#3498db' : '#444', 
-            color: 'white', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}
-        >
-          ⚙️
-        </button>
+        <button onClick={() => setShowFilterModal(true)} style={{ padding: '10px', borderRadius: '50%', border: 'none', background: isFilterActive ? '#3498db' : '#444', color: 'white', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⚙️</button>
       </div>
-
-      {/* Info Bar */}
       <div style={{ padding: '5px 15px', background: '#2a2a2a', color: '#aaa', fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
-        <span>{mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
+        <span>{viewOnly ? 'カードリスト' : mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
         <span>Hit: {filtered.length}枚</span>
       </div>
-
-      {/* Card Grid */}
-      <div 
-        onScroll={handleScroll} 
-        style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}
-      >
+      <div onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}>
         {displayCards.length === 0 && <div style={{ color: '#888', gridColumn: '1/-1', textAlign: 'center', marginTop: '20px' }}>条件に合うカードがありません</div>}
         {displayCards.map(c => {
           const countInDeck = currentDeck.card_uuids.filter(id => id === c.uuid).length;
           return <CardImageStub key={c.uuid} card={c} count={countInDeck > 0 ? countInDeck : undefined} onClick={() => handleSelect(c)} />;
         })}
-        {displayLimit < filtered.length && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#666' }}>Reading more...</div>}
       </div>
-
-      {/* Modals */}
-      {viewingCard && mode === 'main' && (
+      {viewingCard && (
         <CardDetailScreen 
           card={viewingCard} 
           currentCount={currentDeck.card_uuids.filter(id => id === viewingCard.uuid).length} 
           onCountChange={(diff) => handleCountChange(viewingCard, diff)} 
           onClose={() => setViewingCard(null)} 
           onNavigate={handleNavigate} 
+          viewOnly={viewOnly}
         />
       )}
-
       {showFilterModal && (
-        <FilterModal 
-          filters={filters} 
-          setFilters={setFilters} 
-          traitList={traitList}
-          setList={setList}
-          onClose={() => setShowFilterModal(false)}
-          onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })}
-        />
+        <FilterModal filters={filters} setFilters={setFilters} traitList={traitList} setList={setList} onClose={() => setShowFilterModal(false)} onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })} />
       )}
     </div>
   );
 };
 
-// --- 親コンポーネント (Main) ---
-export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
-  const [mode, setMode] = useState<'list' | 'edit' | 'catalog'>('list');
+export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, viewOnly?: boolean }) => {
+  const [mode, setMode] = useState<'list' | 'edit' | 'catalog'>(viewOnly ? 'catalog' : 'list');
   const [catalogMode, setCatalogMode] = useState<'leader' | 'main'>('main');
   const [allCards, setAllCards] = useState<CardData[]>([]);
   const [decks, setDecks] = useState<DeckData[]>([]);
-  const [currentDeck, setCurrentDeck] = useState<DeckData | null>(null);
+  const [currentDeck, setCurrentDeck] = useState<DeckData | null>(viewOnly ? { name: 'Catalog', leader_id: null, card_uuids: [], don_uuids: [] } : null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -692,13 +525,15 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
         const cRes = await fetch(`${API_CONFIG.BASE_URL}/api/cards`);
         const cData = await cRes.json();
         if (cData.success) setAllCards(cData.cards);
-        const dRes = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
-        const dData = await dRes.json();
-        if (dData.success) setDecks(dData.decks);
+        if (!viewOnly) {
+          const dRes = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
+          const dData = await dRes.json();
+          if (dData.success) setDecks(dData.decks);
+        }
       } catch (e) { logger.error('deck_builder.init', String(e)); }
     };
     fetchData();
-  }, [mode]);
+  }, [mode, viewOnly]);
 
   const handleSelectDeck = (deck: DeckData) => { setCurrentDeck(deck); setMode('edit'); };
   const handleCreateNew = () => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); };
@@ -714,6 +549,6 @@ export const DeckBuilder = ({ onBack }: { onBack: () => void }) => {
 
   if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={handleSelectDeck} onCreateNew={handleCreateNew} onBack={onBack} />;
   if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={handleOpenCatalog} />;
-  if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => setMode('edit')} />;
+  if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
   return <div>Loading...</div>;
 };

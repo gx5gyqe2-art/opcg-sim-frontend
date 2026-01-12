@@ -57,13 +57,12 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox'>('start');
+  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox' | 'cardList'>('start');
   const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>({
     p1: 'imu.json',
     p2: 'nami.json'
   });
   
-  // サンドボックス用の追加設定 (Role, GameID)
   const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string }>({ role: 'both' });
 
   return (
@@ -92,6 +91,7 @@ export default function App() {
               }
             }}
             onDeckBuilder={() => setMode('deck')}
+            onCardList={() => setMode('cardList')}
           />
         )}
         
@@ -121,8 +121,11 @@ export default function App() {
           />
         )}
 
-        {mode === 'deck' && (
-          <DeckBuilder onBack={() => setMode('start')} />
+        {(mode === 'deck' || mode === 'cardList') && (
+          <DeckBuilder 
+            onBack={() => setMode('start')} 
+            viewOnly={mode === 'cardList'} 
+          />
         )}
       </ErrorBoundary>
     </div>
