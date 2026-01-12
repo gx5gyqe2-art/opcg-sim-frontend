@@ -199,7 +199,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
           (card, startPos) => startDrag(card, startPos), 
-          (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); }, 
+          // 【修正】onToggleReveal コールバックを削除 (createInspectOverlayの引数から削除したため)
           () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
           (x) => { inspectScrollXRef.current = x; } 
@@ -232,11 +232,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
 
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
-        // --- タップ判定 (InspectモードでのReveal切り替え用) ---
         if (distFromStart < 10) {
             if (inspecting) {
-                // Inspecting中かつタップなら、Reveal状態を切り替え
-                // カードがInspectingCardsに含まれるか確認
                 if (inspectingCards.some(c => c.uuid === card.uuid)) {
                     const newSet = new Set(revealedCardIds);
                     if (newSet.has(card.uuid)) newSet.delete(card.uuid);
@@ -247,10 +244,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 return;
             }
             
-            // 通常のタップ判定
-            const currentPlayer = gameState?.players[myPlayerId === 'both' ? 'p1' : myPlayerId as 'p1'|'p2']; // 簡易判定
-            // 山札等のクリック判定
-            // ... (省略: 既存ロジックは移動距離判定後に実行) ...
+            // 【修正】未使用変数 currentPlayer を削除
+            // 既存の盤面タップ処理へフォールスルー（下のブロックへ）
         }
 
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
@@ -258,23 +253,21 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         
         if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
 
-        // --- Inspecting中のパネル判定 ---
         if (inspecting && overlayRef.current && inspecting.pid === destPid) {
              const PANEL_W = Math.min(W * 0.95, 1200);
              const PANEL_X = (W - PANEL_W) / 2;
-             const PANEL_Y = 20; // InspectOverlay.tsxのPANEL_Yと合わせる
-             const PANEL_H = Math.min(H * 0.48, 450); // InspectOverlay.tsxのPANEL_Hと合わせる
+             const PANEL_Y = 20; 
+             const PANEL_H = Math.min(H * 0.48, 450); 
 
              const isInsidePanel = 
                 endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W &&
                 endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
 
              if (isInsidePanel) {
-                 // パネル内ドロップの場合、並び替えかどうか判定
                  const HEADER_HEIGHT = 50;
                  const SCROLL_ZONE_HEIGHT = 70;
                  if (endPos.y > PANEL_Y + HEADER_HEIGHT && endPos.y < PANEL_Y + PANEL_H - SCROLL_ZONE_HEIGHT) {
-                     const ASPECT = 1.39;
+                     // 【修正】未使用変数 ASPECT, LIST_H, cardH, cardW を削除
                      const DISPLAY_CARD_WIDTH = 70; 
                      const CARD_GAP = 15;
                      const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
@@ -291,15 +284,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                          index: newIndex 
                      });
                  }
-                 // パネル内なら盤面ドロップ処理はさせない (裏のデッキなどに反応させない)
                  setDragState(null);
                  return;
              }
         }
 
-        // --- 盤面ドロップ判定 ---
         if (distFromStart < 10) {
-            // タップ時の通常処理 (Inspect以外)
             const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
             if (destP) { const stackInfo = findInStack(destP); if (stackInfo) { inspectScrollXRef.current = 20; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }

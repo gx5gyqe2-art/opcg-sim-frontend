@@ -25,7 +25,6 @@ export const createInspectOverlay = (
   initialScrollX: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
-  onToggleReveal: (uuid: string) => void,
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
   onScrollCallback: (x: number) => void
@@ -41,14 +40,13 @@ export const createInspectOverlay = (
   bg.on('pointerdown', onClose);
   container.addChild(bg);
 
-  // --- レイアウト定数 (修正: 縦幅を縮小) ---
+  // --- レイアウト定数 ---
   const PADDING = 20;
-  const HEADER_HEIGHT = 50; // ヘッダー高さを少し縮小
-  const SCROLL_ZONE_HEIGHT = 70; // スクロールエリアも少し縮小
+  const HEADER_HEIGHT = 50; 
+  const SCROLL_ZONE_HEIGHT = 70; 
   const PANEL_W = Math.min(W * 0.95, 1200);
   const PANEL_X = (W - PANEL_W) / 2;
-  const PANEL_Y = 20; // 上部マージンを詰める
-  // 高さ: 画面の48%程度に制限し、相手エリア(上半分)に収まるようにする
+  const PANEL_Y = 20; 
   const PANEL_H = Math.min(H * 0.48, 450); 
 
   const CARD_AREA_Y = HEADER_HEIGHT + PADDING;
@@ -65,7 +63,7 @@ export const createInspectOverlay = (
   panel.on('pointerdown', (e) => e.stopPropagation());
   container.addChild(panel);
 
-  // --- ヘッダー要素 (修正: 被り防止) ---
+  // --- ヘッダー要素 ---
   const titleStyle = new PIXI.TextStyle({ fontFamily: 'Arial', fontSize: 18, fontWeight: 'bold', fill: '#ffd700' });
   const title = new PIXI.Text(`${type.toUpperCase()} (${cards.length})`, titleStyle);
   title.position.set(PADDING, PADDING);
@@ -84,7 +82,6 @@ export const createInspectOverlay = (
     const rTxt = new PIXI.Text("REVEAL ALL", { fontSize: 12, fill: 'white', fontWeight: 'bold' });
     rTxt.anchor.set(0.5); rTxt.position.set(50, 13);
     revealBtn.addChild(rBg, rTxt);
-    // 閉じるボタンの左側に配置
     revealBtn.position.set(PANEL_W - 160, 12);
     revealBtn.eventMode = 'static';
     revealBtn.cursor = 'pointer';
@@ -153,9 +150,6 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
-    // SandboxGame側でタップ判定を行うため、ここではstopPropagationせず、
-    // 親への伝播を許可するか、もしくはdrag開始として扱う
-    // ここでは onCardDown (ドラッグ開始) のみをバインド
     cardSprite.on('pointerdown', (e) => {
       e.stopPropagation();
       onCardDown(card, { x: e.global.x, y: e.global.y });
@@ -210,8 +204,6 @@ export const createInspectOverlay = (
     const dx = lastX - e.global.x;
     lastX = e.global.x;
     
-    // スクロール範囲の計算
-    // 右端：カード総幅 - パネル幅 + 余白
     const maxScroll = Math.max(0, cards.length * TOTAL_CARD_WIDTH - PANEL_W + PADDING * 2);
     
     let nextX = currentScrollX + dx;
@@ -267,7 +259,6 @@ export const createInspectOverlay = (
                  visualIndex = adjustedIndex;
              }
          } else {
-             // リスト外からのドラッグの場合
              if (originalIndex >= gapIndex) {
                  visualIndex = originalIndex + 1;
              }
