@@ -6,6 +6,7 @@ import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
 import { createInspectOverlay } from '../ui/InspectOverlay';
 import type { InspectOverlayContainer } from '../ui/InspectOverlay';
+import { CardDetailSheet } from '../ui/CardDetailSheet'; // 追加
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
@@ -30,6 +31,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   const [dropChoice, setDropChoice] = useState<{ card: CardInstance, destPid: string, destZone: string } | null>(null);
+  const [selectedCard, setSelectedCard] = useState<CardInstance | null>(null); // 追加: 詳細表示用
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -55,6 +57,15 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       if (inspecting.type === 'trash') return p.zones.trash || [];
       return [];
   }, [gameState, inspecting]);
+
+  // 長押し時の処理
+  const handleLongPress = (card: CardInstance) => {
+      // 詳細表示
+      logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
+      setSelectedCard(card);
+      // 長押し成立時はドラッグをキャンセル
+      setDragState(null);
+  };
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -189,9 +200,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
-    const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false);
+    
+    // BoardSideにonLongPressを渡す
+    const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false, handleLongPress);
     bottomSide.y = midY; app.stage.addChild(bottomSide);
-    const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle);
+    const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle, handleLongPress);
     topSide.y = 0; app.stage.addChild(topSide);
 
     if (inspecting) {
@@ -199,12 +212,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
           (card, startPos) => startDrag(card, startPos), 
-          // onToggleReveal削除
           () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
-          (x) => { inspectScrollXRef.current = x; } 
+          (x) => { inspectScrollXRef.current = x; },
+          handleLongPress // 追加: InspectOverlayにも渡す
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
@@ -255,7 +268,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (inspecting && overlayRef.current && inspecting.pid === destPid) {
              const PANEL_W = Math.min(W * 0.95, 1200);
              const PANEL_X = (W - PANEL_W) / 2;
-             const PANEL_Y = 20; 
+             const PANEL_Y = 15; 
              const PANEL_H = Math.min(H * 0.48, 450);
 
              const isInsidePanel = 
@@ -263,7 +276,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
 
              if (isInsidePanel) {
-                 const HEADER_HEIGHT = 50;
+                 const HEADER_HEIGHT = 40;
                  const SCROLL_ZONE_HEIGHT = 70;
                  if (endPos.y > PANEL_Y + HEADER_HEIGHT && endPos.y < PANEL_Y + PANEL_H - SCROLL_ZONE_HEIGHT) {
                      const DISPLAY_CARD_WIDTH = 70; 
@@ -399,6 +412,18 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         </div>
       )}
       {!gameState && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}><h2>Connecting...</h2></div>}
+      
+      {/* 詳細表示モーダル */}
+      {selectedCard && (
+        <CardDetailSheet
+          card={selectedCard}
+          location="unknown"
+          isMyTurn={false} // 詳細表示のみなのでfalse
+          onAction={async () => {}} // ダミーアクション
+          onClose={() => setSelectedCard(null)}
+        />
+      )}
+
       {gameState && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}><button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button></div>

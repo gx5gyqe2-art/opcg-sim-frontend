@@ -9,7 +9,8 @@ export const createSandboxBoardSide = (
   W: number, 
   coords: LayoutCoords, 
   onCardDown: (e: PIXI.FederatedPointerEvent, card: CardInstance, container: PIXI.Container) => void,
-  hideHand: boolean = false 
+  hideHand: boolean = false,
+  onLongPress?: (card: CardInstance) => void // 追加
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -31,7 +32,43 @@ export const createSandboxBoardSide = (
   const setupInteractive = (container: PIXI.Container, card: CardInstance) => {
     container.eventMode = 'static';
     container.cursor = 'grab';
-    container.on('pointerdown', (e) => onCardDown(e, card, container));
+    
+    // --- 長押し判定 ---
+    let pressTimer: any = null;
+    let startPos = { x: 0, y: 0 };
+
+    const startPress = (e: PIXI.FederatedPointerEvent) => {
+        startPos = { x: e.global.x, y: e.global.y };
+        pressTimer = setTimeout(() => {
+            if (onLongPress) onLongPress(card);
+            pressTimer = null;
+        }, 500); // 500ms
+    };
+
+    const checkMove = (e: PIXI.FederatedPointerEvent) => {
+        if (!pressTimer) return;
+        const dx = e.global.x - startPos.x;
+        const dy = e.global.y - startPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+        }
+    };
+
+    const cancelPress = () => {
+        if (pressTimer) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+        }
+    };
+
+    container.on('pointerdown', (e) => {
+        startPress(e);
+        onCardDown(e, card, container);
+    });
+    container.on('pointermove', checkMove);
+    container.on('pointerup', cancelPress);
+    container.on('pointerupoutside', cancelPress);
   };
 
   let stageCard = p.stage;
@@ -175,7 +212,6 @@ export const createSandboxBoardSide = (
   }
 
   handList.forEach((c: CardInstance, i: number) => {
-    // hideHandがtrueなら、カード情報を上書きして「裏面」にする
     const renderCard = hideHand 
         ? { ...c, is_face_up: false, card_id: undefined, name: 'Card' } 
         : c;
@@ -184,7 +220,6 @@ export const createSandboxBoardSide = (
     card.x = startX + i * stepX;
     card.y = r4Y;
     
-    // イベント自体は元のカードオブジェクト(UUID等)で行う
     setupInteractive(card, c);
     side.addChild(card);
   });

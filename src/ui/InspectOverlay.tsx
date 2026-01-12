@@ -25,16 +25,16 @@ export const createInspectOverlay = (
   initialScrollX: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
-  // onToggleReveal は使用しなくなったため削除
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
   onMoveToHand: (uuid: string) => void,
   onMoveToTrash: (uuid: string) => void,
-  onScrollCallback: (x: number) => void
+  onScrollCallback: (x: number) => void,
+  onLongPress: (card: CardInstance) => void // 追加
 ): InspectOverlayContainer => {
   const container = new PIXI.Container() as InspectOverlayContainer;
 
-  // 背景: 手札が見えるように透明度を下げる (0.2)
+  // 背景
   const bg = new PIXI.Graphics();
   bg.beginFill(0x000000, 0.2); 
   bg.drawRect(0, 0, W, H);
@@ -45,11 +45,12 @@ export const createInspectOverlay = (
 
   // --- レイアウト定数 ---
   const PADDING = 20;
-  const HEADER_HEIGHT = 50;
+  // リストを上に避けるためヘッダー領域を詰める
+  const HEADER_HEIGHT = 40; 
   const SCROLL_ZONE_HEIGHT = 70;
   const PANEL_W = Math.min(W * 0.95, 1200);
   const PANEL_X = (W - PANEL_W) / 2;
-  const PANEL_Y = 20;
+  const PANEL_Y = 15; // 上部マージンをさらに詰める
   const PANEL_H = Math.min(H * 0.48, 450); 
 
   const CARD_AREA_Y = HEADER_HEIGHT + PADDING;
@@ -69,13 +70,13 @@ export const createInspectOverlay = (
   // --- ヘッダー要素 ---
   const titleStyle = new PIXI.TextStyle({ fontFamily: 'Arial', fontSize: 18, fontWeight: 'bold', fill: '#ffd700' });
   const title = new PIXI.Text(`${type.toUpperCase()} (${cards.length})`, titleStyle);
-  title.position.set(PADDING, PADDING);
+  title.position.set(PADDING, 10); // タイトル位置調整
   panel.addChild(title);
 
   const closeBtn = new PIXI.Text("×", { ...titleStyle, fontSize: 28, fill: '#ffffff' });
   closeBtn.eventMode = 'static';
   closeBtn.cursor = 'pointer';
-  closeBtn.position.set(PANEL_W - PADDING - 15, 10);
+  closeBtn.position.set(PANEL_W - PADDING - 15, 5);
   closeBtn.on('pointerdown', onClose);
   panel.addChild(closeBtn);
 
@@ -85,7 +86,7 @@ export const createInspectOverlay = (
     const rTxt = new PIXI.Text("REVEAL ALL", { fontSize: 12, fill: 'white', fontWeight: 'bold' });
     rTxt.anchor.set(0.5); rTxt.position.set(50, 13);
     revealBtn.addChild(rBg, rTxt);
-    revealBtn.position.set(PANEL_W - 160, 12);
+    revealBtn.position.set(PANEL_W - 160, 8);
     revealBtn.eventMode = 'static';
     revealBtn.cursor = 'pointer';
     revealBtn.on('pointerdown', onRevealAll);
@@ -118,7 +119,6 @@ export const createInspectOverlay = (
     const scale = DISPLAY_CARD_WIDTH / BASE_CARD_WIDTH;
     cardSprite.scale.set(scale);
 
-    // 裏面画像
     if (!isRevealed) {
       const backTexture = PIXI.Texture.from(`${API_CONFIG.IMAGE_BASE_URL}/OPCG_back.png`);
       const backSprite = new PIXI.Sprite(backTexture);
@@ -128,29 +128,37 @@ export const createInspectOverlay = (
       cardSprite.addChild(backSprite);
     }
 
-    // ボタン生成ヘルパー
+    // ボタン生成ヘルパー (サイズ拡大)
     const createButton = (label: string, color: number, yPos: number, onClick: () => void) => {
       const btn = new PIXI.Graphics();
       btn.beginFill(color, 0.9);
       btn.lineStyle(1, 0xecf0f1);
-      const btnH = 22;
-      const btnW = BASE_CARD_WIDTH;
-      btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 4);
+      
+      // ボタンサイズ拡大
+      const btnH = 30; // 22 -> 30
+      const btnW = BASE_CARD_WIDTH + 10; // 幅も少し大きく
+      
+      btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 6);
       btn.endFill();
       btn.position.set(0, yPos);
 
-      const btnTxt = new PIXI.Text(label, { fontSize: 14, fill: 'white', fontWeight: 'bold' });
+      // 文字サイズ拡大
+      const btnTxt = new PIXI.Text(label, { fontSize: 16, fill: 'white', fontWeight: 'bold' });
       btnTxt.anchor.set(0.5);
       btn.addChild(btnTxt);
       
       btn.eventMode = 'static';
       btn.cursor = 'pointer';
-      btn.on('pointerdown', (e) => { e.stopPropagation(); onClick(); });
+      btn.on('pointerdown', (e) => { 
+          e.stopPropagation(); 
+          onClick(); 
+      });
       return btn;
     };
 
-    let btnStartY = BASE_CARD_HEIGHT / 2 + 15;
-    const btnGap = 26;
+    // ボタン配置
+    let btnStartY = BASE_CARD_HEIGHT / 2 + 20;
+    const btnGap = 35; // 間隔も広げる
 
     const handBtn = createButton("手札へ", 0x2980b9, btnStartY + btnGap * 0, () => onMoveToHand(card.uuid));
     const trashBtn = createButton("トラッシュ", 0xc0392b, btnStartY + btnGap * 1, () => onMoveToTrash(card.uuid));
@@ -165,10 +173,54 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
+    // --- 長押し・ドラッグ・タップ判定 ---
+    let pressTimer: any = null;
+    let startPos = { x: 0, y: 0 };
+    let isDragging = false;
+
+    const startPress = (e: PIXI.FederatedPointerEvent) => {
+        startPos = { x: e.global.x, y: e.global.y };
+        isDragging = false;
+        
+        // 500ms長押しで詳細表示
+        pressTimer = setTimeout(() => {
+            onLongPress(card);
+            pressTimer = null;
+        }, 500);
+    };
+
+    const checkMove = (e: PIXI.FederatedPointerEvent) => {
+        if (!pressTimer) return;
+        const dx = e.global.x - startPos.x;
+        const dy = e.global.y - startPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+            isDragging = true;
+        }
+    };
+
+    const cancelPress = () => {
+        if (pressTimer) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+        }
+    };
+
     cardSprite.on('pointerdown', (e) => {
-      e.stopPropagation();
-      onCardDown(card, { x: e.global.x, y: e.global.y });
+        e.stopPropagation();
+        startPress(e);
+        // ドラッグ開始は遅延させず、即座に反応させるが、
+        // 長押しが成立した場合はドラッグをキャンセルする処理はSandboxGame側での制御が必要になる。
+        // ここではシンプルに、「長押し判定中はドラッグ開始を呼ばない」のではなく、
+        // 「長押し成立したらドラッグを無効化」あるいは「ドラッグ開始コールバック」を呼ぶ。
+        // 既存の onCardDown はドラッグ開始用。
+        onCardDown(card, { x: e.global.x, y: e.global.y });
     });
+
+    cardSprite.on('pointermove', checkMove);
+    cardSprite.on('pointerup', cancelPress);
+    cardSprite.on('pointerupoutside', cancelPress);
 
     listContainer.addChild(cardSprite);
     cardSprites.push({ sprite: cardSprite, card, originalIndex: i });
