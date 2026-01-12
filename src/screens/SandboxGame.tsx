@@ -134,13 +134,21 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
         app.stage.addChild(ghost); setDragState({ card, sprite: ghost, startPos: startPoint });
     };
-    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance, _container: PIXI.Container) => {
+    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || inspecting || dragState) return;
-        if (card.type && card.type.toUpperCase() === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
-        if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
-             const player = gameState.players[myPlayerId as 'p1' | 'p2'];
-             if (card.owner_id && player && card.owner_id !== player.name) return;
+        
+        // リーダーはタップのみ（レスト操作）、ドラッグ禁止
+        if ((card.type || '').toUpperCase() === 'LEADER') { 
+            handleAction('TOGGLE_REST', { card_uuid: card.uuid }); 
+            return; 
         }
+
+        // 自分のカード以外は操作禁止 (Solo Mode ('both') 以外の場合)
+        if (myPlayerId !== 'both' && gameState) {
+             const me = gameState.players[myPlayerId as 'p1' | 'p2'];
+             if (me && card.owner_id && card.owner_id !== me.name) return;
+        }
+        
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
@@ -169,20 +177,25 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
-    const onPointerMove = (e: PointerEvent) => { if (!dragState || dragState.card.type === 'LEADER') return; dragState.sprite.position.set(e.clientX, e.clientY); };
+    const onPointerMove = (e: PointerEvent) => { if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; dragState.sprite.position.set(e.clientX, e.clientY); };
     const onPointerUp = async (e: PointerEvent) => {
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
-        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
         
-        if (card.type && card.type.toUpperCase() === 'LEADER') {
-            if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            setDragState(null); return;
+        // リーダーはドラッグ不可（念のため）
+        if ((card.type || '').toUpperCase() === 'LEADER') { 
+            setDragState(null); return; 
         }
 
+        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
-        if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
+        
+        // 相手エリアへのドロップ禁止
+        if (myPlayerId !== 'both' && destPid !== myPlayerId) { 
+            setDragState(null); return; 
+        }
+
         let destZone = 'field'; 
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
         const THRESHOLD = coords.CH; 
@@ -228,6 +241,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
         else if (detectedZone) { destZone = detectedZone; }
         
+        // 移動アニメーション
         const animateAndSend = () => {
             const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
             const step = () => {
