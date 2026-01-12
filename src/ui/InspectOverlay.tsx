@@ -25,13 +25,13 @@ export const createInspectOverlay = (
   initialScrollX: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
-  onToggleReveal: (uuid: string) => void, // 復活
+  onToggleReveal: (uuid: string) => void,
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
   onMoveToHand: (uuid: string) => void,
   onMoveToTrash: (uuid: string) => void,
-  onScrollCallback: (x: number) => void,
-  onLongPress: (card: CardInstance) => void // 追加
+  onScrollCallback: (x: number) => void
+  // onLongPress削除
 ): InspectOverlayContainer => {
   const container = new PIXI.Container() as InspectOverlayContainer;
 
@@ -128,7 +128,6 @@ export const createInspectOverlay = (
       cardSprite.addChild(backSprite);
     }
 
-    // ボタン生成 (サイズ拡大)
     const createButton = (label: string, color: number, yPos: number, onClick: () => void) => {
       const btn = new PIXI.Graphics();
       btn.beginFill(color, 0.9);
@@ -170,57 +169,19 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
-    // --- 長押し判定 ---
-    let pressTimer: any = null;
-    let startPos = { x: 0, y: 0 };
-
-    const startPress = (e: PIXI.FederatedPointerEvent) => {
-        startPos = { x: e.global.x, y: e.global.y };
-        
-        pressTimer = setTimeout(() => {
-            onLongPress(card);
-            pressTimer = null;
-        }, 500);
-    };
-
-    const checkMove = (e: PIXI.FederatedPointerEvent) => {
-        if (!pressTimer) return;
-        const dx = e.global.x - startPos.x;
-        const dy = e.global.y - startPos.y;
-        if (Math.sqrt(dx * dx + dy * dy) > 5) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
-        }
-    };
-
-    const cancelPress = () => {
-        if (pressTimer) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
-        }
-    };
-
     cardSprite.on('pointerdown', (e) => {
         e.stopPropagation();
-        startPress(e);
-        // ドラッグ開始
         onCardDown(card, { x: e.global.x, y: e.global.y });
     });
 
-    // タップ判定 (表裏切り替え)
     cardSprite.on('pointertap', () => {
       if (type !== 'trash') onToggleReveal(card.uuid);
     });
-
-    cardSprite.on('pointermove', checkMove);
-    cardSprite.on('pointerup', cancelPress);
-    cardSprite.on('pointerupoutside', cancelPress);
 
     listContainer.addChild(cardSprite);
     cardSprites.push({ sprite: cardSprite, card, originalIndex: i });
   });
 
-  // --- スクロールゾーン ---
   const scrollZone = new PIXI.Graphics();
   const szY = PANEL_H - SCROLL_ZONE_HEIGHT;
   scrollZone.beginFill(0x222222);

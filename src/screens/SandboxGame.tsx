@@ -35,6 +35,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
+  // --- 長押し判定用のRef ---
+  const longPressTimerRef = useRef<any>(null);
+  const pressStartPosRef = useRef<{x: number, y: number} | null>(null);
+
   const dragStateRef = useRef(dragState);
   useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
@@ -58,10 +62,27 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       return [];
   }, [gameState, inspecting]);
 
-  const handleLongPress = (card: CardInstance) => {
-      logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
-      setSelectedCard(card);
-      setDragState(null);
+  // 長押しタイマー開始
+  const startLongPress = (card: CardInstance, x: number, y: number) => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      pressStartPosRef.current = { x, y };
+      
+      longPressTimerRef.current = setTimeout(() => {
+          // 長押し成立時の処理
+          logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
+          setSelectedCard(card);
+          setDragState(null); // ドラッグをキャンセル
+          longPressTimerRef.current = null;
+      }, 500); // 500ms
+  };
+
+  // 長押しタイマーキャンセル
+  const cancelLongPress = () => {
+      if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+      }
+      pressStartPosRef.current = null;
   };
 
   useEffect(() => {
@@ -112,9 +133,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     return () => { if (ws) ws.close(); };
   }, []);
 
+  // Pixi App Initialization & Ticker
   useEffect(() => {
     if (!pixiContainerRef.current || (gameState && gameState.status === 'WAITING')) return;
+    
     while (pixiContainerRef.current.firstChild) pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
+    
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: COLORS.APP_BG, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
@@ -159,6 +183,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
   }, [gameState?.status]);
 
+  // Main Render Effect
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
@@ -187,10 +212,16 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         app.stage.addChild(ghost); 
         setDragState({ card, sprite: ghost, startPos: startPoint });
     };
+
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState) return;
         if ((card.type || '').toUpperCase() === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
         if (myPlayerId !== 'both' && gameState) { const me = gameState.players[myPlayerId as 'p1' | 'p2']; if (me && card.owner_id && card.owner_id !== me.name) return; }
+        
+        // 長押し判定開始
+        startLongPress(card, e.global.x, e.global.y);
+        
+        // ドラッグ開始
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
@@ -198,17 +229,17 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
     
-    const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false, handleLongPress);
+    // onLongPressの個別渡しは不要になったので削除
+    const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false);
     bottomSide.y = midY; app.stage.addChild(bottomSide);
-    const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle, handleLongPress);
+    const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle);
     topSide.y = 0; app.stage.addChild(topSide);
 
     if (inspecting) {
         const overlay = createInspectOverlay(
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
-          (card, startPos) => startDrag(card, startPos), 
-          // onToggleReveal: 表裏状態を切り替える
+          (card, startPos) => onCardDown({ global: startPos } as any, card), // onCardDownを再利用
           (uuid) => { 
               const newSet = new Set(revealedCardIds); 
               if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); 
@@ -218,8 +249,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
-          (x) => { inspectScrollXRef.current = x; },
-          handleLongPress
+          (x) => { inspectScrollXRef.current = x; }
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
@@ -231,17 +261,30 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     if (dragState) app.stage.addChild(dragState.sprite);
   }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
 
+  // Global Event Listeners
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
     
     const onPointerMove = (e: PointerEvent) => { 
+        // 移動したら長押しキャンセル
+        if (pressStartPosRef.current) {
+            const dx = e.clientX - pressStartPosRef.current.x;
+            const dy = e.clientY - pressStartPosRef.current.y;
+            if (Math.sqrt(dx * dx + dy * dy) > 10) {
+                cancelLongPress();
+            }
+        }
+
         if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; 
         dragState.sprite.position.set(e.clientX, e.clientY); 
         if (overlayRef.current) overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
     };
     
     const onPointerUp = async (e: PointerEvent) => {
+        // 離したら長押しキャンセル
+        cancelLongPress();
+
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
         
@@ -251,10 +294,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
 
         if (distFromStart < 10) {
             if (inspecting) {
-                // Inspecting中のタップ判定はInspectOverlay内で処理されるためここでは無視、
-                // またはOverlay外タップで閉じるなどの処理があればここで行う。
-                // 現在はInspectOverlayでpointertapを処理しているので、ここは空でOK、
-                // もしくはドラッグリセットのみ行う。
+                if (inspectingCards.some(c => c.uuid === card.uuid)) {
+                    const newSet = new Set(revealedCardIds);
+                    if (newSet.has(card.uuid)) newSet.delete(card.uuid);
+                    else newSet.add(card.uuid);
+                    setRevealedCardIds(newSet);
+                }
                 setDragState(null); 
                 return;
             }
@@ -368,9 +413,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       try { const pid = myPlayerId === 'both' ? (params.player_id || 'p1') : myPlayerId; const res = await apiClient.sendSandboxAction(activeGameId, { action_type: type, player_id: pid, ...params }); setGameState(res.state); } catch(e) { logger.error('sandbox.action_fail', String(e)); } finally { setIsPending(false); }
   };
 
+  // ... (描画部分は変更なしのため、return文は元のまま維持)
   if (gameState && gameState.status === 'WAITING') {
-    const ready = gameState.ready_states ?? { p1: false, p2: false };
-    const canStart = ready.p1 && ready.p2;
+    // ... (Lobby UI)
     return (
       <div style={{ width: '100vw', height: '100vh', background: '#1a0b0b', color: '#f0e6d2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }}>
         <h1 style={{ color: '#ffd700', fontSize: isMobile ? '24px' : '32px', marginBottom: '20px' }}>ROOM: {gameState.room_name}</h1>
@@ -378,11 +423,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           {(['p1', 'p2'] as const).map(pid => (
             <div key={pid} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', border: '2px solid #5d4037', flex: 1, textAlign: 'center', maxWidth: isMobile ? '100%' : '350px' }}>
               <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>{pid.toUpperCase()}: {gameState.players[pid].name}</h2>
-              <div style={{ marginBottom: '15px' }}>{ready[pid] ? <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>READY</span> : <span style={{ color: '#e74c3c' }}>NOT READY</span>}</div>
+              <div style={{ marginBottom: '15px' }}>{gameState.ready_states?.[pid] ? <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>READY</span> : <span style={{ color: '#e74c3c' }}>NOT READY</span>}</div>
               {(pid === myPlayerId || myPlayerId === 'both') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <select style={{ padding: '10px', background: '#fff8e1', border: '2px solid #8b4513', borderRadius: '4px' }} onChange={(e) => handleAction('SET_DECK', { player_id: pid, deck_id: e.target.value })}><option value="">デッキを選択...</option>{deckOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}</select>
-                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '12px', background: ready[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{ready[pid] ? 'キャンセル' : '準備完了'}</button>
+                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '12px', background: gameState.ready_states?.[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{gameState.ready_states?.[pid] ? 'キャンセル' : '準備完了'}</button>
                 </div>
               )}
             </div>
@@ -390,7 +435,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         </div>
         <div style={{ marginTop: '40px', display: 'flex', gap: '15px' }}>
           <button onClick={onBack} style={{ padding: '12px 25px', background: '#555', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>退出</button>
-          {(myPlayerId === 'p1' || myPlayerId === 'both') && <button disabled={!canStart} onClick={() => handleAction('START', {})} style={{ padding: '12px 50px', background: canStart ? '#2ecc71' : '#333', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>開始</button>}
+          {(myPlayerId === 'p1' || myPlayerId === 'both') && <button disabled={!(gameState.ready_states?.p1 && gameState.ready_states?.p2)} onClick={() => handleAction('START', {})} style={{ padding: '12px 50px', background: (gameState.ready_states?.p1 && gameState.ready_states?.p2) ? '#2ecc71' : '#333', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>開始</button>}
         </div>
       </div>
     );
@@ -399,7 +444,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: inspecting ? 200 : 1 }} />
-      
       {dropChoice && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10000, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
           <div style={{ background: '#2c3e50', padding: '30px', borderRadius: '15px', border: '2px solid #d4af37', textAlign: 'center', width: '80%', maxWidth: '400px' }}>
@@ -414,7 +458,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       )}
       {!gameState && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}><h2>Connecting...</h2></div>}
       
-      {/* 詳細表示モーダル */}
       {selectedCard && (
         <CardDetailSheet
           card={selectedCard}
