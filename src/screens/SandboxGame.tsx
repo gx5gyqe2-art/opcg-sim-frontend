@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
@@ -134,7 +134,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
         app.stage.addChild(ghost); setDragState({ card, sprite: ghost, startPos: startPoint });
     };
-    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
+    const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance, _container: PIXI.Container) => {
         if (isPending || inspecting || dragState) return;
         if (card.type === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
@@ -220,12 +220,16 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         const detectedZone = checkZone(isTopArea); 
         if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
         else if (detectedZone) { destZone = detectedZone; }
+        
         const animateAndSend = () => {
             const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
             const step = () => {
                 const dx = tx - sprite.x; const dy = ty - sprite.y;
-                if (Math.sqrt(dx*dx + dy*dy) < 5) { app.ticker.remove(step); handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null); }
-                else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
+                if (Math.sqrt(dx*dx + dy*dy) < 5) { 
+                    app.ticker.remove(step); 
+                    handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); 
+                    setDragState(null); 
+                } else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
             };
             app.ticker.add(step);
         };

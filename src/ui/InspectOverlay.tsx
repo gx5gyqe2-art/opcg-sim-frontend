@@ -28,7 +28,7 @@ export const createInspectOverlay = (
   container.addChild(bg);
 
   const panelW = W * 0.95;
-  const panelH = Math.min(H * 0.55, 400); 
+  const panelH = Math.min(H * 0.55, 420); 
   const panelX = (W - panelW) / 2;
   const panelY = 50;
 
@@ -91,8 +91,7 @@ export const createInspectOverlay = (
   cards.forEach((card, i) => {
     const baseW = 100; 
     const baseH = 140;
-    const currentFaceUp = (card as any).is_face_up;
-    const isRevealed = revealedCardIds.has(card.uuid) || currentFaceUp;
+    const isRevealed = revealedCardIds.has(card.uuid) || (card as any).is_face_up;
     const displayCard = { ...card, is_face_up: isRevealed };
 
     const cardSprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
@@ -112,14 +111,14 @@ export const createInspectOverlay = (
     const btn = new PIXI.Graphics();
     btn.beginFill(0x2c3e50);
     btn.lineStyle(1, 0x555555);
-    btn.drawRoundedRect(-45, baseH / 2 + 20, 90, 40, 6);
+    btn.drawRoundedRect(-50, baseH / 2 + 25, 100, 45, 8);
     btn.endFill();
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
     btn.on('pointerdown', (e) => { e.stopPropagation(); onMoveToBottom(card.uuid); });
     const btnText = new PIXI.Text(type === 'deck' ? 'デッキ下' : 'ライフ下', { fontSize: 20, fill: '#ffffff', fontWeight: 'bold' });
     btnText.anchor.set(0.5);
-    btnText.position.set(0, baseH / 2 + 40);
+    btnText.position.set(0, baseH / 2 + 47);
     btn.addChild(btnText);
     cardSprite.addChild(btn);
 
