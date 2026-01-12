@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
@@ -136,10 +136,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || inspecting || dragState) return;
-        if (card.type === 'LEADER') {
-            handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            return;
-        }
+        if (card.type === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
              const player = gameState.players[myPlayerId as 'p1' | 'p2'];
              if (card.owner_id && player && card.owner_id !== player.name) return;
@@ -177,17 +174,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
-        
-        if (card.type === 'LEADER') {
-            if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            setDragState(null); return;
-        }
-
+        if (card.type === 'LEADER') { if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid }); setDragState(null); return; }
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
-        
         if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
-
         let destZone = 'field'; 
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
         const THRESHOLD = coords.CH; 
@@ -207,7 +197,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (checkDist(coords.getDonRestX(W), r3Y) < THRESHOLD) return 'don_rested';
             return null;
         };
-
         if (distFromStart < 10) {
             if (inspecting) { setDragState(null); return; }
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
@@ -216,7 +205,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (!currentPlayer?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null); return;
         }
-
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
@@ -232,7 +220,16 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         const detectedZone = checkZone(isTopArea); 
         if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
         else if (detectedZone) { destZone = detectedZone; }
-        await handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null);
+        const animateAndSend = () => {
+            const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
+            const step = () => {
+                const dx = tx - sprite.x; const dy = ty - sprite.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 5) { app.ticker.remove(step); handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null); }
+                else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
+            };
+            app.ticker.add(step);
+        };
+        animateAndSend();
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
@@ -274,7 +271,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
-      <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
+      <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: inspecting ? 200 : 1 }} />
       {dropChoice && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10000, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
           <div style={{ background: '#2c3e50', padding: '30px', borderRadius: '15px', border: '2px solid #d4af37', textAlign: 'center', width: '80%', maxWidth: '400px' }}>

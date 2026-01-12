@@ -28,13 +28,13 @@ export const createInspectOverlay = (
   container.addChild(bg);
 
   const panelW = W * 0.95;
-  const panelH = Math.min(H * 0.5, 380); 
+  const panelH = Math.min(H * 0.55, 400); 
   const panelX = (W - panelW) / 2;
-  const panelY = 60;
+  const panelY = 50;
 
   const panel = new PIXI.Graphics();
   panel.beginFill(0x1a1a1a, 0.98);
-  panel.lineStyle(2, 0x555555);
+  panel.lineStyle(2, 0x444444);
   panel.drawRoundedRect(0, 0, panelW, panelH, 12);
   panel.endFill();
   panel.position.set(panelX, panelY);
@@ -55,7 +55,6 @@ export const createInspectOverlay = (
   revealAllBtn.eventMode = 'static';
   revealAllBtn.cursor = 'pointer';
   revealAllBtn.on('pointerdown', (e) => { e.stopPropagation(); onRevealAll(); });
-  
   const raText = new PIXI.Text('すべて表示', { fontSize: 14, fill: '#ffffff', fontWeight: 'bold' });
   raText.anchor.set(0.5);
   raText.position.set(50, 15);
@@ -71,10 +70,9 @@ export const createInspectOverlay = (
 
   const listContainer = new PIXI.Container();
   listContainer.position.set(initialScrollX, 60);
-  
   const mask = new PIXI.Graphics();
   mask.beginFill(0xffffff);
-  mask.drawRect(0, 0, panelW - 40, panelH - 60);
+  mask.drawRect(0, 0, panelW - 40, panelH - 80);
   mask.endFill();
   listContainer.mask = mask;
   panel.addChild(mask);
@@ -112,16 +110,16 @@ export const createInspectOverlay = (
     });
 
     const btn = new PIXI.Graphics();
-    btn.beginFill(0x34495e);
-    btn.drawRoundedRect(-50, baseH / 2 + 10, 100, 40, 6);
+    btn.beginFill(0x2c3e50);
+    btn.lineStyle(1, 0x555555);
+    btn.drawRoundedRect(-45, baseH / 2 + 20, 90, 40, 6);
     btn.endFill();
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
     btn.on('pointerdown', (e) => { e.stopPropagation(); onMoveToBottom(card.uuid); });
-
-    const btnText = new PIXI.Text(type === 'deck' ? 'デッキ下' : 'ライフ下', { fontSize: 22, fill: '#ffffff', fontWeight: 'bold' });
+    const btnText = new PIXI.Text(type === 'deck' ? 'デッキ下' : 'ライフ下', { fontSize: 20, fill: '#ffffff', fontWeight: 'bold' });
     btnText.anchor.set(0.5);
-    btnText.position.set(0, baseH / 2 + 30);
+    btnText.position.set(0, baseH / 2 + 40);
     btn.addChild(btnText);
     cardSprite.addChild(btn);
 
@@ -139,24 +137,15 @@ export const createInspectOverlay = (
     if (!pendingCard && !isScrolling) return;
     const dx = e.global.x - startPos.x;
     const dy = e.global.y - startPos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist > 10) {
-        if (pendingCard) {
-            if (Math.abs(dy) > Math.abs(dx) + 20) {
-                const currentFaceUp = (pendingCard.card as any).is_face_up;
-                const isRevealed = revealedCardIds.has(pendingCard.card.uuid) || currentFaceUp;
-                if (isRevealed) {
-                    onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
-                    pendingCard = null; isScrolling = false;
-                } else {
-                    pendingCard = null; isScrolling = false;
-                }
-                return;
-            } else {
-                isScrolling = false; 
+    if (pendingCard && Math.sqrt(dx*dx + dy*dy) > 10) {
+        if (Math.abs(dy) > Math.abs(dx) + 20) {
+            if ((pendingCard.card as any).is_face_up || revealedCardIds.has(pendingCard.card.uuid)) {
+                onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
+                pendingCard = null; isScrolling = false; return;
             }
         }
+        if (Math.abs(dx) > 15) isScrolling = false;
     }
 
     if (isScrolling) {
@@ -181,8 +170,7 @@ export const createInspectOverlay = (
           }
           onToggleReveal(pendingCard.card.uuid);
       }
-      isScrolling = false;
-      pendingCard = null;
+      isScrolling = false; pendingCard = null;
   };
 
   panel.on('pointerup', endDrag);
