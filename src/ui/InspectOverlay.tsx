@@ -9,9 +9,14 @@ export interface InspectOverlayContainer extends PIXI.Container {
   updateScroll: (x: number) => void;
 }
 
-// レンダリング用の基準サイズ定義 (レイアウト設定の比率を使用)
+// レンダリング用の基準解像度（きれいに表示するための内部サイズ）
 const BASE_CARD_WIDTH = 120;
 const BASE_CARD_HEIGHT = BASE_CARD_WIDTH * LAYOUT_PARAMS.CARD.ASPECT_RATIO;
+
+// 実際に表示するサイズ（以前のサイズ感に合わせる）
+const DISPLAY_CARD_WIDTH = 70; 
+const CARD_GAP = 15;
+const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
 
 export const createInspectOverlay = (
   type: string,
@@ -35,7 +40,7 @@ export const createInspectOverlay = (
   bg.drawRect(0, 0, W, H);
   bg.endFill();
   bg.eventMode = 'static';
-  bg.on('pointerdown', onClose); // 背景クリックで閉じる
+  bg.on('pointerdown', onClose);
   container.addChild(bg);
 
   // --- レイアウト定数 ---
@@ -98,18 +103,6 @@ export const createInspectOverlay = (
   listContainer.y = CARD_AREA_Y;
   panel.addChild(listContainer);
 
-  // カードサイズ計算
-  const ASPECT = 1.39;
-  let cardH = LIST_H - 20;
-  let cardW = cardH / ASPECT;
-  const MAX_CARD_W = 120;
-  if (cardW > MAX_CARD_W) {
-    cardW = MAX_CARD_W;
-    cardH = cardW * ASPECT;
-  }
-  const CARD_GAP = 15;
-  const TOTAL_CARD_WIDTH = cardW + CARD_GAP;
-
   let currentScrollX = initialScrollX;
   const maxScroll = Math.max(0, cards.length * TOTAL_CARD_WIDTH - PANEL_W + PADDING * 2);
   
@@ -120,36 +113,47 @@ export const createInspectOverlay = (
     const isRevealed = type === 'trash' || type === 'hand' || revealedCardIds.has(card.uuid);
     const displayCard = { ...card, is_face_up: isRevealed };
     
-    // 修正: ローカル定義した BASE_CARD_WIDTH, BASE_CARD_HEIGHT を使用
+    // 基準解像度で作成（CardRendererは中心基準で描画）
     const cardSprite = createCardContainer(displayCard, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, { 
       onClick: () => {}
     });
 
-    // 表示サイズに合わせてスケール
-    const scale = cardW / BASE_CARD_WIDTH;
+    // 表示サイズに合わせてスケール (70px / 120px)
+    const scale = DISPLAY_CARD_WIDTH / BASE_CARD_WIDTH;
     cardSprite.scale.set(scale);
 
+    // 裏向きカバー
     if (!isRevealed) {
       const cover = new PIXI.Graphics();
       cover.beginFill(0x34495e);
       cover.lineStyle(2, 0xecf0f1);
-      cover.drawRoundedRect(0, 0, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, 8);
+      // 【修正】中心基準で描画するように座標を修正 (-w/2, -h/2)
+      cover.drawRoundedRect(-BASE_CARD_WIDTH / 2, -BASE_CARD_HEIGHT / 2, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, 8);
       cover.endFill();
+      
       const txt = new PIXI.Text("?", { fontSize: 60, fill: "white", fontWeight: 'bold' });
       txt.anchor.set(0.5);
-      txt.position.set(BASE_CARD_WIDTH/2, BASE_CARD_HEIGHT/2);
+      // 【修正】中心基準なので (0, 0)
+      txt.position.set(0, 0);
       cover.addChild(txt);
       cardSprite.addChild(cover);
     }
 
+    // デッキ下へボタン
     const btn = new PIXI.Graphics();
     btn.beginFill(0x000000, 0.6);
-    btn.drawRoundedRect(10, BASE_CARD_HEIGHT - 40, BASE_CARD_WIDTH - 20, 30, 4);
+    // 【修正】中心基準で座標計算 (下部マージン考慮)
+    const btnH = 30;
+    const btnW = BASE_CARD_WIDTH - 20;
+    const btnY = BASE_CARD_HEIGHT / 2 - 25; // 中心から下に配置
+    btn.drawRoundedRect(-btnW / 2, btnY - btnH / 2, btnW, btnH, 4);
     btn.endFill();
+
     const btnTxt = new PIXI.Text("Bot", { fontSize: 18, fill: 'white' });
     btnTxt.anchor.set(0.5);
-    btnTxt.position.set(BASE_CARD_WIDTH/2, BASE_CARD_HEIGHT - 25);
+    btnTxt.position.set(0, btnY);
     btn.addChild(btnTxt);
+    
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
     btn.visible = isRevealed;
@@ -172,6 +176,7 @@ export const createInspectOverlay = (
     cardSprites.push({ sprite: cardSprite, card, originalIndex: i });
   });
 
+  // --- スクロールゾーン ---
   const scrollZone = new PIXI.Graphics();
   const szY = PANEL_H - SCROLL_ZONE_HEIGHT;
   scrollZone.beginFill(0x222222);
@@ -268,9 +273,9 @@ export const createInspectOverlay = (
             if (originalIndex > draggingItemIndex) adjustedIndex -= 1;
             
              if (adjustedIndex >= gapIndex) {
-                 sprite.position.set((adjustedIndex + 1) * TOTAL_CARD_WIDTH - currentScrollX, cardH / 2 + 10);
+                 sprite.position.set((adjustedIndex + 1) * TOTAL_CARD_WIDTH - currentScrollX, LIST_H / 2);
              } else {
-                 sprite.position.set(adjustedIndex * TOTAL_CARD_WIDTH - currentScrollX, cardH / 2 + 10);
+                 sprite.position.set(adjustedIndex * TOTAL_CARD_WIDTH - currentScrollX, LIST_H / 2);
              }
              return;
          }
@@ -282,7 +287,7 @@ export const createInspectOverlay = (
           if (originalIndex >= gapIndex) targetX += TOTAL_CARD_WIDTH;
       }
 
-      sprite.position.set(targetX, cardH / 2 + 10);
+      sprite.position.set(targetX, LIST_H / 2);
     });
   };
 
