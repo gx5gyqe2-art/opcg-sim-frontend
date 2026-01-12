@@ -6,7 +6,7 @@ import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
 import { createInspectOverlay } from '../ui/InspectOverlay';
 import type { InspectOverlayContainer } from '../ui/InspectOverlay';
-import { CardDetailSheet } from '../ui/CardDetailSheet'; // 追加
+import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
@@ -31,7 +31,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   const [dropChoice, setDropChoice] = useState<{ card: CardInstance, destPid: string, destZone: string } | null>(null);
-  const [selectedCard, setSelectedCard] = useState<CardInstance | null>(null); // 追加: 詳細表示用
+  const [selectedCard, setSelectedCard] = useState<CardInstance | null>(null);
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
@@ -58,12 +58,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       return [];
   }, [gameState, inspecting]);
 
-  // 長押し時の処理
   const handleLongPress = (card: CardInstance) => {
-      // 詳細表示
       logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
       setSelectedCard(card);
-      // 長押し成立時はドラッグをキャンセル
       setDragState(null);
   };
 
@@ -201,7 +198,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
     
-    // BoardSideにonLongPressを渡す
     const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false, handleLongPress);
     bottomSide.y = midY; app.stage.addChild(bottomSide);
     const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle, handleLongPress);
@@ -212,12 +208,18 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
           (card, startPos) => startDrag(card, startPos), 
+          // onToggleReveal: 表裏状態を切り替える
+          (uuid) => { 
+              const newSet = new Set(revealedCardIds); 
+              if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); 
+              setRevealedCardIds(newSet); 
+          },
           () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
           (x) => { inspectScrollXRef.current = x; },
-          handleLongPress // 追加: InspectOverlayにも渡す
+          handleLongPress
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
@@ -249,12 +251,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
 
         if (distFromStart < 10) {
             if (inspecting) {
-                if (inspectingCards.some(c => c.uuid === card.uuid)) {
-                    const newSet = new Set(revealedCardIds);
-                    if (newSet.has(card.uuid)) newSet.delete(card.uuid);
-                    else newSet.add(card.uuid);
-                    setRevealedCardIds(newSet);
-                }
+                // Inspecting中のタップ判定はInspectOverlay内で処理されるためここでは無視、
+                // またはOverlay外タップで閉じるなどの処理があればここで行う。
+                // 現在はInspectOverlayでpointertapを処理しているので、ここは空でOK、
+                // もしくはドラッグリセットのみ行う。
                 setDragState(null); 
                 return;
             }
@@ -399,6 +399,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: inspecting ? 200 : 1 }} />
+      
       {dropChoice && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10000, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
           <div style={{ background: '#2c3e50', padding: '30px', borderRadius: '15px', border: '2px solid #d4af37', textAlign: 'center', width: '80%', maxWidth: '400px' }}>
@@ -418,8 +419,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         <CardDetailSheet
           card={selectedCard}
           location="unknown"
-          isMyTurn={false} // 詳細表示のみなのでfalse
-          onAction={async () => {}} // ダミーアクション
+          isMyTurn={false}
+          onAction={async () => {}}
           onClose={() => setSelectedCard(null)}
         />
       )}

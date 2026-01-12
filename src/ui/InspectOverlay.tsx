@@ -25,6 +25,7 @@ export const createInspectOverlay = (
   initialScrollX: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
+  onToggleReveal: (uuid: string) => void, // 復活
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
   onMoveToHand: (uuid: string) => void,
@@ -45,12 +46,11 @@ export const createInspectOverlay = (
 
   // --- レイアウト定数 ---
   const PADDING = 20;
-  // リストを上に避けるためヘッダー領域を詰める
   const HEADER_HEIGHT = 40; 
   const SCROLL_ZONE_HEIGHT = 70;
   const PANEL_W = Math.min(W * 0.95, 1200);
   const PANEL_X = (W - PANEL_W) / 2;
-  const PANEL_Y = 15; // 上部マージンをさらに詰める
+  const PANEL_Y = 15;
   const PANEL_H = Math.min(H * 0.48, 450); 
 
   const CARD_AREA_Y = HEADER_HEIGHT + PADDING;
@@ -70,7 +70,7 @@ export const createInspectOverlay = (
   // --- ヘッダー要素 ---
   const titleStyle = new PIXI.TextStyle({ fontFamily: 'Arial', fontSize: 18, fontWeight: 'bold', fill: '#ffd700' });
   const title = new PIXI.Text(`${type.toUpperCase()} (${cards.length})`, titleStyle);
-  title.position.set(PADDING, 10); // タイトル位置調整
+  title.position.set(PADDING, 10);
   panel.addChild(title);
 
   const closeBtn = new PIXI.Text("×", { ...titleStyle, fontSize: 28, fill: '#ffffff' });
@@ -128,21 +128,19 @@ export const createInspectOverlay = (
       cardSprite.addChild(backSprite);
     }
 
-    // ボタン生成ヘルパー (サイズ拡大)
+    // ボタン生成 (サイズ拡大)
     const createButton = (label: string, color: number, yPos: number, onClick: () => void) => {
       const btn = new PIXI.Graphics();
       btn.beginFill(color, 0.9);
       btn.lineStyle(1, 0xecf0f1);
       
-      // ボタンサイズ拡大
-      const btnH = 30; // 22 -> 30
-      const btnW = BASE_CARD_WIDTH + 10; // 幅も少し大きく
+      const btnH = 30;
+      const btnW = BASE_CARD_WIDTH + 10;
       
       btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 6);
       btn.endFill();
       btn.position.set(0, yPos);
 
-      // 文字サイズ拡大
       const btnTxt = new PIXI.Text(label, { fontSize: 16, fill: 'white', fontWeight: 'bold' });
       btnTxt.anchor.set(0.5);
       btn.addChild(btnTxt);
@@ -156,9 +154,8 @@ export const createInspectOverlay = (
       return btn;
     };
 
-    // ボタン配置
     let btnStartY = BASE_CARD_HEIGHT / 2 + 20;
-    const btnGap = 35; // 間隔も広げる
+    const btnGap = 35;
 
     const handBtn = createButton("手札へ", 0x2980b9, btnStartY + btnGap * 0, () => onMoveToHand(card.uuid));
     const trashBtn = createButton("トラッシュ", 0xc0392b, btnStartY + btnGap * 1, () => onMoveToTrash(card.uuid));
@@ -173,16 +170,13 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
-    // --- 長押し・ドラッグ・タップ判定 ---
+    // --- 長押し判定 ---
     let pressTimer: any = null;
     let startPos = { x: 0, y: 0 };
-    let isDragging = false;
 
     const startPress = (e: PIXI.FederatedPointerEvent) => {
         startPos = { x: e.global.x, y: e.global.y };
-        isDragging = false;
         
-        // 500ms長押しで詳細表示
         pressTimer = setTimeout(() => {
             onLongPress(card);
             pressTimer = null;
@@ -196,7 +190,6 @@ export const createInspectOverlay = (
         if (Math.sqrt(dx * dx + dy * dy) > 5) {
             clearTimeout(pressTimer);
             pressTimer = null;
-            isDragging = true;
         }
     };
 
@@ -210,12 +203,13 @@ export const createInspectOverlay = (
     cardSprite.on('pointerdown', (e) => {
         e.stopPropagation();
         startPress(e);
-        // ドラッグ開始は遅延させず、即座に反応させるが、
-        // 長押しが成立した場合はドラッグをキャンセルする処理はSandboxGame側での制御が必要になる。
-        // ここではシンプルに、「長押し判定中はドラッグ開始を呼ばない」のではなく、
-        // 「長押し成立したらドラッグを無効化」あるいは「ドラッグ開始コールバック」を呼ぶ。
-        // 既存の onCardDown はドラッグ開始用。
+        // ドラッグ開始
         onCardDown(card, { x: e.global.x, y: e.global.y });
+    });
+
+    // タップ判定 (表裏切り替え)
+    cardSprite.on('pointertap', () => {
+      if (type !== 'trash') onToggleReveal(card.uuid);
     });
 
     cardSprite.on('pointermove', checkMove);
