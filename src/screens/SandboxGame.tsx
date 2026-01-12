@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
@@ -29,7 +29,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [dropChoice, setDropChoice] = useState<{ card: CardInstance, destPid: string, destZone: string } | null>(null);
   const inspectScrollXRef = useRef(15);
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { Z_INDEX } = LAYOUT_PARAMS;
 
   const isMyTurn = useMemo(() => {
     if (!gameState || myPlayerId === 'both') return true;
@@ -174,7 +173,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
-        if (card.type === 'LEADER') { if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid }); setDragState(null); return; }
+        
+        if (card.type === 'LEADER') {
+            if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            setDragState(null); return;
+        }
+
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
         
