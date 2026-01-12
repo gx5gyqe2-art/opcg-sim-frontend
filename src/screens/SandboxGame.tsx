@@ -35,7 +35,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
-  // --- 長押し判定用のRef (既存維持) ---
+  // --- 長押し判定用のRef (完全維持) ---
   const longPressTimerRef = useRef<any>(null);
   const pressStartPosRef = useRef<{x: number, y: number} | null>(null);
 
@@ -62,14 +62,15 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       return [];
   }, [gameState, inspecting]);
 
-  // マリガン表示判定 (ターン1のみ)
+  // マリガン表示判定 (turn_countが1の時のみ表示)
   const canMulligan = useMemo(() => {
     if (!gameState || gameState.turn_info.turn_count > 1) return false;
     const pid = myPlayerId === 'both' ? gameState.turn_info.active_player_id : myPlayerId;
-    return !(gameState as any).mulligan_used?.[pid];
+    const mulliganStates = (gameState as any).mulligan_used || {};
+    return !mulliganStates[pid];
   }, [gameState, myPlayerId]);
 
-  // 長押しタイマー開始 (既存維持)
+  // 長押しタイマー開始 (完全維持)
   const startLongPress = (card: CardInstance, x: number, y: number) => {
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       pressStartPosRef.current = { x, y };
@@ -77,12 +78,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       longPressTimerRef.current = setTimeout(() => {
           logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
           setSelectedCard(card);
-          setDragState(null);
+          setDragState(null); 
           longPressTimerRef.current = null;
       }, 500);
   };
 
-  // 長押しタイマーキャンセル (既存維持)
+  // 長押しタイマーキャンセル (完全維持)
   const cancelLongPress = () => {
       if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
@@ -153,12 +154,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       const currentDrag = dragStateRef.current;
       const overlay = overlayRef.current;
       if (!currentDrag || !overlay) return;
-      
       const spriteX = currentDrag.sprite.x;
       const W = app.screen.width;
       const EDGE = 120;
       const MAX_SPEED = 25;
-      
       let scrollSpeed = 0;
       if (spriteX < EDGE) scrollSpeed = -MAX_SPEED * (1 - spriteX / EDGE);
       else if (spriteX > W - EDGE) scrollSpeed = MAX_SPEED * (1 - (W - spriteX) / EDGE);
@@ -189,7 +188,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
-    
     const children = [...app.stage.children];
     children.forEach(child => { 
         if (dragState && child === dragState.sprite) { }
@@ -248,7 +246,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
           (x) => { inspectScrollXRef.current = x; },
-          // シャッフル機能追加
           () => handleAction('SHUFFLE', { player_id: inspecting.pid })
         );
         app.stage.addChild(overlay);
@@ -269,11 +266,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (pressStartPosRef.current) {
             const dx = e.clientX - pressStartPosRef.current.x;
             const dy = e.clientY - pressStartPosRef.current.y;
-            if (Math.sqrt(dx * dx + dy * dy) > 10) {
-                cancelLongPress();
-            }
+            if (Math.sqrt(dx * dx + dy * dy) > 10) cancelLongPress();
         }
-
         if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; 
         dragState.sprite.position.set(e.clientX, e.clientY); 
         if (overlayRef.current) overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
@@ -281,12 +275,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     
     const onPointerUp = async (e: PointerEvent) => {
         cancelLongPress();
-
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
-        
         if ((card.type || '').toUpperCase() === 'LEADER') { setDragState(null); return; }
-
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
         if (distFromStart < 10) {
@@ -312,10 +303,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
              const PANEL_X = (W - PANEL_W) / 2;
              const PANEL_Y = 15; 
              const PANEL_H = Math.min(H * 0.48, 450);
-
-             const isInsidePanel = 
-                endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W &&
-                endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
+             const isInsidePanel = endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W && endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
 
              if (isInsidePanel) {
                  const HEADER_HEIGHT = 40;
@@ -324,18 +312,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                      const DISPLAY_CARD_WIDTH = 70; 
                      const CARD_GAP = 15;
                      const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
-                     
                      const listStartX = PANEL_X; 
                      const relativeX = endPos.x + inspectScrollXRef.current - listStartX;
                      let newIndex = Math.floor(relativeX / TOTAL_CARD_WIDTH);
                      newIndex = Math.max(0, newIndex);
-                     
-                     handleAction('MOVE_CARD', { 
-                         card_uuid: card.uuid, 
-                         dest_player_id: inspecting.pid, 
-                         dest_zone: inspecting.type, 
-                         index: newIndex 
-                     });
+                     handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: newIndex });
                  }
                  setDragState(null);
                  return;
@@ -390,11 +371,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
             const step = () => {
                 const dx = tx - sprite.x; const dy = ty - sprite.y;
-                if (Math.sqrt(dx*dx + dy*dy) < 5) { 
-                    app.ticker.remove(step); 
-                    handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); 
-                    setDragState(null); 
-                } else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
+                if (Math.sqrt(dx*dx + dy*dy) < 5) { app.ticker.remove(step); handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null); } else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
             };
             app.ticker.add(step);
         };
@@ -402,7 +379,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
-  }, [dragState, gameState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds]);
+  }, [dragState, gameState, inspecting, isRotated, myPlayerId]);
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState || !activeGameId) return;
@@ -461,11 +438,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}>
                 <button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button>
-                {/* リセットボタン追加 */}
                 <button onClick={() => { if(window.confirm('ゲームを初期状態にリセットしますか？')) handleAction('RESET', {}); }} style={{ background: 'rgba(200, 0, 0, 0.8)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>リセット</button>
             </div>
-
-            {/* マリガンボタン追加 (中央上部) */}
+            
             {canMulligan && (
                 <div style={{ position: 'absolute', top: '50px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'auto' }}>
                     <button onClick={() => { if(window.confirm('手札を引き直しますか？')) handleAction('MULLIGAN', {}); }} style={{ background: '#3498db', color: 'white', border: '2px solid white', borderRadius: '8px', padding: '10px 20px', fontSize: '16px', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>マリガン (引き直し)</button>
