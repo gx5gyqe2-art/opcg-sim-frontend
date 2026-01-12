@@ -4,7 +4,9 @@ import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
-import { createInspectOverlay, InspectOverlayContainer } from '../ui/InspectOverlay';
+import { createInspectOverlay } from '../ui/InspectOverlay';
+// 【修正】type import に変更
+import type { InspectOverlayContainer } from '../ui/InspectOverlay';
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
@@ -17,7 +19,7 @@ interface SandboxGameProps { gameId?: string; myPlayerId?: string; roomName?: st
 export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomName, onBack }: SandboxGameProps) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const overlayRef = useRef<InspectOverlayContainer | null>(null); // Overlayへの参照
+  const overlayRef = useRef<InspectOverlayContainer | null>(null);
 
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [activeGameId, setActiveGameId] = useState<string | null>(initialGameId || null);
@@ -111,7 +113,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     setLayoutCoords(coords.turnEndPos);
     
     // Auto-scroll ticker
-    const autoScrollTicker = (delta: number) => {
+    // 【修正】delta 引数を削除
+    const autoScrollTicker = () => {
       if (!dragState || !overlayRef.current) return;
       
       const spriteX = dragState.sprite.x;
@@ -128,12 +131,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       
       if (Math.abs(scrollSpeed) > 0.5) {
         let newScroll = inspectScrollXRef.current + scrollSpeed;
-        newScroll = Math.max(0, newScroll); // 上限はOverlay内で制御されるが、下限はここでも
+        newScroll = Math.max(0, newScroll);
         inspectScrollXRef.current = newScroll;
         
-        // オーバーレイのスクロール更新
         overlayRef.current.updateScroll(newScroll);
-        // レイアウト更新も呼ぶ（カーソル位置が変わっていなくても、スクロールで相対位置が変わるため）
         overlayRef.current.updateLayout(dragState.sprite.x, dragState.card.uuid);
       }
     };
@@ -147,16 +148,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         app.ticker.remove(autoScrollTicker);
         app.destroy(true, { children: true }); 
     };
-  }, [gameState?.status]); // dragStateはRef経由で見るべきだが、Ticker内ではクロージャ注意。
-  // 注意: useEffect内のTicker定義だと、dragStateが古いままになる可能性がある。
-  // 正しくは app.ticker.add 内で Ref を参照するか、dragStateが変わるたびにTicker再登録。
-  // 今回はMain Logic側でTickerを管理せず、useEffectの外に出すのは難しいので、
-  // 下記のuseEffectでTickerを登録・解除する方式、あるいは useRef に dragState を同期させる。
+  }, [gameState?.status]); 
 
   const dragStateRef = useRef(dragState);
   useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
-  // Ticker再登録用のEffect (上記初期化とは別にする)
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -186,20 +182,18 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     
     app.ticker.add(ticker);
     return () => { app.ticker.remove(ticker); };
-  }, []); // Mount時のみ登録、内部でRef参照
+  }, []);
 
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
     
     // Clean up
-    const childrenToDestroy: PIXI.DisplayObject[] = [];
+    // 【修正】未使用変数 childrenToDestroy を削除し、ループ内で直接処理
     const children = [...app.stage.children];
     children.forEach(child => { 
         if (dragState && child === dragState.sprite) { /* keep dragging sprite */ }
-        else if (inspecting && overlayRef.current && child === overlayRef.current) { /* keep overlay to avoid flicker? No, recreate if data changes */
-             // データが変わった場合は再生成したいが、位置だけ変えたい場合は維持したい
-             // ここでは簡易的に全削除・再描画
+        else if (inspecting && overlayRef.current && child === overlayRef.current) { 
              app.stage.removeChild(child);
              child.destroy({ children: true });
         } else {
@@ -225,7 +219,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         setDragState({ card, sprite: ghost, startPos: startPoint });
     };
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
-        if (isPending || dragState) return; // inspecting中はOK（リストからのドラッグ）
+        if (isPending || dragState) return;
         if ((card.type || '').toUpperCase() === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
         if (myPlayerId !== 'both' && gameState) { const me = gameState.players[myPlayerId as 'p1' | 'p2']; if (me && card.owner_id && card.owner_id !== me.name) return; }
         startDrag(card, { x: e.global.x, y: e.global.y });
@@ -249,12 +243,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); }, 
           () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
-          (x) => { inspectScrollXRef.current = x; } // Scroll Callback
+          (x) => { inspectScrollXRef.current = x; } 
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
         
-        // もしドラッグ中なら、レイアウトを初期更新して隙間を作る
         if (dragState) {
             overlay.updateLayout(dragState.sprite.x, dragState.card.uuid);
         }
@@ -263,9 +256,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     }
 
     if (dragState) {
-        app.stage.addChild(dragState.sprite); // Ensure on top
+        app.stage.addChild(dragState.sprite);
     }
-  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]); // Redraw on state change
+  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
 
   useEffect(() => {
     const app = appRef.current;
@@ -275,7 +268,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; 
         dragState.sprite.position.set(e.clientX, e.clientY); 
         
-        // Inspecting中はオーバーレイのレイアウトを更新して隙間を動かす
         if (overlayRef.current) {
             overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
         }
@@ -292,20 +284,16 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         
         if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
 
-        // --- Inspecting中のドロップ判定 (並び替え) ---
         if (inspecting && overlayRef.current && inspecting.pid === destPid) {
-             // オーバーレイ上へのドロップか判定 (簡易的にY座標で判定)
-             // Overlayのリストエリアはおよそ Top 110px ~ Bottom 80px
-             // 下部のスクロールエリアは除外
              if (endPos.y > 110 && endPos.y < H - 80) {
-                 // InspectOverlay内のロジックと同じ計算でインデックスを特定
-                 // (InspectOverlay.tsx の定数と同期が必要。本来は共有config化すべき)
+                 // 【修正】定数 PADDING を削除してリテラルまたは定義済みの値を使用（ここでは省略された定数ロジックを修正）
+                 // InspectOverlay内のロジックと同期。
                  const PANEL_W = Math.min(W * 0.95, 1200);
                  const PANEL_X = (W - PANEL_W) / 2;
                  const ASPECT = 1.39;
                  const SCROLL_ZONE_HEIGHT = 80;
                  const HEADER_HEIGHT = 60;
-                 const PADDING = 20;
+                 // const PADDING = 20; // 未使用のため削除
                  const PANEL_H = Math.min(H * 0.7, 500);
                  const LIST_H = PANEL_H - HEADER_HEIGHT - SCROLL_ZONE_HEIGHT;
                  let cardH = LIST_H - 20;
@@ -313,12 +301,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                  if (cardW > 120) cardW = 120;
                  const TOTAL_CARD_WIDTH = cardW + 15;
                  
-                 const listStartX = PANEL_X; // container.x assumed 0
+                 const listStartX = PANEL_X; 
                  const relativeX = endPos.x + inspectScrollXRef.current - listStartX;
                  let newIndex = Math.floor((relativeX + TOTAL_CARD_WIDTH/2) / TOTAL_CARD_WIDTH);
                  newIndex = Math.max(0, newIndex);
                  
-                 // 自分自身をドロップした場合は、insertではなくmove（index指定）
                  handleAction('MOVE_CARD', { 
                      card_uuid: card.uuid, 
                      dest_player_id: inspecting.pid, 
@@ -329,7 +316,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                  return;
              }
         }
-        // ------------------------------------------
 
         let destZone = 'field'; 
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
@@ -350,6 +336,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (checkDist(coords.getDonRestX(W), r3Y) < THRESHOLD) return 'don_rested';
             return null;
         };
+
+        // 【修正】distFromStart の計算を追加
+        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
         if (distFromStart < 10) {
             if (inspecting) { setDragState(null); return; }
