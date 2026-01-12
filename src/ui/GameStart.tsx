@@ -23,7 +23,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
-  const [roomName, setRoomName] = useState('New Battle');
+  const [roomName, setRoomName] = useState(''); // デフォルト値を空に修正
   const [showRoomCreateModal, setShowRoomCreateModal] = useState(false);
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -147,6 +147,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
                 onChange={(e) => setRoomName(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', boxSizing: 'border-box' }}
                 autoFocus
+                placeholder="部屋名を入力"
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' && roomName.trim()) {
                         onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName });

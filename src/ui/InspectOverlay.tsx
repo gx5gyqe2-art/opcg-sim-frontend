@@ -25,15 +25,18 @@ export const createInspectOverlay = (
   initialScrollX: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
+  onToggleReveal: (uuid: string) => void,
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
+  onMoveToHand: (uuid: string) => void,   // 追加
+  onMoveToTrash: (uuid: string) => void,  // 追加
   onScrollCallback: (x: number) => void
 ): InspectOverlayContainer => {
   const container = new PIXI.Container() as InspectOverlayContainer;
 
-  // 背景
+  // 背景: 手札が見えるように透明度を下げる (0.2)
   const bg = new PIXI.Graphics();
-  bg.beginFill(0x000000, 0.85);
+  bg.beginFill(0x000000, 0.2); 
   bg.drawRect(0, 0, W, H);
   bg.endFill();
   bg.eventMode = 'static';
@@ -42,11 +45,11 @@ export const createInspectOverlay = (
 
   // --- レイアウト定数 ---
   const PADDING = 20;
-  const HEADER_HEIGHT = 50; 
-  const SCROLL_ZONE_HEIGHT = 70; 
+  const HEADER_HEIGHT = 50;
+  const SCROLL_ZONE_HEIGHT = 70;
   const PANEL_W = Math.min(W * 0.95, 1200);
   const PANEL_X = (W - PANEL_W) / 2;
-  const PANEL_Y = 20; 
+  const PANEL_Y = 20;
   const PANEL_H = Math.min(H * 0.48, 450); 
 
   const CARD_AREA_Y = HEADER_HEIGHT + PADDING;
@@ -125,27 +128,45 @@ export const createInspectOverlay = (
       cardSprite.addChild(backSprite);
     }
 
-    // デッキ下へボタン
-    const btn = new PIXI.Graphics();
-    btn.beginFill(0x34495e, 0.9);
-    btn.lineStyle(1, 0xecf0f1);
-    const btnH = 24;
-    const btnW = BASE_CARD_WIDTH;
-    const btnY = BASE_CARD_HEIGHT / 2 + 15 + btnH / 2; 
-    btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 4);
-    btn.endFill();
-    btn.position.set(0, btnY);
+    // ボタン生成ヘルパー
+    const createButton = (label: string, color: number, yPos: number, onClick: () => void) => {
+      const btn = new PIXI.Graphics();
+      btn.beginFill(color, 0.9);
+      btn.lineStyle(1, 0xecf0f1);
+      const btnH = 22;
+      const btnW = BASE_CARD_WIDTH;
+      btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 4);
+      btn.endFill();
+      btn.position.set(0, yPos);
 
-    const btnTxt = new PIXI.Text("デッキ下", { fontSize: 16, fill: 'white', fontWeight: 'bold' });
-    btnTxt.anchor.set(0.5);
-    btn.addChild(btnTxt);
-    
-    btn.eventMode = 'static';
-    btn.cursor = 'pointer';
-    btn.visible = isRevealed;
-    btn.on('pointerdown', (e) => { e.stopPropagation(); onMoveToBottom(card.uuid); });
-    
-    cardSprite.addChild(btn);
+      const btnTxt = new PIXI.Text(label, { fontSize: 14, fill: 'white', fontWeight: 'bold' });
+      btnTxt.anchor.set(0.5);
+      btn.addChild(btnTxt);
+      
+      btn.eventMode = 'static';
+      btn.cursor = 'pointer';
+      // 親のドラッグイベントを止める
+      btn.on('pointerdown', (e) => { e.stopPropagation(); onClick(); });
+      return btn;
+    };
+
+    // ボタン配置（カードの下に縦並び）
+    // カード中心(0,0)から、下端は BASE_CARD_HEIGHT/2
+    let btnStartY = BASE_CARD_HEIGHT / 2 + 15;
+    const btnGap = 26;
+
+    // 手札へ
+    const handBtn = createButton("手札へ", 0x2980b9, btnStartY + btnGap * 0, () => onMoveToHand(card.uuid));
+    // トラッシュへ
+    const trashBtn = createButton("トラッシュ", 0xc0392b, btnStartY + btnGap * 1, () => onMoveToTrash(card.uuid));
+    // デッキ下へ
+    const botBtn = createButton("デッキ下", 0x34495e, btnStartY + btnGap * 2, () => onMoveToBottom(card.uuid));
+
+    if (isRevealed) {
+      cardSprite.addChild(handBtn);
+      cardSprite.addChild(trashBtn);
+      cardSprite.addChild(botBtn);
+    }
 
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
@@ -203,12 +224,9 @@ export const createInspectOverlay = (
     if (!isScrolling) return;
     const dx = lastX - e.global.x;
     lastX = e.global.x;
-    
     const maxScroll = Math.max(0, cards.length * TOTAL_CARD_WIDTH - PANEL_W + PADDING * 2);
-    
     let nextX = currentScrollX + dx;
     nextX = Math.max(0, Math.min(nextX, maxScroll));
-    
     container.updateScroll(nextX);
     onScrollCallback(nextX);
   };
@@ -248,11 +266,9 @@ export const createInspectOverlay = (
 
       if (gapIndex !== -1) {
          const draggingItemIndex = cards.findIndex(c => c.uuid === draggingUuid);
-         
          if (draggingItemIndex !== -1) {
             let adjustedIndex = originalIndex;
             if (originalIndex > draggingItemIndex) adjustedIndex -= 1;
-            
              if (adjustedIndex >= gapIndex) {
                  visualIndex = adjustedIndex + 1;
              } else {
@@ -265,7 +281,9 @@ export const createInspectOverlay = (
          }
       }
 
-      const targetX = visualIndex * TOTAL_CARD_WIDTH + TOTAL_CARD_WIDTH / 2 - currentScrollX;
+      // X座標計算: 左端が見切れないようにオフセットを追加 (+20)
+      const X_OFFSET = TOTAL_CARD_WIDTH / 2 + 20;
+      const targetX = visualIndex * TOTAL_CARD_WIDTH + X_OFFSET - currentScrollX;
       sprite.position.set(targetX, LIST_H / 2);
     });
   };
