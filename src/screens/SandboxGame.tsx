@@ -199,10 +199,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
           (card, startPos) => startDrag(card, startPos), 
-          (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); }, 
+          // onToggleReveal削除
           () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
-          // 新規追加コールバック
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
           (x) => { inspectScrollXRef.current = x; } 
@@ -235,7 +234,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
 
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
 
-        // --- タップ判定 ---
         if (distFromStart < 10) {
             if (inspecting) {
                 if (inspectingCards.some(c => c.uuid === card.uuid)) {
@@ -247,9 +245,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 setDragState(null); 
                 return;
             }
-            // 通常のタップ処理
-            const destP = (isRotated ? 'p1' : 'p2') === 'p1' ? gameState?.players.p1 : gameState?.players.p2; // 簡易
-            // (省略: 正確なdestPid計算が必要だがここではスキップ、下のZoneCheck前のロジックを使用)
         }
 
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
@@ -257,7 +252,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         
         if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
 
-        // --- Inspecting中のパネル判定（裏移り防止）---
         if (inspecting && overlayRef.current && inspecting.pid === destPid) {
              const PANEL_W = Math.min(W * 0.95, 1200);
              const PANEL_X = (W - PANEL_W) / 2;
@@ -269,11 +263,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
 
              if (isInsidePanel) {
-                 // パネル内の場合、並び替え処理
                  const HEADER_HEIGHT = 50;
                  const SCROLL_ZONE_HEIGHT = 70;
                  if (endPos.y > PANEL_Y + HEADER_HEIGHT && endPos.y < PANEL_Y + PANEL_H - SCROLL_ZONE_HEIGHT) {
-                     const ASPECT = 1.39;
                      const DISPLAY_CARD_WIDTH = 70; 
                      const CARD_GAP = 15;
                      const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
@@ -291,12 +283,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                      });
                  }
                  setDragState(null);
-                 return; // パネル内なら終了
+                 return;
              }
         }
 
-        // --- 盤面ドロップ・タップ判定 ---
-        // タップ判定の再確認（Inspect時は上でreturn済み）
         if (distFromStart < 10) {
             const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };

@@ -25,11 +25,11 @@ export const createInspectOverlay = (
   initialScrollX: number,
   onClose: () => void,
   onCardDown: (card: CardInstance, startPos: { x: number, y: number }) => void,
-  onToggleReveal: (uuid: string) => void,
+  // onToggleReveal は使用しなくなったため削除
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
-  onMoveToHand: (uuid: string) => void,   // 追加
-  onMoveToTrash: (uuid: string) => void,  // 追加
+  onMoveToHand: (uuid: string) => void,
+  onMoveToTrash: (uuid: string) => void,
   onScrollCallback: (x: number) => void
 ): InspectOverlayContainer => {
   const container = new PIXI.Container() as InspectOverlayContainer;
@@ -145,21 +145,15 @@ export const createInspectOverlay = (
       
       btn.eventMode = 'static';
       btn.cursor = 'pointer';
-      // 親のドラッグイベントを止める
       btn.on('pointerdown', (e) => { e.stopPropagation(); onClick(); });
       return btn;
     };
 
-    // ボタン配置（カードの下に縦並び）
-    // カード中心(0,0)から、下端は BASE_CARD_HEIGHT/2
     let btnStartY = BASE_CARD_HEIGHT / 2 + 15;
     const btnGap = 26;
 
-    // 手札へ
     const handBtn = createButton("手札へ", 0x2980b9, btnStartY + btnGap * 0, () => onMoveToHand(card.uuid));
-    // トラッシュへ
     const trashBtn = createButton("トラッシュ", 0xc0392b, btnStartY + btnGap * 1, () => onMoveToTrash(card.uuid));
-    // デッキ下へ
     const botBtn = createButton("デッキ下", 0x34495e, btnStartY + btnGap * 2, () => onMoveToBottom(card.uuid));
 
     if (isRevealed) {
@@ -281,7 +275,6 @@ export const createInspectOverlay = (
          }
       }
 
-      // X座標計算: 左端が見切れないようにオフセットを追加 (+20)
       const X_OFFSET = TOTAL_CARD_WIDTH / 2 + 20;
       const targetX = visualIndex * TOTAL_CARD_WIDTH + X_OFFSET - currentScrollX;
       sprite.position.set(targetX, LIST_H / 2);
