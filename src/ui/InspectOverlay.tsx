@@ -30,12 +30,13 @@ export const createInspectOverlay = (
   onMoveToBottom: (uuid: string) => void,
   onMoveToHand: (uuid: string) => void,
   onMoveToTrash: (uuid: string) => void,
-  onScrollCallback: (x: number) => void
-  // onLongPress削除
+  onScrollCallback: (x: number) => void,
+  onLongPress: (card: CardInstance) => void,
+  onShuffle?: () => void // 追加
 ): InspectOverlayContainer => {
   const container = new PIXI.Container() as InspectOverlayContainer;
 
-  // 背景
+  // 背景: 手札が見えるように透明度を下げる
   const bg = new PIXI.Graphics();
   bg.beginFill(0x000000, 0.2); 
   bg.drawRect(0, 0, W, H);
@@ -80,17 +81,36 @@ export const createInspectOverlay = (
   closeBtn.on('pointerdown', onClose);
   panel.addChild(closeBtn);
 
+  // --- アクションボタン群 (Reveal All / Shuffle) ---
   if (type !== 'trash') {
+    let btnX = PANEL_W - 160;
+
+    // Reveal All
     const revealBtn = new PIXI.Container();
     const rBg = new PIXI.Graphics().beginFill(0x27ae60).drawRoundedRect(0, 0, 100, 26, 4).endFill();
     const rTxt = new PIXI.Text("REVEAL ALL", { fontSize: 12, fill: 'white', fontWeight: 'bold' });
     rTxt.anchor.set(0.5); rTxt.position.set(50, 13);
     revealBtn.addChild(rBg, rTxt);
-    revealBtn.position.set(PANEL_W - 160, 8);
+    revealBtn.position.set(btnX, 8);
     revealBtn.eventMode = 'static';
     revealBtn.cursor = 'pointer';
     revealBtn.on('pointerdown', onRevealAll);
     panel.addChild(revealBtn);
+
+    // Shuffle (Deckのみ)
+    if (type === 'deck' && onShuffle) {
+        btnX -= 110;
+        const shufBtn = new PIXI.Container();
+        const sBg = new PIXI.Graphics().beginFill(0xe67e22).drawRoundedRect(0, 0, 100, 26, 4).endFill();
+        const sTxt = new PIXI.Text("SHUFFLE", { fontSize: 12, fill: 'white', fontWeight: 'bold' });
+        sTxt.anchor.set(0.5); sTxt.position.set(50, 13);
+        shufBtn.addChild(sBg, sTxt);
+        shufBtn.position.set(btnX, 8);
+        shufBtn.eventMode = 'static';
+        shufBtn.cursor = 'pointer';
+        shufBtn.on('pointerdown', onShuffle);
+        panel.addChild(shufBtn);
+    }
   }
 
   // --- カードリストエリア ---
@@ -128,14 +148,13 @@ export const createInspectOverlay = (
       cardSprite.addChild(backSprite);
     }
 
+    // ボタン生成ヘルパー (大きく、使いやすく)
     const createButton = (label: string, color: number, yPos: number, onClick: () => void) => {
       const btn = new PIXI.Graphics();
       btn.beginFill(color, 0.9);
       btn.lineStyle(1, 0xecf0f1);
-      
       const btnH = 30;
       const btnW = BASE_CARD_WIDTH + 10;
-      
       btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 6);
       btn.endFill();
       btn.position.set(0, yPos);
@@ -143,13 +162,9 @@ export const createInspectOverlay = (
       const btnTxt = new PIXI.Text(label, { fontSize: 16, fill: 'white', fontWeight: 'bold' });
       btnTxt.anchor.set(0.5);
       btn.addChild(btnTxt);
-      
       btn.eventMode = 'static';
       btn.cursor = 'pointer';
-      btn.on('pointerdown', (e) => { 
-          e.stopPropagation(); 
-          onClick(); 
-      });
+      btn.on('pointerdown', (e) => { e.stopPropagation(); onClick(); });
       return btn;
     };
 
@@ -169,11 +184,13 @@ export const createInspectOverlay = (
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
     
+    // ドラッグと長押しを両立させるための pointerdown
     cardSprite.on('pointerdown', (e) => {
-        e.stopPropagation();
-        onCardDown(card, { x: e.global.x, y: e.global.y });
+      e.stopPropagation();
+      onCardDown(card, { x: e.global.x, y: e.global.y });
     });
 
+    // タップによる表裏反転
     cardSprite.on('pointertap', () => {
       if (type !== 'trash') onToggleReveal(card.uuid);
     });
@@ -204,10 +221,8 @@ export const createInspectOverlay = (
     scrollBar.clear();
     const totalW = cards.length * TOTAL_CARD_WIDTH;
     if (totalW <= PANEL_W) return;
-    
     const barW = (PANEL_W / totalW) * PANEL_W;
     const barX = (currentScrollX / (totalW - PANEL_W)) * (PANEL_W - barW);
-    
     scrollBar.beginFill(0x666666);
     scrollBar.drawRoundedRect(Math.max(0, Math.min(barX, PANEL_W - barW)), 10, barW, 6, 3);
     scrollBar.endFill();
@@ -215,12 +230,7 @@ export const createInspectOverlay = (
 
   let isScrolling = false;
   let lastX = 0;
-
-  scrollZone.on('pointerdown', (e) => {
-    isScrolling = true;
-    lastX = e.global.x;
-  });
-
+  scrollZone.on('pointerdown', (e) => { isScrolling = true; lastX = e.global.x; });
   const onDragMove = (e: PIXI.FederatedPointerEvent) => {
     if (!isScrolling) return;
     const dx = lastX - e.global.x;
@@ -231,64 +241,38 @@ export const createInspectOverlay = (
     container.updateScroll(nextX);
     onScrollCallback(nextX);
   };
-
-  const onDragEnd = () => {
-    isScrolling = false;
-  };
-
+  const onDragEnd = () => { isScrolling = false; };
   scrollZone.on('globalpointermove', onDragMove);
   scrollZone.on('pointerup', onDragEnd);
   scrollZone.on('pointerupoutside', onDragEnd);
 
-  container.updateScroll = (x: number) => {
-    currentScrollX = x;
-    container.updateLayout(null, null);
-    updateScrollBar();
-  };
-
+  container.updateScroll = (x: number) => { currentScrollX = x; container.updateLayout(null, null); updateScrollBar(); };
   container.updateLayout = (draggingGlobalX: number | null, draggingUuid: string | null) => {
     let gapIndex = -1;
     const listStartX = PANEL_X + container.x;
-
     if (draggingUuid && draggingGlobalX !== null) {
       const relativeX = draggingGlobalX + currentScrollX - listStartX;
       gapIndex = Math.floor((relativeX) / TOTAL_CARD_WIDTH);
       gapIndex = Math.max(0, Math.min(gapIndex, cards.length));
     }
-
     cardSprites.forEach(({ sprite, card, originalIndex }) => {
-      if (card.uuid === draggingUuid) {
-        sprite.visible = false;
-        return;
-      }
+      if (card.uuid === draggingUuid) { sprite.visible = false; return; }
       sprite.visible = true;
-
       let visualIndex = originalIndex;
-
       if (gapIndex !== -1) {
          const draggingItemIndex = cards.findIndex(c => c.uuid === draggingUuid);
          if (draggingItemIndex !== -1) {
             let adjustedIndex = originalIndex;
             if (originalIndex > draggingItemIndex) adjustedIndex -= 1;
-             if (adjustedIndex >= gapIndex) {
-                 visualIndex = adjustedIndex + 1;
-             } else {
-                 visualIndex = adjustedIndex;
-             }
-         } else {
-             if (originalIndex >= gapIndex) {
-                 visualIndex = originalIndex + 1;
-             }
-         }
+            if (adjustedIndex >= gapIndex) visualIndex = adjustedIndex + 1;
+            else visualIndex = adjustedIndex;
+         } else if (originalIndex >= gapIndex) visualIndex = originalIndex + 1;
       }
-
       const X_OFFSET = TOTAL_CARD_WIDTH / 2 + 20;
       const targetX = visualIndex * TOTAL_CARD_WIDTH + X_OFFSET - currentScrollX;
       sprite.position.set(targetX, LIST_H / 2);
     });
   };
-
   container.updateScroll(initialScrollX);
-
   return container;
 };

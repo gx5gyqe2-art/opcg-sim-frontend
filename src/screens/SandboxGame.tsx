@@ -35,7 +35,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
-  // --- 長押し判定用のRef ---
+  // --- 長押し判定用のRef (既存維持) ---
   const longPressTimerRef = useRef<any>(null);
   const pressStartPosRef = useRef<{x: number, y: number} | null>(null);
 
@@ -62,21 +62,27 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       return [];
   }, [gameState, inspecting]);
 
-  // 長押しタイマー開始
+  // マリガン表示判定 (ターン1のみ)
+  const canMulligan = useMemo(() => {
+    if (!gameState || gameState.turn_info.turn_count > 1) return false;
+    const pid = myPlayerId === 'both' ? gameState.turn_info.active_player_id : myPlayerId;
+    return !(gameState as any).mulligan_used?.[pid];
+  }, [gameState, myPlayerId]);
+
+  // 長押しタイマー開始 (既存維持)
   const startLongPress = (card: CardInstance, x: number, y: number) => {
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       pressStartPosRef.current = { x, y };
       
       longPressTimerRef.current = setTimeout(() => {
-          // 長押し成立時の処理
           logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
           setSelectedCard(card);
-          setDragState(null); // ドラッグをキャンセル
+          setDragState(null);
           longPressTimerRef.current = null;
-      }, 500); // 500ms
+      }, 500);
   };
 
-  // 長押しタイマーキャンセル
+  // 長押しタイマーキャンセル (既存維持)
   const cancelLongPress = () => {
       if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
@@ -133,12 +139,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     return () => { if (ws) ws.close(); };
   }, []);
 
-  // Pixi App Initialization & Ticker
   useEffect(() => {
     if (!pixiContainerRef.current || (gameState && gameState.status === 'WAITING')) return;
-    
     while (pixiContainerRef.current.firstChild) pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
-    
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: COLORS.APP_BG, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
@@ -183,7 +186,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
   }, [gameState?.status]);
 
-  // Main Render Effect
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
@@ -218,10 +220,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if ((card.type || '').toUpperCase() === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
         if (myPlayerId !== 'both' && gameState) { const me = gameState.players[myPlayerId as 'p1' | 'p2']; if (me && card.owner_id && card.owner_id !== me.name) return; }
         
-        // 長押し判定開始
         startLongPress(card, e.global.x, e.global.y);
-        
-        // ドラッグ開始
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
@@ -229,7 +228,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
     
-    // onLongPressの個別渡しは不要になったので削除
     const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false);
     bottomSide.y = midY; app.stage.addChild(bottomSide);
     const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle);
@@ -239,7 +237,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         const overlay = createInspectOverlay(
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
-          (card, startPos) => onCardDown({ global: startPos } as any, card), // onCardDownを再利用
+          (card, startPos) => onCardDown({ global: startPos } as any, card),
           (uuid) => { 
               const newSet = new Set(revealedCardIds); 
               if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); 
@@ -249,7 +247,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
-          (x) => { inspectScrollXRef.current = x; }
+          (x) => { inspectScrollXRef.current = x; },
+          // シャッフル機能追加
+          () => handleAction('SHUFFLE', { player_id: inspecting.pid })
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
@@ -261,13 +261,11 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     if (dragState) app.stage.addChild(dragState.sprite);
   }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
 
-  // Global Event Listeners
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
     
     const onPointerMove = (e: PointerEvent) => { 
-        // 移動したら長押しキャンセル
         if (pressStartPosRef.current) {
             const dx = e.clientX - pressStartPosRef.current.x;
             const dy = e.clientY - pressStartPosRef.current.y;
@@ -282,7 +280,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
     
     const onPointerUp = async (e: PointerEvent) => {
-        // 離したら長押しキャンセル
         cancelLongPress();
 
         if (!dragState) return;
@@ -405,7 +402,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
-  }, [dragState, gameState, inspecting, isRotated, myPlayerId]);
+  }, [dragState, gameState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds]);
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState || !activeGameId) return;
@@ -413,9 +410,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       try { const pid = myPlayerId === 'both' ? (params.player_id || 'p1') : myPlayerId; const res = await apiClient.sendSandboxAction(activeGameId, { action_type: type, player_id: pid, ...params }); setGameState(res.state); } catch(e) { logger.error('sandbox.action_fail', String(e)); } finally { setIsPending(false); }
   };
 
-  // ... (描画部分は変更なしのため、return文は元のまま維持)
   if (gameState && gameState.status === 'WAITING') {
-    // ... (Lobby UI)
     return (
       <div style={{ width: '100vw', height: '100vh', background: '#1a0b0b', color: '#f0e6d2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }}>
         <h1 style={{ color: '#ffd700', fontSize: isMobile ? '24px' : '32px', marginBottom: '20px' }}>ROOM: {gameState.room_name}</h1>
@@ -459,18 +454,24 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       {!gameState && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}><h2>Connecting...</h2></div>}
       
       {selectedCard && (
-        <CardDetailSheet
-          card={selectedCard}
-          location="unknown"
-          isMyTurn={false}
-          onAction={async () => {}}
-          onClose={() => setSelectedCard(null)}
-        />
+        <CardDetailSheet card={selectedCard} location="unknown" isMyTurn={false} onAction={async () => {}} onClose={() => setSelectedCard(null)} />
       )}
 
       {gameState && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
-            <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}><button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button></div>
+            <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}>
+                <button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button>
+                {/* リセットボタン追加 */}
+                <button onClick={() => { if(window.confirm('ゲームを初期状態にリセットしますか？')) handleAction('RESET', {}); }} style={{ background: 'rgba(200, 0, 0, 0.8)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>リセット</button>
+            </div>
+
+            {/* マリガンボタン追加 (中央上部) */}
+            {canMulligan && (
+                <div style={{ position: 'absolute', top: '50px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'auto' }}>
+                    <button onClick={() => { if(window.confirm('手札を引き直しますか？')) handleAction('MULLIGAN', {}); }} style={{ background: '#3498db', color: 'white', border: '2px solid white', borderRadius: '8px', padding: '10px 20px', fontSize: '16px', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>マリガン (引き直し)</button>
+                </div>
+            )}
+
             <button 
                 onClick={() => handleAction('TURN_END', {})} 
                 disabled={isPending || !isMyTurn} 
