@@ -35,7 +35,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
-  // --- 長押し判定用のRef (完全維持) ---
   const longPressTimerRef = useRef<any>(null);
   const pressStartPosRef = useRef<{x: number, y: number} | null>(null);
 
@@ -62,28 +61,36 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       return [];
   }, [gameState, inspecting]);
 
-  // マリガン表示判定 (turn_countが1の時のみ表示)
-  const canMulligan = useMemo(() => {
-    if (!gameState || gameState.turn_info.turn_count > 1) return false;
-    const pid = myPlayerId === 'both' ? gameState.turn_info.active_player_id : myPlayerId;
-    const mulliganStates = (gameState as any).mulligan_used || {};
-    return !mulliganStates[pid];
-  }, [gameState, myPlayerId]);
+  const mulliganStatus = useMemo(() => {
+    if (!gameState) return { p1: false, p2: false };
+    return (gameState as any).mulligan_finished || { p1: false, p2: false };
+  }, [gameState]);
 
-  // 長押しタイマー開始 (完全維持)
+  const isMulliganPhase = useMemo(() => {
+    if (!gameState || gameState.turn_info.turn_count > 1) return false;
+    return !mulliganStatus.p1 || !mulliganStatus.p2;
+  }, [gameState, mulliganStatus]);
+
+  const isActionBlockedByMulligan = useMemo(() => {
+    if (!gameState || !isMulliganPhase) return false;
+    if (myPlayerId === 'both') return false;
+    if (myPlayerId === 'p1') {
+        return !mulliganStatus.p2 || !mulliganStatus.p1;
+    }
+    return false;
+  }, [gameState, isMulliganPhase, mulliganStatus, myPlayerId]);
+
   const startLongPress = (card: CardInstance, x: number, y: number) => {
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       pressStartPosRef.current = { x, y };
-      
       longPressTimerRef.current = setTimeout(() => {
           logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
           setSelectedCard(card);
-          setDragState(null); 
+          setDragState(null);
           longPressTimerRef.current = null;
       }, 500);
   };
 
-  // 長押しタイマーキャンセル (完全維持)
   const cancelLongPress = () => {
       if (longPressTimerRef.current) {
           clearTimeout(longPressTimerRef.current);
@@ -146,10 +153,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: COLORS.APP_BG, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
-
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
-    
     const autoScrollTicker = () => {
       const currentDrag = dragStateRef.current;
       const overlay = overlayRef.current;
@@ -161,7 +166,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       let scrollSpeed = 0;
       if (spriteX < EDGE) scrollSpeed = -MAX_SPEED * (1 - spriteX / EDGE);
       else if (spriteX > W - EDGE) scrollSpeed = MAX_SPEED * (1 - (W - spriteX) / EDGE);
-      
       if (Math.abs(scrollSpeed) > 1.0) {
         let newScroll = inspectScrollXRef.current + scrollSpeed;
         newScroll = Math.max(0, newScroll);
@@ -171,10 +175,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       }
     };
     app.ticker.add(autoScrollTicker);
-
     const handleResize = () => { app.renderer.resize(window.innerWidth, window.innerHeight); const newCoords = calculateCoordinates(window.innerWidth, window.innerHeight); setLayoutCoords(newCoords.turnEndPos); };
     window.addEventListener('resize', handleResize);
-    
     return () => { 
         window.removeEventListener('resize', handleResize); 
         try {
@@ -197,7 +199,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
              app.stage.removeChild(child); child.destroy({ children: true });
         }
     });
-    
     const { width: W, height: H } = app.screen;
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
@@ -205,32 +206,27 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     bg.beginFill(COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
     app.stage.addChild(bg);
-    
     const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
         app.stage.addChild(ghost); 
         setDragState({ card, sprite: ghost, startPos: startPoint });
     };
-
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState) return;
+        if (isActionBlockedByMulligan) return;
         if ((card.type || '').toUpperCase() === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
         if (myPlayerId !== 'both' && gameState) { const me = gameState.players[myPlayerId as 'p1' | 'p2']; if (me && card.owner_id && card.owner_id !== me.name) return; }
-        
         startLongPress(card, e.global.x, e.global.y);
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
-
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
-    
     const bottomSide = createSandboxBoardSide(bottomPlayer, false, W, coords, onCardDown, false);
     bottomSide.y = midY; app.stage.addChild(bottomSide);
     const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle);
     topSide.y = 0; app.stage.addChild(topSide);
-
     if (inspecting) {
         const overlay = createInspectOverlay(
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
@@ -254,14 +250,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     } else {
         overlayRef.current = null;
     }
-
     if (dragState) app.stage.addChild(dragState.sprite);
-  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
+  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds, isActionBlockedByMulligan]);
 
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
-    
     const onPointerMove = (e: PointerEvent) => { 
         if (pressStartPosRef.current) {
             const dx = e.clientX - pressStartPosRef.current.x;
@@ -272,14 +266,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         dragState.sprite.position.set(e.clientX, e.clientY); 
         if (overlayRef.current) overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
     };
-    
     const onPointerUp = async (e: PointerEvent) => {
         cancelLongPress();
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
         if ((card.type || '').toUpperCase() === 'LEADER') { setDragState(null); return; }
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
-
         if (distFromStart < 10) {
             if (inspecting) {
                 if (inspectingCards.some(c => c.uuid === card.uuid)) {
@@ -292,19 +284,15 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 return;
             }
         }
-
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
-        
         if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
-
         if (inspecting && overlayRef.current && inspecting.pid === destPid) {
              const PANEL_W = Math.min(W * 0.95, 1200);
              const PANEL_X = (W - PANEL_W) / 2;
              const PANEL_Y = 15; 
              const PANEL_H = Math.min(H * 0.48, 450);
              const isInsidePanel = endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W && endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
-
              if (isInsidePanel) {
                  const HEADER_HEIGHT = 40;
                  const SCROLL_ZONE_HEIGHT = 70;
@@ -322,7 +310,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                  return;
              }
         }
-
         if (distFromStart < 10) {
             const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
@@ -330,7 +317,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (!destP?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null); return;
         }
-
         let destZone = 'field'; 
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
         const THRESHOLD = coords.CH; 
@@ -350,7 +336,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (checkDist(coords.getDonRestX(W), r3Y) < THRESHOLD) return 'don_rested';
             return null;
         };
-
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
@@ -366,7 +351,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         const detectedZone = checkZone(isTopArea); 
         if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
         else if (detectedZone) { destZone = detectedZone; }
-        
         const animateAndSend = () => {
             const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
             const step = () => {
@@ -440,23 +424,40 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 <button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button>
                 <button onClick={() => { if(window.confirm('ゲームを初期状態にリセットしますか？')) handleAction('RESET', {}); }} style={{ background: 'rgba(200, 0, 0, 0.8)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>リセット</button>
             </div>
-            
-            {canMulligan && (
-                <div style={{ position: 'absolute', top: '50px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'auto' }}>
-                    <button onClick={() => { if(window.confirm('手札を引き直しますか？')) handleAction('MULLIGAN', {}); }} style={{ background: '#3498db', color: 'white', border: '2px solid white', borderRadius: '8px', padding: '10px 20px', fontSize: '16px', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>マリガン (引き直し)</button>
+
+            {isMulliganPhase && (
+                <div style={{ position: 'absolute', top: '60px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'auto', display: 'flex', gap: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px', borderRadius: '12px', border: '1px solid #555' }}>
+                    {(myPlayerId === 'p1' || myPlayerId === 'both') && !mulliganStatus.p1 && (
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>P1 マリガン</div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button onClick={() => handleAction('MULLIGAN', { player_id: 'p1' })} style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>引き直す</button>
+                                <button onClick={() => handleAction('MULLIGAN_FINISH', { player_id: 'p1' })} style={{ background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>完了</button>
+                            </div>
+                        </div>
+                    )}
+                    {(myPlayerId === 'p2' || myPlayerId === 'both') && !mulliganStatus.p2 && (
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>P2 マリガン</div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button onClick={() => handleAction('MULLIGAN', { player_id: 'p2' })} style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>引き直す</button>
+                                <button onClick={() => handleAction('MULLIGAN_FINISH', { player_id: 'p2' })} style={{ background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>完了</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
             <button 
                 onClick={() => handleAction('TURN_END', {})} 
-                disabled={isPending || !isMyTurn} 
+                disabled={isPending || !isMyTurn || isActionBlockedByMulligan} 
                 style={{ 
                     position: 'absolute', left: layoutCoords ? `${layoutCoords.x}px` : 'auto', top: layoutCoords ? `${layoutCoords.y}px` : '50%', 
                     padding: '10px 20px', 
-                    backgroundColor: (isPending || !isMyTurn) ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, 
+                    backgroundColor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, 
                     color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', pointerEvents: 'auto',
-                    cursor: (isPending || !isMyTurn) ? 'not-allowed' : 'pointer',
-                    opacity: isMyTurn ? 1 : 0.6
+                    cursor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? 'not-allowed' : 'pointer',
+                    opacity: (isMyTurn && !isActionBlockedByMulligan) ? 1 : 0.6
                 }}
             >
                 {isPending ? '送信中' : '終了'}
