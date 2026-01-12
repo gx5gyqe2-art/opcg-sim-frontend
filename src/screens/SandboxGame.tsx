@@ -26,6 +26,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life' | 'trash', pid: string } | null>(null);
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
+  const [dropChoice, setDropChoice] = useState<{ card: CardInstance, destPid: string, destZone: string } | null>(null);
+  const inspectScrollXRef = useRef(15);
   const { COLORS } = LAYOUT_CONSTANTS;
 
   const isRotated = useMemo(() => {
@@ -130,7 +132,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || inspecting || dragState) return;
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
-             const player = gameState.players[myPlayerId];
+             const player = gameState.players[myPlayerId as 'p1' | 'p2'];
              if (card.owner_id && player && card.owner_id !== player.name) return;
         }
         startDrag(card, { x: e.global.x, y: e.global.y });
@@ -142,8 +144,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     bottomSide.y = midY; app.stage.addChild(bottomSide);
     const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle);
     topSide.y = 0; app.stage.addChild(topSide);
+
     if (inspecting) {
-        const overlay = createInspectOverlay(inspecting.type, inspectingCards, revealedCardIds, W, H, () => setInspecting(null), (card, startPos) => startDrag(card, startPos), (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); });
+        const overlay = createInspectOverlay(inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, () => setInspecting(null), (card, startPos) => startDrag(card, startPos), (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); }, () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, (x) => { inspectScrollXRef.current = x; });
         app.stage.addChild(overlay);
     }
     if (dragState) app.stage.addChild(dragState.sprite);
@@ -191,12 +194,17 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             const dZone = checkZone(isTopArea); if (dZone && ['don_active', 'don_rested', 'don_deck'].includes(dZone)) handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
             setDragState(null); return;
         }
-        const detectedZone = checkZone(isTopArea); if (detectedZone) destZone = detectedZone;
+        const detectedZone = checkZone(isTopArea); 
+        if (detectedZone === 'deck' || detectedZone === 'life') {
+            setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return;
+        } else if (detectedZone) {
+            destZone = detectedZone;
+        }
         if (distFromStart < 10) {
             if (inspecting) { setDragState(null); return; }
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
-            if (currentPlayer) { const stackInfo = findInStack(currentPlayer); if (stackInfo) { setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
+            if (currentPlayer) { const stackInfo = findInStack(currentPlayer); if (stackInfo) { inspectScrollXRef.current = 15; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
             if (!currentPlayer?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null); return;
         }
@@ -243,6 +251,18 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
+      {dropChoice && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10000, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+          <div style={{ background: '#2c3e50', padding: '30px', borderRadius: '15px', border: '2px solid #d4af37', textAlign: 'center', width: '80%', maxWidth: '400px' }}>
+            <h3 style={{ color: '#ffd700', marginBottom: '25px' }}>{dropChoice.destZone === 'deck' ? '山札' : 'ライフ'}のどこに置きますか？</h3>
+            <div style={{ display: 'flex', gap: '15px' }}>
+              <button onClick={() => { handleAction('MOVE_CARD', { card_uuid: dropChoice.card.uuid, dest_player_id: dropChoice.destPid, dest_zone: dropChoice.destZone, index: 0 }); setDropChoice(null); }} style={{ flex: 1, padding: '15px', background: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>上へ置く</button>
+              <button onClick={() => { handleAction('MOVE_CARD', { card_uuid: dropChoice.card.uuid, dest_player_id: dropChoice.destPid, dest_zone: dropChoice.destZone, index: -1 }); setDropChoice(null); }} style={{ flex: 1, padding: '15px', background: '#3498db', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>下へ置く</button>
+            </div>
+            <button onClick={() => setDropChoice(null)} style={{ marginTop: '20px', background: 'transparent', color: '#bdc3c7', border: 'none', textDecoration: 'underline' }}>キャンセル</button>
+          </div>
+        </div>
+      )}
       {!gameState && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}><h2>Connecting...</h2></div>}
       {gameState && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
