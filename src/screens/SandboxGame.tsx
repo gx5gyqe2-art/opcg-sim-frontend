@@ -31,6 +31,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
   const [deckOptions, setDeckOptions] = useState<{id: string, name: string}[]>([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life' | 'trash', pid: string } | null>(null);
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
@@ -53,6 +54,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       if (inspecting.type === 'trash') return p.zones.trash || [];
       return [];
   }, [gameState, inspecting]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchDecks = async () => {
@@ -303,22 +310,22 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const ready = gameState.ready_states ?? { p1: false, p2: false };
     const canStart = ready.p1 && ready.p2;
     return (
-      <div style={{ width: '100vw', height: '100vh', background: '#1a0b0b', color: '#f0e6d2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif' }}>
-        <h1 style={{ color: '#ffd700', textShadow: '0 2px 4px black' }}>ROOM: {gameState.room_name}</h1>
-        <div style={{ display: 'flex', gap: '40px', marginTop: '30px' }}>
+      <div style={{ width: '100vw', height: '100vh', background: '#1a0b0b', color: '#f0e6d2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', overflowY: 'auto', padding: '20px', boxSizing: 'border-box' }}>
+        <h1 style={{ color: '#ffd700', textShadow: '0 2px 4px black', textAlign: 'center', fontSize: isMobile ? '24px' : '32px' }}>ROOM: {gameState.room_name}</h1>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '20px' : '40px', marginTop: '30px', width: '100%', maxWidth: '800px', justifyContent: 'center', alignItems: 'center' }}>
           {(['p1', 'p2'] as const).map(pid => (
-            <div key={pid} style={{ background: 'rgba(255,255,255,0.05)', padding: '30px', borderRadius: '12px', border: '2px solid #5d4037', width: '250px', textAlign: 'center' }}>
-              <h2 style={{ margin: '0 0 20px 0' }}>{pid.toUpperCase()} {gameState.players[pid].name}</h2>
-              <div style={{ marginBottom: '20px' }}>
+            <div key={pid} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', border: '2px solid #5d4037', width: '100%', maxWidth: '300px', textAlign: 'center', boxSizing: 'border-box' }}>
+              <h2 style={{ margin: '0 0 15px 0', fontSize: '18px' }}>{pid.toUpperCase()}: {gameState.players[pid].name}</h2>
+              <div style={{ marginBottom: '15px' }}>
                 {ready[pid] ? <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>READY</span> : <span style={{ color: '#e74c3c' }}>NOT READY</span>}
               </div>
               {(pid === myPlayerId || myPlayerId === 'both') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <select style={{ padding: '10px', background: '#fff8e1', border: '1px solid #8b4513' }} onChange={(e) => handleAction('SET_DECK', { player_id: pid, deck_id: e.target.value })}>
+                  <select style={{ padding: '10px', background: '#fff8e1', border: '1px solid #8b4513', borderRadius: '4px', width: '100%' }} onChange={(e) => handleAction('SET_DECK', { player_id: pid, deck_id: e.target.value })}>
                     <option value="">デッキを選択...</option>
                     {deckOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
                   </select>
-                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '10px', background: ready[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', cursor: 'pointer' }}>
+                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '12px', background: ready[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                     {ready[pid] ? 'キャンセル' : '準備完了'}
                   </button>
                 </div>
@@ -326,10 +333,10 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             </div>
           ))}
         </div>
-        <div style={{ marginTop: '50px', display: 'flex', gap: '20px' }}>
-           <button onClick={onBack} style={{ padding: '15px 30px', background: '#555', color: 'white', border: 'none', cursor: 'pointer' }}>退出</button>
+        <div style={{ marginTop: '40px', display: 'flex', gap: '15px', width: '100%', justifyContent: 'center' }}>
+           <button onClick={onBack} style={{ padding: '12px 25px', background: '#555', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>退出</button>
            {(myPlayerId === 'p1' || myPlayerId === 'both') && (
-             <button disabled={!canStart} onClick={() => handleAction('START', {})} style={{ padding: '15px 60px', background: canStart ? '#2ecc71' : '#333', color: 'white', border: 'none', cursor: canStart ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>開始</button>
+             <button disabled={!canStart} onClick={() => handleAction('START', {})} style={{ padding: '12px 50px', background: canStart ? '#2ecc71' : '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: canStart ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>開始</button>
            )}
         </div>
       </div>
