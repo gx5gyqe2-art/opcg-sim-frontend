@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import { createCardContainer } from './CardRenderer';
 import type { CardInstance } from '../game/types';
 import { LAYOUT_PARAMS } from '../layout/layout.config';
+import { API_CONFIG } from '../api/api.config'; // 画像パス用にインポート
 
 // オーバーレイコンテナに更新用メソッドを追加した型定義
 export interface InspectOverlayContainer extends PIXI.Container {
@@ -9,11 +10,11 @@ export interface InspectOverlayContainer extends PIXI.Container {
   updateScroll: (x: number) => void;
 }
 
-// レンダリング用の基準解像度（きれいに表示するための内部サイズ）
+// レンダリング用の基準解像度
 const BASE_CARD_WIDTH = 120;
 const BASE_CARD_HEIGHT = BASE_CARD_WIDTH * LAYOUT_PARAMS.CARD.ASPECT_RATIO;
 
-// 実際に表示するサイズ（以前のサイズ感に合わせる）
+// 実際に表示するサイズ
 const DISPLAY_CARD_WIDTH = 70; 
 const CARD_GAP = 15;
 const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
@@ -122,42 +123,47 @@ export const createInspectOverlay = (
     const scale = DISPLAY_CARD_WIDTH / BASE_CARD_WIDTH;
     cardSprite.scale.set(scale);
 
-    // 裏向きカバー
+    // 裏向き画像
     if (!isRevealed) {
-      const cover = new PIXI.Graphics();
-      cover.beginFill(0x34495e);
-      cover.lineStyle(2, 0xecf0f1);
-      // 【修正】中心基準で描画するように座標を修正 (-w/2, -h/2)
-      cover.drawRoundedRect(-BASE_CARD_WIDTH / 2, -BASE_CARD_HEIGHT / 2, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, 8);
-      cover.endFill();
+      // 既存のSpriteがあれば削除（CardRendererがデフォルトで作るものを上書き）
+      // CardRendererの実装によっては裏面時に何か描画しているかもしれないので、上に被せる
+      const backTexture = PIXI.Texture.from(`${API_CONFIG.IMAGE_BASE_URL}/OPCG_back.png`);
+      const backSprite = new PIXI.Sprite(backTexture);
+      backSprite.width = BASE_CARD_WIDTH;
+      backSprite.height = BASE_CARD_HEIGHT;
+      backSprite.anchor.set(0.5);
       
-      const txt = new PIXI.Text("?", { fontSize: 60, fill: "white", fontWeight: 'bold' });
-      txt.anchor.set(0.5);
-      // 【修正】中心基準なので (0, 0)
-      txt.position.set(0, 0);
-      cover.addChild(txt);
-      cardSprite.addChild(cover);
+      // 枠線などを消すために少しマスクしたり工夫が必要だが、ここでは単純に上に乗せる
+      // 必要に応じて CardRenderer 側で制御するのがベストだが、Overlay独自処理として追加
+      cardSprite.addChild(backSprite);
     }
 
-    // デッキ下へボタン
+    // デッキ下へボタン (カードの下に配置)
     const btn = new PIXI.Graphics();
-    btn.beginFill(0x000000, 0.6);
-    // 【修正】中心基準で座標計算 (下部マージン考慮)
-    const btnH = 30;
-    const btnW = BASE_CARD_WIDTH - 20;
-    const btnY = BASE_CARD_HEIGHT / 2 - 25; // 中心から下に配置
-    btn.drawRoundedRect(-btnW / 2, btnY - btnH / 2, btnW, btnH, 4);
+    btn.beginFill(0x34495e, 0.9);
+    btn.lineStyle(1, 0xecf0f1);
+    
+    const btnH = 24;
+    const btnW = BASE_CARD_WIDTH; // カード幅と同じ
+    // カードの下端(BASE_CARD_HEIGHT/2)から少し空けて配置
+    const btnY = BASE_CARD_HEIGHT / 2 + 15 + btnH / 2; 
+    
+    btn.drawRoundedRect(-btnW / 2, -btnH / 2, btnW, btnH, 4);
     btn.endFill();
+    
+    // 位置設定 (中心基準)
+    btn.position.set(0, btnY);
 
-    const btnTxt = new PIXI.Text("Bot", { fontSize: 18, fill: 'white' });
+    const btnTxt = new PIXI.Text("デッキ下", { fontSize: 16, fill: 'white', fontWeight: 'bold' });
     btnTxt.anchor.set(0.5);
-    btnTxt.position.set(0, btnY);
+    // ボタンのGraphics内に追加するので、ローカル座標 (0,0) がボタン中心
     btn.addChild(btnTxt);
     
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
     btn.visible = isRevealed;
     btn.on('pointerdown', (e) => { e.stopPropagation(); onMoveToBottom(card.uuid); });
+    
     cardSprite.addChild(btn);
 
     cardSprite.eventMode = 'static';
@@ -245,10 +251,14 @@ export const createInspectOverlay = (
   container.updateLayout = (draggingGlobalX: number | null, draggingUuid: string | null) => {
     let gapIndex = -1;
 
+    // リストの開始X座標 (マスク内でのローカル座標0に対応するグローバル座標ではないが、相対計算に使用)
+    const listStartX = PANEL_X + container.x;
+
     if (draggingUuid && draggingGlobalX !== null) {
-      const listStartX = PANEL_X + container.x;
       const relativeX = draggingGlobalX + currentScrollX - listStartX;
-      gapIndex = Math.floor((relativeX + TOTAL_CARD_WIDTH / 2) / TOTAL_CARD_WIDTH);
+      // カードの中心ではなく左端基準でインデックス計算するために補正
+      // TOTAL_CARD_WIDTHで割る
+      gapIndex = Math.floor((relativeX) / TOTAL_CARD_WIDTH);
       gapIndex = Math.max(0, Math.min(gapIndex, cards.length));
     }
 
@@ -273,20 +283,20 @@ export const createInspectOverlay = (
             if (originalIndex > draggingItemIndex) adjustedIndex -= 1;
             
              if (adjustedIndex >= gapIndex) {
-                 sprite.position.set((adjustedIndex + 1) * TOTAL_CARD_WIDTH - currentScrollX, LIST_H / 2);
+                 visualIndex = adjustedIndex + 1;
              } else {
-                 sprite.position.set(adjustedIndex * TOTAL_CARD_WIDTH - currentScrollX, LIST_H / 2);
+                 visualIndex = adjustedIndex;
              }
-             return;
          }
       }
 
-      let targetX = visualIndex * TOTAL_CARD_WIDTH - currentScrollX;
+      // X座標計算
+      // visualIndex * TOTAL_CARD_WIDTH: カード間隔ごとの左端位置
+      // + TOTAL_CARD_WIDTH / 2: カードの中心に合わせる (Anchor 0.5)
+      // - currentScrollX: スクロール分引く
+      const targetX = visualIndex * TOTAL_CARD_WIDTH + TOTAL_CARD_WIDTH / 2 - currentScrollX;
       
-      if (gapIndex !== -1 && draggingUuid && !cards.find(c => c.uuid === draggingUuid)) {
-          if (originalIndex >= gapIndex) targetX += TOTAL_CARD_WIDTH;
-      }
-
+      // Y座標はリストエリアの中央
       sprite.position.set(targetX, LIST_H / 2);
     });
   };
