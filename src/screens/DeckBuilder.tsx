@@ -358,7 +358,7 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
       <div style={{ background: '#222', width: '100%', maxWidth: '400px', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>デッキ分布</h3>
-          <button onClose={onClose} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ padding: '20px', overflowY: 'auto' }}>
           <StatSection title="コスト分布" data={stats.costs} />
