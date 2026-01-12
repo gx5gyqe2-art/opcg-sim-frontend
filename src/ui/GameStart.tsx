@@ -24,6 +24,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
   const [roomName, setRoomName] = useState('New Battle');
+  const [showRoomCreate, setShowRoomCreate] = useState(false);
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -176,21 +177,44 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
            <button onClick={onDeckBuilder} style={{ ...styles.subBtn, flex: 1 }} className="hover-scale">デッキ作成</button>
            <button onClick={onCardList} style={{ ...styles.subBtn, flex: 1, borderColor: '#e67e22', color: '#e67e22' }} className="hover-scale">カードリスト</button>
         </div>
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, border: '1px solid rgba(212,175,55,0.2)', padding: '15px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)' }}>
-            <div style={{ color: '#d4af37', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>ONLINE LOBBY</div>
-            <input 
-                type="text" 
-                placeholder="Room Name" 
-                value={roomName} 
-                onChange={(e) => setRoomName(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #555', background: '#222', color: '#fff', boxSizing: 'border-box' }}
-            />
-            <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName })} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }}>ルーム作成</button>
-                <button onClick={onLobby} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }}>部屋に参加</button>
-            </div>
+        <div style={{ display: 'flex', width: '100%', gap: 10, marginTop: 10 }}>
+            <button onClick={() => setShowRoomCreate(true)} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }} className="hover-scale">ルーム作成</button>
+            <button onClick={onLobby} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }} className="hover-scale">部屋に参加</button>
         </div>
       </div>
+
+      {showRoomCreate && (
+        <div className="ui-overlay" style={{ zIndex: 2000 }}>
+          <div className="action-menu" style={{ maxWidth: '400px' }}>
+            <h3 className="menu-title">新規ルーム作成</h3>
+            <div style={{ padding: '10px 0' }}>
+              <label style={{ fontSize: '12px', color: '#666', display: 'block', textAlign: 'left', marginBottom: '5px' }}>部屋名</label>
+              <input 
+                type="text" 
+                value={roomName} 
+                onChange={(e) => setRoomName(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', boxSizing: 'border-box' }}
+                autoFocus
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && roomName.trim()) {
+                        onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName });
+                    }
+                }}
+              />
+            </div>
+            <div className="menu-buttons" style={{ marginTop: '20px' }}>
+              <button 
+                className="menu-btn primary" 
+                disabled={!roomName.trim()}
+                onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName })}
+              >
+                作成して開始
+              </button>
+              <button className="menu-btn cancel" onClick={() => setShowRoomCreate(false)}>キャンセル</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

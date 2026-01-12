@@ -75,9 +75,12 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin }) => {
                 onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
                 onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
               >
+                {/* 作成者が設定した部屋名を大きく表示 */}
                 <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '18px', marginBottom: '10px' }}>{room.room_name}</div>
+                
                 <div style={{ fontSize: '14px', color: '#ccc' }}>Host: {room.p1_name}</div>
                 <div style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>Turn: {room.turn} | Created: {formatTime(room.created_at)}</div>
+                
                 <div style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '4px 12px', background: '#3498db', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>JOIN</div>
               </div>
             ))}
