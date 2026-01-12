@@ -33,7 +33,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
-  // DragStateの最新値をRefで保持（Ticker用）
   const dragStateRef = useRef(dragState);
   useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
@@ -105,14 +104,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     return () => { if (ws) ws.close(); };
   }, []);
 
-  // Pixi App Initialization & Ticker
   useEffect(() => {
     if (!pixiContainerRef.current || (gameState && gameState.status === 'WAITING')) return;
-    
-    // コンテナのクリア
     while (pixiContainerRef.current.firstChild) pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
-    
-    // App生成
     const app = new PIXI.Application({ width: window.innerWidth, height: window.innerHeight, backgroundColor: COLORS.APP_BG, antialias: true, resolution: window.devicePixelRatio || 1, autoDensity: true });
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
@@ -120,12 +114,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
     
-    // Auto-scroll ticker定義
     const autoScrollTicker = () => {
-      // Refから最新の状態を取得
       const currentDrag = dragStateRef.current;
       const overlay = overlayRef.current;
-      
       if (!currentDrag || !overlay) return;
       
       const spriteX = currentDrag.sprite.x;
@@ -134,61 +125,46 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       const MAX_SPEED = 25;
       
       let scrollSpeed = 0;
-      if (spriteX < EDGE) {
-        scrollSpeed = -MAX_SPEED * (1 - spriteX / EDGE);
-      } else if (spriteX > W - EDGE) {
-        scrollSpeed = MAX_SPEED * (1 - (W - spriteX) / EDGE);
-      }
+      if (spriteX < EDGE) scrollSpeed = -MAX_SPEED * (1 - spriteX / EDGE);
+      else if (spriteX > W - EDGE) scrollSpeed = MAX_SPEED * (1 - (W - spriteX) / EDGE);
       
-      // スクロール発生時
       if (Math.abs(scrollSpeed) > 1.0) {
         let newScroll = inspectScrollXRef.current + scrollSpeed;
         newScroll = Math.max(0, newScroll);
         inspectScrollXRef.current = newScroll;
-        
         overlay.updateScroll(newScroll);
         overlay.updateLayout(spriteX, currentDrag.card.uuid);
       }
     };
-    
-    // Ticker登録
     app.ticker.add(autoScrollTicker);
 
     const handleResize = () => { app.renderer.resize(window.innerWidth, window.innerHeight); const newCoords = calculateCoordinates(window.innerWidth, window.innerHeight); setLayoutCoords(newCoords.turnEndPos); };
     window.addEventListener('resize', handleResize);
     
-    // クリーンアップ
     return () => { 
         window.removeEventListener('resize', handleResize); 
         try {
             app.ticker.remove(autoScrollTicker);
             app.destroy(true, { children: true });
-        } catch (e) {
-            console.warn("Pixi destruction error:", e);
-        }
+        } catch(e) { console.warn(e); }
         appRef.current = null;
     };
-  }, [gameState?.status]); // gameState.status が変わるまで再生成しない
+  }, [gameState?.status]);
 
-  // Main Render Effect
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
     
-    // Clean up old sprites
     const children = [...app.stage.children];
     children.forEach(child => { 
-        if (dragState && child === dragState.sprite) { /* keep dragging sprite */ }
+        if (dragState && child === dragState.sprite) { }
         else if (inspecting && overlayRef.current && child === overlayRef.current) { 
-             app.stage.removeChild(child);
-             child.destroy({ children: true });
+             app.stage.removeChild(child); child.destroy({ children: true });
         } else {
-             app.stage.removeChild(child);
-             child.destroy({ children: true });
+             app.stage.removeChild(child); child.destroy({ children: true });
         }
     });
     
-    // Draw BG
     const { width: W, height: H } = app.screen;
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
@@ -197,7 +173,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
     app.stage.addChild(bg);
     
-    // Functions
     const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {} });
         ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
@@ -211,7 +186,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
 
-    // Draw Boards
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
@@ -220,7 +194,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const topSide = createSandboxBoardSide(topPlayer, true, W, coords, onCardDown, isOnlineBattle);
     topSide.y = 0; app.stage.addChild(topSide);
 
-    // Draw Overlay
     if (inspecting) {
         const overlay = createInspectOverlay(
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
@@ -233,20 +206,14 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
-        
-        if (dragState) {
-            overlay.updateLayout(dragState.sprite.x, dragState.card.uuid);
-        }
+        if (dragState) overlay.updateLayout(dragState.sprite.x, dragState.card.uuid);
     } else {
         overlayRef.current = null;
     }
 
-    if (dragState) {
-        app.stage.addChild(dragState.sprite);
-    }
+    if (dragState) app.stage.addChild(dragState.sprite);
   }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
 
-  // Handle Drag Move & Drop
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -254,11 +221,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const onPointerMove = (e: PointerEvent) => { 
         if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; 
         dragState.sprite.position.set(e.clientX, e.clientY); 
-        
-        // オーバーレイのレイアウト更新 (スクロールなしでの並び替えプレビュー)
-        if (overlayRef.current) {
-            overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
-        }
+        if (overlayRef.current) overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
     };
     
     const onPointerUp = async (e: PointerEvent) => {
@@ -267,36 +230,51 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         
         if ((card.type || '').toUpperCase() === 'LEADER') { setDragState(null); return; }
 
+        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
+
+        // --- タップ判定 (InspectモードでのReveal切り替え用) ---
+        if (distFromStart < 10) {
+            if (inspecting) {
+                // Inspecting中かつタップなら、Reveal状態を切り替え
+                // カードがInspectingCardsに含まれるか確認
+                if (inspectingCards.some(c => c.uuid === card.uuid)) {
+                    const newSet = new Set(revealedCardIds);
+                    if (newSet.has(card.uuid)) newSet.delete(card.uuid);
+                    else newSet.add(card.uuid);
+                    setRevealedCardIds(newSet);
+                }
+                setDragState(null); 
+                return;
+            }
+            
+            // 通常のタップ判定
+            const currentPlayer = gameState?.players[myPlayerId === 'both' ? 'p1' : myPlayerId as 'p1'|'p2']; // 簡易判定
+            // 山札等のクリック判定
+            // ... (省略: 既存ロジックは移動距離判定後に実行) ...
+        }
+
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
         
         if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
 
-        // --- Inspecting中の処理 ---
+        // --- Inspecting中のパネル判定 ---
         if (inspecting && overlayRef.current && inspecting.pid === destPid) {
-             // パネル範囲の計算 (InspectOverlayと一致させる)
              const PANEL_W = Math.min(W * 0.95, 1200);
              const PANEL_X = (W - PANEL_W) / 2;
-             const PANEL_Y = 50;
-             const PANEL_H = Math.min(H * 0.7, 500);
+             const PANEL_Y = 20; // InspectOverlay.tsxのPANEL_Yと合わせる
+             const PANEL_H = Math.min(H * 0.48, 450); // InspectOverlay.tsxのPANEL_Hと合わせる
 
-             // ドロップ位置がパネル内かどうか判定
              const isInsidePanel = 
                 endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W &&
                 endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
 
              if (isInsidePanel) {
-                 // パネル内の場合、並び替え処理などを試行
-                 const HEADER_HEIGHT = 60;
-                 const SCROLL_ZONE_HEIGHT = 80;
-                 // リストエリアのY範囲 (Header下からScrollZone上まで)
-                 // Y座標チェック (Reorder判定用)
+                 // パネル内ドロップの場合、並び替えかどうか判定
+                 const HEADER_HEIGHT = 50;
+                 const SCROLL_ZONE_HEIGHT = 70;
                  if (endPos.y > PANEL_Y + HEADER_HEIGHT && endPos.y < PANEL_Y + PANEL_H - SCROLL_ZONE_HEIGHT) {
                      const ASPECT = 1.39;
-                     const LIST_H = PANEL_H - HEADER_HEIGHT - SCROLL_ZONE_HEIGHT;
-                     let cardH = LIST_H - 20;
-                     let cardW = cardH / ASPECT;
-                     if (cardW > 120) cardW = 120;
                      const DISPLAY_CARD_WIDTH = 70; 
                      const CARD_GAP = 15;
                      const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
@@ -313,12 +291,20 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                          index: newIndex 
                      });
                  }
-                 // パネル内だがリストエリア外(ヘッダー等)の場合も含め、
-                 // パネル内ドロップなら「盤面へのドロップ」としては扱わず終了する
+                 // パネル内なら盤面ドロップ処理はさせない (裏のデッキなどに反応させない)
                  setDragState(null);
                  return;
              }
-             // パネル外の場合は以下へ進む（盤面への移動）
+        }
+
+        // --- 盤面ドロップ判定 ---
+        if (distFromStart < 10) {
+            // タップ時の通常処理 (Inspect以外)
+            const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
+            if (destP) { const stackInfo = findInStack(destP); if (stackInfo) { inspectScrollXRef.current = 20; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
+            if (!destP?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            setDragState(null); return;
         }
 
         let destZone = 'field'; 
@@ -340,17 +326,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (checkDist(coords.getDonRestX(W), r3Y) < THRESHOLD) return 'don_rested';
             return null;
         };
-
-        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
-
-        if (distFromStart < 10) {
-            if (inspecting) { setDragState(null); return; }
-            const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
-            if (currentPlayer) { const stackInfo = findInStack(currentPlayer); if (stackInfo) { inspectScrollXRef.current = 20; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
-            if (!currentPlayer?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            setDragState(null); return;
-        }
 
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
