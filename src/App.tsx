@@ -113,8 +113,6 @@ export default function App() {
 
         {mode === 'sandbox' && (
           <SandboxGame 
-            p1Deck={selectedDecks.p1} 
-            p2Deck={selectedDecks.p2}
             myPlayerId={sandboxOptions.role === 'both' ? 'both' : sandboxOptions.role}
             gameId={sandboxOptions.gameId}
             roomName={sandboxOptions.room_name}

@@ -91,15 +91,11 @@ export const apiClient = {
   },
 
   async createSandboxGame(
-    p1Deck: string,
-    p2Deck: string,
     roomName?: string
   ): Promise<{ game_id: string; state: GameState }> {
     const res = await fetchWithLog(`${BASE_URL}/api/sandbox/create`, {
       method: 'POST',
       body: JSON.stringify({
-        p1_deck: p1Deck,
-        p2_deck: p2Deck,
         p1_name: "P1",
         p2_name: "P2",
         room_name: roomName
@@ -128,6 +124,7 @@ export const apiClient = {
       dest_zone?: string; 
       index?: number;
       player_id?: string;
+      deck_id?: string;
     }
   ): Promise<{ success: boolean; state: GameState }> {
     const res = await fetchWithLog(`${BASE_URL}/api/sandbox/action`, {
