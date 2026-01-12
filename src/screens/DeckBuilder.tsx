@@ -437,6 +437,14 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     return Array.from(sets).sort();
   }, [allCards]);
 
+  const isFilterActive = useMemo(() => {
+    return Object.entries(filters).some(([key, val]) => {
+      if (key === 'sort') return val !== 'COST';
+      if (Array.isArray(val)) return val.length > 0;
+      return val !== 'ALL';
+    });
+  }, [filters]);
+
   const filtered = useMemo(() => {
     let res = allCards;
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
@@ -496,6 +504,8 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     });
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
 
+  useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
+
   const handleSelect = (card: CardData) => {
     if (viewOnly) { setViewingCard(card); return; }
     if (mode === 'leader') { onUpdateDeck({ ...currentDeck, leader_id: card.uuid }); onClose(); }
@@ -536,12 +546,47 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
           return <CardImageStub key={c.uuid} card={c} count={count > 0 ? count : undefined} onClick={() => handleSelect(c)} />;
         })}
       </div>
-      <div style={{ padding: '10px', background: '#333', borderTop: '1px solid #444', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button onClick={onClose} style={{ padding: '8px 12px', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>完了</button>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <input placeholder="検索" value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '20px', border: 'none', background: '#222', color: 'white' }} />
+      <div style={{ 
+        padding: '12px 15px 45px 15px', 
+        background: '#333', 
+        borderTop: '1px solid #444', 
+        display: 'flex', 
+        gap: '12px', 
+        alignItems: 'center',
+        zIndex: 10
+      }}>
+        <button onClick={onClose} style={{ padding: '10px 16px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', flexShrink: 0, cursor: 'pointer' }}>
+          完了
+        </button>
+        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          <input 
+            placeholder="キーワード検索" 
+            value={searchText} 
+            onChange={e => setSearchText(e.target.value)} 
+            style={{ 
+              width: '100%', 
+              padding: '10px 10px 10px 35px', 
+              borderRadius: '20px', 
+              border: 'none', 
+              background: '#222', 
+              color: 'white',
+              fontSize: '14px',
+              boxSizing: 'border-box'
+            }} 
+          />
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#777', pointerEvents: 'none' }}>🔍</span>
         </div>
-        <button onClick={() => setShowFilterModal(true)} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#444', border: 'none', color: 'white' }}>⚙️</button>
+        <button 
+          onClick={() => setShowFilterModal(true)} 
+          style={{ 
+            width: '40px', height: '40px', borderRadius: '50%', 
+            background: isFilterActive ? '#3498db' : '#444', 
+            border: 'none', color: 'white', cursor: 'pointer',
+            flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}
+        >
+          ⚙️
+        </button>
       </div>
       {viewingCard && (
         <CardDetailScreen 
