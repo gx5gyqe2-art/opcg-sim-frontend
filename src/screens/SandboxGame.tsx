@@ -134,15 +134,28 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
         app.stage.addChild(ghost); setDragState({ card, sprite: ghost, startPos: startPoint });
     };
+    
+    // ■■■■■ ここから修正: エリアロックとリーダーロック ■■■■■
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance, _container: PIXI.Container) => {
         if (isPending || inspecting || dragState) return;
-        if (card.type === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
+        
+        // リーダーはタップ操作（レスト切替）のみ許可し、ドラッグは禁止
+        if (card.type && card.type.toUpperCase() === 'LEADER') {
+            handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            return;
+        }
+
+        // 他人のカードは触れない（エリアロック）
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
              const player = gameState.players[myPlayerId as 'p1' | 'p2'];
+             // card.owner_id と プレイヤー名が不一致なら操作不可
              if (card.owner_id && player && card.owner_id !== player.name) return;
         }
+        
         startDrag(card, { x: e.global.x, y: e.global.y });
     };
+    // ■■■■■ ここまで ■■■■■
+
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
     const topPlayer = isRotated ? gameState.players.p1 : gameState.players.p2;
     const isOnlineBattle = myPlayerId !== 'both';
@@ -173,11 +186,23 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const onPointerUp = async (e: PointerEvent) => {
         if (!dragState) return;
         const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
+        
+        // リーダーはドラッグ不可なのでここでは何もしない（念のため）
+        if (card.type && card.type.toUpperCase() === 'LEADER') {
+            setDragState(null); return;
+        }
+
         const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
-        if (card.type === 'LEADER') { if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid }); setDragState(null); return; }
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
-        if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
+        
+        // ■■■■■ ここから修正: エリアロック ■■■■■
+        // 自分以外のエリアにドロップしようとしたらキャンセル
+        if (myPlayerId !== 'both' && destPid !== myPlayerId) { 
+            setDragState(null); return; 
+        }
+        // ■■■■■ ここまで ■■■■■
+
         let destZone = 'field'; 
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
         const THRESHOLD = coords.CH; 
@@ -197,6 +222,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (checkDist(coords.getDonRestX(W), r3Y) < THRESHOLD) return 'don_rested';
             return null;
         };
+
         if (distFromStart < 10) {
             if (inspecting) { setDragState(null); return; }
             const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
@@ -205,6 +231,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (!currentPlayer?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
             setDragState(null); return;
         }
+
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
@@ -221,19 +248,31 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
         else if (detectedZone) { destZone = detectedZone; }
         
+        // ■■■■■ ここから修正: 移動アニメーション ■■■■■
         const animateAndSend = () => {
             const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
             const step = () => {
-                const dx = tx - sprite.x; const dy = ty - sprite.y;
+                // ターゲット座標に向かってスムーズに移動 (簡易イージング)
+                const dx = tx - sprite.x; 
+                const dy = ty - sprite.y;
                 if (Math.sqrt(dx*dx + dy*dy) < 5) { 
                     app.ticker.remove(step); 
                     handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); 
                     setDragState(null); 
-                } else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
+                } else { 
+                    sprite.x += dx * 0.3; 
+                    sprite.y += dy * 0.3; 
+                }
             };
             app.ticker.add(step);
         };
-        animateAndSend();
+        // 即時送信ではなくアニメーション後に送信する場合はこちらを使う（今回は即時判定＋視覚効果のみなら微調整が必要）
+        // ここでは「ドロップした場所からスッと消える」のではなく「ドロップ位置で止まる」挙動に近いので、
+        // 実際にはサーバーからのレスポンスで再描画されるまでの間をつなぐ役割。
+        // 単純にAPIを呼ぶ
+        await handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone });
+        setDragState(null); 
+        // ■■■■■ ここまで ■■■■■
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
@@ -275,6 +314,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
+      {/* リスト表示中 (inspecting) は zIndex を上げて前面に表示 */}
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: inspecting ? 200 : 1 }} />
       {dropChoice && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10000, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>

@@ -28,7 +28,7 @@ export const createInspectOverlay = (
   container.addChild(bg);
 
   const panelW = W * 0.95;
-  const panelH = Math.min(H * 0.55, 420); 
+  const panelH = Math.min(H * 0.55, 400); 
   const panelX = (W - panelW) / 2;
   const panelY = 50;
 
@@ -70,6 +70,8 @@ export const createInspectOverlay = (
 
   const listContainer = new PIXI.Container();
   listContainer.position.set(initialScrollX, 60);
+  listContainer.sortableChildren = true; // zIndexを有効化
+  
   const mask = new PIXI.Graphics();
   mask.beginFill(0xffffff);
   mask.drawRect(0, 0, panelW - 40, panelH - 80);
@@ -86,7 +88,13 @@ export const createInspectOverlay = (
   let isScrolling = false;
   let startPos = { x: 0, y: 0 };
   let scrollStartX = 0;
-  let pendingCard: { card: CardInstance, index: number, e: PIXI.FederatedPointerEvent } | null = null;
+  
+  // ドラッグ中の状態管理
+  let draggingSprite: PIXI.Container | null = null;
+  let draggingCard: CardInstance | null = null;
+  let draggingIndex = -1;
+  let dragOffset = { x: 0, y: 0 };
+  let originalPos = { x: 0, y: 0 };
 
   cards.forEach((card, i) => {
     const baseW = 100; 
@@ -96,15 +104,26 @@ export const createInspectOverlay = (
 
     const cardSprite = createCardContainer(displayCard, baseW, baseH, { onClick: () => {} });
     cardSprite.scale.set(cardH / baseH);
-    cardSprite.position.set(i * (cardW + gap) + cardW / 2, cardH / 2);
+    const initialX = i * (cardW + gap) + cardW / 2;
+    const initialY = cardH / 2;
+    cardSprite.position.set(initialX, initialY);
     cardSprite.eventMode = 'static';
     cardSprite.cursor = 'grab';
+    cardSprite.zIndex = 0; // デフォルトのzIndex
     
     cardSprite.on('pointerdown', (e) => {
       e.stopPropagation();
-      pendingCard = { card, index: i, e }; 
+      draggingCard = card;
+      draggingIndex = i;
+      draggingSprite = cardSprite;
       startPos = { x: e.global.x, y: e.global.y };
       scrollStartX = listContainer.x;
+      originalPos = { x: cardSprite.x, y: cardSprite.y };
+      
+      // コンテナ内でのローカル座標に変換してオフセットを保持
+      const localPos = listContainer.toLocal(e.global);
+      dragOffset = { x: cardSprite.x - localPos.x, y: cardSprite.y - localPos.y };
+      
       isScrolling = false;
     });
 
@@ -129,47 +148,79 @@ export const createInspectOverlay = (
     isScrolling = true; 
     startPos = { x: e.global.x, y: e.global.y };
     scrollStartX = listContainer.x;
-    pendingCard = null;
+    draggingSprite = null;
   });
 
   panel.on('globalpointermove', (e) => {
-    if (!pendingCard && !isScrolling) return;
-    const dx = e.global.x - startPos.x;
-    const dy = e.global.y - startPos.y;
-
-    if (pendingCard && Math.sqrt(dx*dx + dy*dy) > 10) {
-        if (Math.abs(dy) > Math.abs(dx) + 20) {
-            if ((pendingCard.card as any).is_face_up || revealedCardIds.has(pendingCard.card.uuid)) {
-                onCardDown(pendingCard.card, { x: e.global.x, y: e.global.y });
-                pendingCard = null; isScrolling = false; return;
-            }
-        }
-        if (Math.abs(dx) > 15) isScrolling = false;
+    // 1. スクロール処理
+    if (isScrolling && !draggingSprite) {
+      const dx = e.global.x - startPos.x;
+      let newX = scrollStartX + dx;
+      if (newX > 20) newX = 20;
+      if (newX < 20 - maxScroll) newX = 20 - maxScroll;
+      listContainer.x = newX;
+      if (onScroll) onScroll(newX);
+      return;
     }
 
-    if (isScrolling) {
-        let newX = scrollStartX + dx;
-        if (newX > 20) newX = 20;
-        if (newX < 20 - maxScroll) newX = 20 - maxScroll;
-        listContainer.x = newX;
-        if (onScroll) onScroll(newX);
+    // 2. カードドラッグ処理
+    if (draggingSprite && draggingCard) {
+        const dx = e.global.x - startPos.x;
+        const dy = e.global.y - startPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // 一定距離動くまでは判定しない
+        if (dist > 5) {
+            // 縦移動が大きい場合 -> 盤面へのドラッグ開始とみなす
+            if (Math.abs(dy) > Math.abs(dx) + 20) {
+                const currentFaceUp = (draggingCard as any).is_face_up;
+                const isRevealed = revealedCardIds.has(draggingCard.uuid) || currentFaceUp;
+                if (isRevealed) {
+                    onCardDown(draggingCard, { x: e.global.x, y: e.global.y });
+                    draggingSprite = null; 
+                    draggingCard = null;
+                    return;
+                }
+            }
+            
+            // 横移動が大きい場合 -> リオーダーのための移動アニメーション
+            // zIndexを上げて浮いているように見せる
+            draggingSprite.zIndex = 100;
+            const localPos = listContainer.toLocal(e.global);
+            draggingSprite.position.set(localPos.x + dragOffset.x, originalPos.y); // Y軸は固定
+        }
     }
   });
 
   const endDrag = (e: PIXI.FederatedPointerEvent) => {
-      if (pendingCard) {
+      if (draggingSprite && draggingCard) {
           const dx = e.global.x - startPos.x;
-          if (Math.abs(dx) > cardW / 2) {
+          const dy = e.global.y - startPos.y;
+          
+          // ドラッグ終了時、移動量が十分大きければリオーダーを実行
+          if (Math.abs(dx) > cardW / 2 && Math.abs(dy) < 50) {
               const shift = Math.round(dx / (cardW + gap));
-              const newIdx = Math.max(0, Math.min(cards.length - 1, pendingCard.index + shift));
-              if (newIdx !== pendingCard.index) {
-                  onReorder(pendingCard.card.uuid, newIdx);
-                  pendingCard = null; return;
+              const newIdx = Math.max(0, Math.min(cards.length - 1, draggingIndex + shift));
+              if (newIdx !== draggingIndex) {
+                  onReorder(draggingCard.uuid, newIdx);
+              } else {
+                  // 元の位置に戻す
+                  draggingSprite.position.set(originalPos.x, originalPos.y);
+                  draggingSprite.zIndex = 0;
+                  // クリック判定（移動なし）なら裏表反転
+                  if (Math.sqrt(dx*dx + dy*dy) < 5) onToggleReveal(draggingCard.uuid);
               }
+          } else {
+              // 元の位置に戻す
+              draggingSprite.position.set(originalPos.x, originalPos.y);
+              draggingSprite.zIndex = 0;
+              // クリック判定
+              if (Math.sqrt(dx*dx + dy*dy) < 5) onToggleReveal(draggingCard.uuid);
           }
-          onToggleReveal(pendingCard.card.uuid);
       }
-      isScrolling = false; pendingCard = null;
+      isScrolling = false;
+      draggingSprite = null;
+      draggingCard = null;
   };
 
   panel.on('pointerup', endDrag);
