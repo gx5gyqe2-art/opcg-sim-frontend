@@ -261,20 +261,6 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             ))}
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, traits: filteredTraits})}>特徴 (TRAITS)</SectionTitle>
-          <input 
-            placeholder="特徴を検索..." 
-            value={traitSearch} 
-            onChange={e => setTraitSearch(e.target.value)}
-            style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', marginBottom: '10px', boxSizing: 'border-box' }}
-          />
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', maxHeight: '200px', overflowY: 'auto', padding: '5px', border: '1px solid #444', borderRadius: '4px' }}>
-            {filteredTraits.map(t => (
-              <FilterBtn key={t} label={t} active={filters.traits.includes(t)} onClick={() => toggle('traits', t)} />
-            ))}
-            {filteredTraits.length === 0 && <div style={{ fontSize: '12px', color: '#666' }}>見つかりません</div>}
-          </div>
-
           <SectionTitle onSelectAll={() => setFilters({...filters, type: ['LEADER', 'CHARACTER', 'EVENT', 'STAGE']})}>種類 (TYPE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="リーダー" active={filters.type.includes('LEADER')} onClick={() => toggle('type', 'LEADER')} />
@@ -295,6 +281,21 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             {['打', '斬', '特', '射', '知'].map(attr => (
               <FilterBtn key={attr} label={attr} active={filters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
             ))}
+          </div>
+
+          {/* 特徴（TRAITS）を最下部に移動 */}
+          <SectionTitle onSelectAll={() => setFilters({...filters, traits: filteredTraits})}>特徴 (TRAITS)</SectionTitle>
+          <input 
+            placeholder="特徴を検索..." 
+            value={traitSearch} 
+            onChange={e => setTraitSearch(e.target.value)}
+            style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', marginBottom: '10px', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', maxHeight: '200px', overflowY: 'auto', padding: '5px', border: '1px solid #444', borderRadius: '4px' }}>
+            {filteredTraits.map(t => (
+              <FilterBtn key={t} label={t} active={filters.traits.includes(t)} onClick={() => toggle('traits', t)} />
+            ))}
+            {filteredTraits.length === 0 && <div style={{ fontSize: '12px', color: '#666' }}>見つかりません</div>}
           </div>
         </div>
 
@@ -358,6 +359,7 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
       <div style={{ background: '#222', width: '100%', maxWidth: '400px', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>デッキ分布</h3>
+          {/* onCloseプロパティではなくonClickを使用しビルドエラーを回避 */}
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ padding: '20px', overflowY: 'auto' }}>
@@ -475,6 +477,12 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     return Array.from(sets).sort();
   }, [allCards]);
 
+  const normalizeColor = (c: string) => {
+    const s = c.trim().toLowerCase(); 
+    const map: Record<string, string> = { '赤': 'red', 'red': 'red', '緑': 'green', 'green': 'green', '青': 'blue', 'blue': 'blue', '紫': 'purple', 'purple': 'purple', '黒': 'black', 'black': 'black', '黄': 'yellow', 'yellow': 'yellow' };
+    return map[s] || s;
+  };
+
   const isFilterActive = useMemo(() => {
     return Object.entries(filters).some(([key, val]) => {
       if (key === 'sort') return val !== 'COST';
@@ -486,24 +494,34 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   const filtered = useMemo(() => {
     let res = allCards;
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[\/／]/)).map(c => c.trim().toLowerCase());
+    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[\/／]/)).map(c => normalizeColor(c));
 
     if (mode === 'main') {
       if (!viewOnly) {
           res = res.filter(c => c.type !== 'LEADER');
           if (leaderColors.length > 0) {
             res = res.filter(c => {
-               const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/)).map(cc => cc.trim().toLowerCase());
+               const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/)).map(cc => normalizeColor(cc));
                return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
             });
           }
       }
     } else { res = res.filter(c => c.type === 'LEADER'); }
 
-    if (filters.color.length > 0) res = res.filter(c => c.color && c.color.some(cc => filters.color.includes(cc)));
+    if (filters.color.length > 0) {
+      const selected = filters.color.map(c => normalizeColor(c));
+      res = res.filter(c => {
+        if (!c.color) return false;
+        // スラッシュ区切りの多色にも対応
+        const cardColors = c.color.flatMap(col => col.split(/[\/／]/)).map(col => normalizeColor(col));
+        return cardColors.some(cc => selected.includes(cc));
+      });
+    }
+
     if (filters.type.length > 0) res = res.filter(c => filters.type.includes(c.type));
     if (filters.attribute.length > 0) res = res.filter(c => c.attributes?.some(attr => filters.attribute.includes(attr)));
     if (filters.traits.length > 0) res = res.filter(c => c.traits?.some(t => filters.traits.includes(t)));
+    
     if (filters.counter.length > 0) {
       res = res.filter(c => {
         if (filters.counter.includes('NONE') && !c.counter) return true;
@@ -543,6 +561,8 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
     });
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
+
+  useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
 
   const handleSelect = (card: CardData) => {
     if (viewOnly) { setViewingCard(card); return; }
