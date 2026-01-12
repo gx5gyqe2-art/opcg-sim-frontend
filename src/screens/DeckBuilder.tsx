@@ -202,14 +202,14 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}>
-      <div style={{ width: '85%', maxWidth: '350px', background: '#222', height: '100%', display: 'flex', flexDirection: 'column', boxShadow: '-5px 0 15px rgba(0,0,0,0.5)' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, display: 'flex' }}>
+      <div style={{ width: '100%', background: '#222', height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>フィルタ設定</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-          <SectionTitle>色 (COLOR) - 複数選択可</SectionTitle>
+          <SectionTitle>色 (COLOR)</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <ColorBtn colorKey="Red" label="赤" colorCode="#e74c3c" />
             <ColorBtn colorKey="Green" label="緑" colorCode="#27ae60" />
@@ -218,21 +218,28 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             <ColorBtn colorKey="Black" label="黒" colorCode="#34495e" />
             <ColorBtn colorKey="Yellow" label="黄" colorCode="#f1c40f" />
           </div>
-          <SectionTitle>コスト (COST) - 複数選択可</SectionTitle>
+          <SectionTitle>コスト (COST)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(10)].map((_, i) => (
               <FilterBtn key={i} label={`${i+1}`} active={filters.cost.includes(`${i+1}`)} onClick={() => toggle('cost', `${i+1}`)} />
             ))}
             <FilterBtn label="10+" active={filters.cost.includes('10')} onClick={() => toggle('cost', '10')} />
           </div>
-          <SectionTitle>種類 (TYPE) - 複数選択可</SectionTitle>
+          <SectionTitle>パワー (POWER)</SectionTitle>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {[...Array(13)].map((_, i) => (
+              <FilterBtn key={i} label={`${i}`} active={filters.power.includes(`${i}`)} onClick={() => toggle('power', `${i}`)} />
+            ))}
+            <FilterBtn label="13~" active={filters.power.includes('13')} onClick={() => toggle('power', '13')} />
+          </div>
+          <SectionTitle>種類 (TYPE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="リーダー" active={filters.type.includes('LEADER')} onClick={() => toggle('type', 'LEADER')} />
             <FilterBtn label="キャラ" active={filters.type.includes('CHARACTER')} onClick={() => toggle('type', 'CHARACTER')} />
             <FilterBtn label="イベント" active={filters.type.includes('EVENT')} onClick={() => toggle('type', 'EVENT')} />
             <FilterBtn label="ステージ" active={filters.type.includes('STAGE')} onClick={() => toggle('type', 'STAGE')} />
           </div>
-          <SectionTitle>カウンター (COUNTER) - 複数選択可</SectionTitle>
+          <SectionTitle>カウンター (COUNTER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="なし" active={filters.counter.includes('NONE')} onClick={() => toggle('counter', 'NONE')} />
             <FilterBtn label="+1000" active={filters.counter.includes('1000')} onClick={() => toggle('counter', '1000')} />
@@ -243,7 +250,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             <FilterBtn label="あり" active={filters.trigger.includes('HAS')} onClick={() => toggle('trigger', 'HAS')} />
             <FilterBtn label="なし" active={filters.trigger.includes('NONE')} onClick={() => toggle('trigger', 'NONE')} />
           </div>
-          <SectionTitle>属性 (ATTRIBUTE) - 複数選択可</SectionTitle>
+          <SectionTitle>属性 (ATTRIBUTE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['打', '斬', '特', '射', '知'].map(attr => (
               <FilterBtn key={attr} label={attr} active={filters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
@@ -263,6 +270,62 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
         <div style={{ padding: '15px', borderTop: '1px solid #444', display: 'flex', gap: '10px' }}>
           <button onClick={onReset} style={{ flex: 1, padding: '12px', borderRadius: '4px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer' }}>リセット</button>
           <button onClick={onClose} style={{ flex: 2, padding: '12px', borderRadius: '4px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, allCards: CardData[], onClose: () => void }) => {
+  const stats = useMemo(() => {
+    const cards = deck.card_uuids.map(uuid => allCards.find(c => c.uuid === uuid)).filter(Boolean) as CardData[];
+    const costs: Record<string, number> = {};
+    const counters: Record<string, number> = { 'NONE': 0, '1000': 0, '2000': 0 };
+    const traits: Record<string, number> = {};
+
+    cards.forEach(c => {
+      const cost = c.cost !== undefined ? (c.cost >= 10 ? '10+' : c.cost.toString()) : '0';
+      costs[cost] = (costs[cost] || 0) + 1;
+      const counter = c.counter ? c.counter.toString() : 'NONE';
+      if (counters[counter] !== undefined) counters[counter]++;
+      c.traits?.forEach(t => { traits[t] = (traits[t] || 0) + 1; });
+    });
+
+    return {
+      costs: Object.entries(costs).sort((a, b) => (a[0] === '10+' ? 10 : parseInt(a[0])) - (b[0] === '10+' ? 10 : parseInt(b[0]))),
+      counters: Object.entries(counters),
+      traits: Object.entries(traits).sort((a, b) => b[1] - a[1]).slice(0, 10)
+    };
+  }, [deck.card_uuids, allCards]);
+
+  const StatSection = ({ title, data }: { title: string, data: [string, number][] }) => (
+    <div style={{ marginBottom: '20px' }}>
+      <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '3px solid #e74c3c', paddingLeft: '8px', marginBottom: '10px' }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+        {data.map(([key, count]) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '60px', fontSize: '12px' }}>{key}</div>
+            <div style={{ flex: 1, height: '12px', background: '#444', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ width: `${(count / 50) * 100}%`, height: '100%', background: '#3498db' }} />
+            </div>
+            <div style={{ width: '30px', fontSize: '12px', textAlign: 'right' }}>{count}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ background: '#222', width: '100%', maxWidth: '400px', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+        <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>デッキ分布</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ padding: '20px', overflowY: 'auto' }}>
+          <StatSection title="コスト分布" data={stats.costs} />
+          <StatSection title="カウンター分布" data={stats.counters} />
+          <StatSection title="特徴 (Top 10)" data={stats.traits} />
         </div>
       </div>
     </div>
@@ -300,6 +363,7 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: Dec
 
 const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCatalog }: { deck: DeckData, allCards: CardData[], onUpdateDeck: (d: DeckData) => void, onSave: () => void, onBack: () => void, onOpenCatalog: (mode: 'leader' | 'main') => void }) => {
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
+  const [showStats, setShowStats] = useState(false);
   const groupedCards = useMemo(() => {
     const map = new Map<string, number>();
     deck.card_uuids.forEach(uuid => { map.set(uuid, (map.get(uuid) || 0) + 1); });
@@ -317,19 +381,12 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
     onUpdateDeck({ ...deck, card_uuids: newUuids });
   };
 
-  const handleNavigate = (direction: -1 | 1) => {
-    if (!viewingCard) return;
-    const currentIndex = groupedCards.list.findIndex(item => item.card.uuid === viewingCard.uuid);
-    if (currentIndex === -1) return;
-    const nextIndex = currentIndex + direction;
-    if (nextIndex >= 0 && nextIndex < groupedCards.list.length) { setViewingCard(groupedCards.list[nextIndex].card); }
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
-      <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: '10px', alignItems: 'center' }}>
+      <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '10px', alignItems: 'center' }}>
         <button onClick={onBack} style={{ padding: '5px 10px', cursor: 'pointer' }}>←</button>
         <input value={deck.name} onChange={e => onUpdateDeck({...deck, name: e.target.value})} style={{ background: '#222', color: 'white', border: '1px solid #555', padding: '5px', borderRadius: '4px' }} />
+        <button onClick={() => setShowStats(true)} style={{ padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}>📊</button>
         <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{deck.card_uuids.length}/50</div>
         <button onClick={onSave} style={{ padding: '5px 15px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>保存</button>
       </div>
@@ -345,7 +402,8 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
           {groupedCards.list.map((item) => ( <CardImageStub key={item.card.uuid} card={item.card} count={item.count} onClick={() => setViewingCard(item.card)} /> ))}
         </div>
       </div>
-      {viewingCard && ( <CardDetailScreen card={viewingCard} currentCount={deck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} onNavigate={handleNavigate} /> )}
+      {viewingCard && ( <CardDetailScreen card={viewingCard} currentCount={deck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} /> )}
+      {showStats && <DeckDistributionModal deck={deck} allCards={allCards} onClose={() => setShowStats(false)} />}
     </div>
   );
 };
@@ -371,43 +429,31 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     return Array.from(sets).sort();
   }, [allCards]);
 
-  const normalizeColor = (c: string) => {
-    const s = c.trim().toLowerCase(); 
-    const map: Record<string, string> = { '赤': 'red', 'red': 'red', '緑': 'green', 'green': 'green', '青': 'blue', 'blue': 'blue', '紫': 'purple', 'purple': 'purple', '黒': 'black', 'black': 'black', '黄': 'yellow', 'yellow': 'yellow' };
-    return map[s] || s;
-  };
-
   const filtered = useMemo(() => {
     let res = allCards;
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[\/／]/)).map(c => normalizeColor(c));
+    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[\/／]/)).map(c => c.trim().toLowerCase());
 
     if (mode === 'main') {
       if (!viewOnly) {
           res = res.filter(c => c.type !== 'LEADER');
           if (leaderColors.length > 0) {
             res = res.filter(c => {
-               const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/)).map(cc => normalizeColor(cc));
+               const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/)).map(cc => cc.trim().toLowerCase());
                return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
             });
           }
       }
-    } else {
-      res = res.filter(c => c.type === 'LEADER');
-    }
+    } else { res = res.filter(c => c.type === 'LEADER'); }
 
-    if (filters.color.length > 0) {
-        const selected = filters.color.map(c => normalizeColor(c));
-        res = res.filter(c => c.color && c.color.some(cc => selected.includes(normalizeColor(cc))));
-    }
+    if (filters.color.length > 0) res = res.filter(c => c.color && c.color.some(cc => filters.color.includes(cc)));
     if (filters.type.length > 0) res = res.filter(c => filters.type.includes(c.type));
     if (filters.attribute.length > 0) res = res.filter(c => c.attributes?.some(attr => filters.attribute.includes(attr)));
     if (filters.trait !== 'ALL') res = res.filter(c => c.traits?.some(t => t.includes(filters.trait)));
     if (filters.counter.length > 0) {
       res = res.filter(c => {
         if (filters.counter.includes('NONE') && !c.counter) return true;
-        if (c.counter && filters.counter.includes(c.counter.toString())) return true;
-        return false;
+        return c.counter && filters.counter.includes(c.counter.toString());
       });
     }
     if (filters.cost.length > 0) {
@@ -417,97 +463,49 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
         return filters.cost.includes(costVal.toString());
       });
     }
-    if (filters.trigger.length > 0) {
+    if (filters.power.length > 0) {
       res = res.filter(c => {
-        if (filters.trigger.includes('HAS') && !!c.trigger_text) return true;
-        if (filters.trigger.includes('NONE') && !c.trigger_text) return true;
-        return false;
+        const pwrVal = c.power || 0;
+        return filters.power.some(p => p === '13' ? pwrVal >= 13000 : pwrVal === parseInt(p) * 1000);
       });
+    }
+    if (filters.trigger.length > 0) {
+      res = res.filter(c => filters.trigger.includes(c.trigger_text ? 'HAS' : 'NONE'));
     }
     if (filters.set !== 'ALL') res = res.filter(c => c.uuid.startsWith(filters.set));
 
     if (searchText) {
       const lower = searchText.toLowerCase();
-      res = res.filter(c => (c.name && c.name.toLowerCase().includes(lower)) || (c.text && c.text.toLowerCase().includes(lower)) || (c.attributes && c.attributes.some(a => a.toLowerCase().includes(lower))) || (c.type && c.type.toLowerCase().includes(lower)) || (c.traits && c.traits.some(t => t.toLowerCase().includes(lower))));
+      res = res.filter(c => (c.name?.toLowerCase().includes(lower)) || (c.text?.toLowerCase().includes(lower)));
     }
 
-    res = [...res].sort((a, b) => {
-      if (filters.sort === 'COST') return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
-      if (filters.sort === 'POWER') return (a.power || 0) - (b.power || 0) || a.uuid.localeCompare(b.uuid);
-      return a.uuid.localeCompare(b.uuid);
+    const typeOrder: Record<string, number> = { 'LEADER': 1, 'CHARACTER': 2, 'EVENT': 3, 'STAGE': 4 };
+    return [...res].sort((a, b) => {
+      const orderA = typeOrder[a.type || ''] || 99;
+      const orderB = typeOrder[b.type || ''] || 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
     });
-    return res;
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
-
-  useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 200) { if (displayLimit < filtered.length) setDisplayLimit(prev => prev + 50); }
-  };
-
-  const handleSelect = (card: CardData) => {
-    if (viewOnly) { setViewingCard(card); return; }
-    if (mode === 'leader') { onUpdateDeck({ ...currentDeck, leader_id: card.uuid }); onClose(); }
-    else { setViewingCard(card); }
-  };
-
-  const handleCountChange = (card: CardData, diff: number) => {
-    const newUuids = [...currentDeck.card_uuids];
-    if (diff > 0) { if (newUuids.length < 50) newUuids.push(card.uuid); }
-    else { const idx = newUuids.indexOf(card.uuid); if (idx !== -1) newUuids.splice(idx, 1); }
-    onUpdateDeck({ ...currentDeck, card_uuids: newUuids });
-  };
-
-  const handleNavigate = (direction: -1 | 1) => {
-    if (!viewingCard) return;
-    const currentIndex = filtered.findIndex(c => c.uuid === viewingCard.uuid);
-    if (currentIndex === -1) return;
-    const nextIndex = currentIndex + direction;
-    if (nextIndex >= 0 && nextIndex < filtered.length) { setViewingCard(filtered[nextIndex]); }
-  };
-
-  const displayCards = filtered.slice(0, displayLimit);
-  const isFilterActive = Object.entries(filters).some(([key, val]) => {
-    if (key === 'sort') return val !== 'COST';
-    if (Array.isArray(val)) return val.length > 0;
-    return val !== 'ALL';
-  });
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button onClick={onClose} style={{ padding: '8px 12px', borderRadius: '4px', border: 'none', background: '#555', color: 'white', cursor: 'pointer' }}>{viewOnly ? '戻る' : '完了'}</button>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <input placeholder="キーワード検索" value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '20px', border: 'none', background: '#222', color: 'white', boxSizing: 'border-box' }} />
-          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#777' }}>🔍</span>
-        </div>
-        <button onClick={() => setShowFilterModal(true)} style={{ padding: '10px', borderRadius: '50%', border: 'none', background: isFilterActive ? '#3498db' : '#444', color: 'white', cursor: 'pointer', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⚙️</button>
-      </div>
       <div style={{ padding: '5px 15px', background: '#2a2a2a', color: '#aaa', fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
-        <span>{viewOnly ? 'カードリスト' : mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
+        <span>{mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
         <span>Hit: {filtered.length}枚</span>
       </div>
-      <div onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}>
-        {displayCards.length === 0 && <div style={{ color: '#888', gridColumn: '1/-1', textAlign: 'center', marginTop: '20px' }}>条件に合うカードがありません</div>}
-        {displayCards.map(c => {
-          const countInDeck = currentDeck.card_uuids.filter(id => id === c.uuid).length;
-          return <CardImageStub key={c.uuid} card={c} count={countInDeck > 0 ? countInDeck : undefined} onClick={() => handleSelect(c)} />;
-        })}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px' }}>
+        {filtered.slice(0, displayLimit).map(c => <CardImageStub key={c.uuid} card={c} onClick={() => handleSelect(c)} />)}
       </div>
-      {viewingCard && (
-        <CardDetailScreen 
-          card={viewingCard} 
-          currentCount={currentDeck.card_uuids.filter(id => id === viewingCard.uuid).length} 
-          onCountChange={(diff) => handleCountChange(viewingCard, diff)} 
-          onClose={() => setViewingCard(null)} 
-          onNavigate={handleNavigate} 
-          viewOnly={viewOnly}
-        />
-      )}
-      {showFilterModal && (
-        <FilterModal filters={filters} setFilters={setFilters} traitList={traitList} setList={setList} onClose={() => setShowFilterModal(false)} onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })} />
-      )}
+      <div style={{ padding: '10px', background: '#333', borderTop: '1px solid #444', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <button onClick={onClose} style={{ padding: '8px 12px', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>完了</button>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <input placeholder="検索" value={searchText} onChange={e => setSearchText(e.target.value)} style={{ width: '100%', padding: '10px 10px 10px 35px', borderRadius: '20px', border: 'none', background: '#222', color: 'white' }} />
+        </div>
+        <button onClick={() => setShowFilterModal(true)} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#444', border: 'none', color: 'white' }}>⚙️</button>
+      </div>
+      {viewingCard && <CardDetailScreen card={viewingCard} currentCount={0} onCountChange={() => {}} onClose={() => setViewingCard(null)} viewOnly={viewOnly} />}
+      {showFilterModal && <FilterModal filters={filters} setFilters={setFilters} traitList={traitList} setList={setList} onClose={() => setShowFilterModal(false)} onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })} />}
     </div>
   );
 };
@@ -535,20 +533,14 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
     fetchData();
   }, [mode, viewOnly]);
 
-  const handleSelectDeck = (deck: DeckData) => { setCurrentDeck(deck); setMode('edit'); };
-  const handleCreateNew = () => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); };
-  const handleOpenCatalog = (cMode: 'leader' | 'main') => { setCatalogMode(cMode); setMode('catalog'); };
-  const handleSaveDeck = async () => {
-    if (!currentDeck) return;
+  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} />;
+  if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={async () => {
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentDeck) });
       const data = await res.json();
-      if (data.success) { alert('保存しました'); setCurrentDeck(prev => prev ? ({...prev, id: data.deck_id}) : null); } else { alert('Error: ' + data.error); }
-    } catch (e) { alert('通信エラー'); }
-  };
-
-  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={handleSelectDeck} onCreateNew={handleCreateNew} onBack={onBack} />;
-  if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={handleOpenCatalog} />;
+      if (data.success) { alert('保存しました'); setCurrentDeck({...currentDeck, id: data.deck_id}); }
+    } catch (e) { alert('エラー'); }
+  }} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
   if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
   return <div>Loading...</div>;
 };
