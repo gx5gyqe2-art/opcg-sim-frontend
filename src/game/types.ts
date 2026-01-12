@@ -11,19 +11,17 @@ export interface BaseCard {
   attribute?: string;
   traits?: string[];
   type?: string;
+  is_rest?: boolean;
+  attached_don?: number;
 }
 
 export interface LeaderCard extends BaseCard {
   power: number;
-  is_rest: boolean;
-  attached_don: number;
 }
 
 export interface BoardCard extends BaseCard {
   power: number;
   cost: number;
-  is_rest: boolean;
-  attached_don: number;
   counter?: number;
 }
 
@@ -40,7 +38,7 @@ export interface PendingRequest extends ApiPendingRequest {}
 export interface PlayerState {
   player_id: string;
   name: string;
-  leader: LeaderCard;
+  leader: LeaderCard | null;
   stage?: BoardCard | null;
   zones: {
     field: BoardCard[];
@@ -52,12 +50,16 @@ export interface PlayerState {
   };
   don_count: number;
   active_don: number;
+  don_active: CardInstance[];
+  don_rested: CardInstance[];
+  don_attached: CardInstance[];
+  don_deck_count?: number;
 }
 
 export interface GameState {
   game_id: string;
   room_name?: string;
-  status?: string;
+  status?: 'WAITING' | 'PLAYING';
   ready_states?: {
     p1: boolean;
     p2: boolean;
