@@ -20,11 +20,12 @@ interface SandboxGameProps {
   p1Deck: string;
   p2Deck: string;
   gameId?: string; 
-  myPlayerId?: string; // 'p1' | 'p2' | 'both'
+  myPlayerId?: string;
+  roomName?: string;
   onBack: () => void;
 }
 
-export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId = 'both', onBack }: SandboxGameProps) => {
+export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId = 'both', roomName, onBack }: SandboxGameProps) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -63,7 +64,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         let currentId = activeGameId;
 
         if (!currentId) {
-            const { state } = await apiClient.createSandboxGame(p1Deck, p2Deck);
+            const { state } = await apiClient.createSandboxGame(p1Deck, p2Deck, roomName);
             currentId = state.game_id;
             setActiveGameId(currentId);
             setGameState(state);

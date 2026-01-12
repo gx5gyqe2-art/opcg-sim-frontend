@@ -90,11 +90,10 @@ export const apiClient = {
     };
   },
 
-  // --- Sandbox Methods ---
-
   async createSandboxGame(
     p1Deck: string,
-    p2Deck: string
+    p2Deck: string,
+    roomName?: string
   ): Promise<{ game_id: string; state: GameState }> {
     const res = await fetchWithLog(`${BASE_URL}/api/sandbox/create`, {
       method: 'POST',
@@ -102,7 +101,8 @@ export const apiClient = {
         p1_deck: p1Deck,
         p2_deck: p2Deck,
         p1_name: "P1",
-        p2_name: "P2"
+        p2_name: "P2",
+        room_name: roomName
       }),
     });
 
@@ -148,8 +148,6 @@ export const apiClient = {
       state: data.game_state
     };
   },
-
-  // --- End Sandbox Methods ---
 
   async sendAction(gameId: string, request: GameActionRequest): Promise<GameActionResult> {
     const actionBody = {

@@ -66,7 +66,6 @@ export default function App() {
   
   const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string, room_name?: string }>({ role: 'both' });
 
-  // 共通のゲーム開始ハンドラー
   const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: any) => {
     setSelectedDecks({ p1, p2 });
     if (gameMode === 'sandbox') {
@@ -118,6 +117,7 @@ export default function App() {
             p2Deck={selectedDecks.p2}
             myPlayerId={sandboxOptions.role === 'both' ? 'both' : sandboxOptions.role}
             gameId={sandboxOptions.gameId}
+            roomName={sandboxOptions.room_name}
             onBack={() => {
               if (confirm("サンドボックスを終了しますか？")) {
                 setMode('start');
