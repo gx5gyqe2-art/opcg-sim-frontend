@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
@@ -17,8 +17,6 @@ type DragState = {
 } | null;
 
 interface SandboxGameProps {
-  p1Deck: string;
-  p2Deck: string;
   gameId?: string; 
   myPlayerId?: string;
   roomName?: string;
