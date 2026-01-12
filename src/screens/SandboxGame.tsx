@@ -452,9 +452,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             {isMulliganPhase && (
                 <div style={{ 
                     position: 'absolute', 
-                    top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y}px` : '60px', 
+                    top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y + 22}px` : '60px', 
                     left: '50%', 
-                    transform: 'translateX(-50%)', 
+                    transform: (myPlayerId === 'both' && layoutCoords) ? 'translate(-50%, -50%)' : 'translateX(-50%)', 
                     pointerEvents: 'auto', 
                     display: 'flex', 
                     gap: '20px', 
@@ -488,7 +488,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 onClick={() => handleAction('TURN_END', {})} 
                 disabled={isPending || !isMyTurn || isActionBlockedByMulligan} 
                 style={{ 
-                    position: 'absolute', left: layoutCoords ? `${layoutCoords.x}px` : 'auto', top: layoutCoords ? `${layoutCoords.y}px` : '50%', 
+                    position: 'absolute', 
+                    left: layoutCoords ? `${layoutCoords.x + 40}px` : 'auto', 
+                    top: layoutCoords ? `${layoutCoords.y}px` : '50%', 
                     padding: '10px 20px', 
                     backgroundColor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, 
                     color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', pointerEvents: 'auto',
