@@ -4,6 +4,7 @@ import { RealGame } from './screens/RealGame';
 import { SandboxGame } from './screens/SandboxGame';
 import GameStart from './ui/GameStart';
 import { DeckBuilder } from './screens/DeckBuilder';
+import { RoomLobby } from './screens/RoomLobby';
 
 interface Props {
   children: ReactNode;
@@ -57,13 +58,23 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox' | 'cardList'>('start');
+  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby'>('start');
   const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>({
     p1: 'imu.json',
     p2: 'nami.json'
   });
   
   const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string }>({ role: 'both' });
+
+  const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: any) => {
+    setSelectedDecks({ p1, p2 });
+    if (gameMode === 'sandbox') {
+        setSandboxOptions(sbOptions || { role: 'both' });
+        setMode('sandbox');
+    } else {
+        setMode('game');
+    }
+  };
 
   return (
     <div 
@@ -81,17 +92,10 @@ export default function App() {
       <ErrorBoundary>
         {mode === 'start' && (
           <GameStart 
-            onStart={(p1, p2, gameMode = 'normal', sbOptions) => {
-              setSelectedDecks({ p1, p2 });
-              if (gameMode === 'sandbox') {
-                  setSandboxOptions(sbOptions || { role: 'both' });
-                  setMode('sandbox');
-              } else {
-                  setMode('game');
-              }
-            }}
+            onStart={handleStart}
             onDeckBuilder={() => setMode('deck')}
             onCardList={() => setMode('cardList')}
+            onLobby={() => setMode('lobby')}
           />
         )}
         
@@ -125,6 +129,13 @@ export default function App() {
           <DeckBuilder 
             onBack={() => setMode('start')} 
             viewOnly={mode === 'cardList'} 
+          />
+        )}
+
+        {mode === 'lobby' && (
+          <RoomLobby 
+            onBack={() => setMode('start')}
+            onJoin={(gameId) => handleStart(selectedDecks.p1, selectedDecks.p2, 'sandbox', { role: 'p2', gameId })}
           />
         )}
       </ErrorBoundary>

@@ -7,32 +7,23 @@ interface DeckOption {
   name: string;
 }
 
-interface RoomInfo {
-  game_id: string;
-  p1_name: string;
-  p2_name: string;
-  turn: number;
-  created_at: string;
-}
-
 interface GameStartProps {
   onStart: (
     p1: string, 
     p2: string, 
     mode?: 'normal' | 'sandbox', 
-    sandboxOptions?: { role: 'both' | 'p1' | 'p2', gameId?: string }
+    sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string, gameId?: string }
   ) => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
+  onLobby: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby }) => {
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
-  const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [p1Deck, setP1Deck] = useState('imu.json');
   const [p2Deck, setP2Deck] = useState('nami.json');
-  const [manualGameId, setManualGameId] = useState('');
-  const [showOnlinePanel, setShowOnlinePanel] = useState(false);
+  const [roomName, setRoomName] = useState('New Battle');
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -72,32 +63,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
     };
     fetchDecks();
   }, []);
-
-  const fetchRooms = async () => {
-    try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/api/sandbox/list`);
-      const data = await res.json();
-      if (data.success) {
-        setRooms(data.games);
-      }
-    } catch (e) {
-      console.error("Failed to load rooms", e);
-    }
-  };
-
-  useEffect(() => {
-    fetchRooms();
-    const interval = setInterval(fetchRooms, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const formatTime = (iso: string) => {
-      if (!iso || iso === 'N/A') return '';
-      try {
-          const d = new Date(iso);
-          return `${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-      } catch { return iso; }
-  };
 
   const styles = useMemo(() => ({
     container: {
@@ -163,96 +128,15 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
       left: left ? '10px' : 'auto',
       right: !left ? '10px' : 'auto'
     }),
-    selectGroup: {
-      display: 'flex', flexDirection: 'column' as const, gap: '8px'
-    },
-    label: {
-      fontSize: isMobile ? '14px' : '16px', fontWeight: 'bold', color: '#5d4037',
-      textTransform: 'uppercase' as const, letterSpacing: '1px'
-    },
+    selectGroup: { display: 'flex', flexDirection: 'column' as const, gap: '8px' },
+    label: { fontSize: isMobile ? '14px' : '16px', fontWeight: 'bold', color: '#5d4037', textTransform: 'uppercase' as const, letterSpacing: '1px' },
     select: {
-      width: '100%', padding: '12px',
-      background: '#fff8e1',
-      color: '#3e2723',
-      border: '2px solid #8b4513',
-      borderRadius: '4px',
-      fontSize: isMobile ? '16px' : '18px',
-      fontFamily: 'inherit',
-      fontWeight: 'bold',
-      outline: 'none',
-      cursor: 'pointer',
-      boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.1)',
-      boxSizing: 'border-box' as const
+      width: '100%', padding: '12px', background: '#fff8e1', color: '#3e2723', border: '2px solid #8b4513', borderRadius: '4px', fontSize: isMobile ? '16px' : '18px', fontFamily: 'inherit', fontWeight: 'bold', outline: 'none', cursor: 'pointer', boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.1)', boxSizing: 'border-box' as const
     },
-    vs: {
-      textAlign: 'center' as const,
-      fontSize: isMobile ? '24px' : '36px',
-      fontWeight: 'bold',
-      color: '#8b0000',
-      textShadow: '0 2px 0 rgba(0,0,0,0.2)',
-      margin: isMobile ? '-5px 0' : '-10px 0',
-      fontStyle: 'italic'
-    },
-    actions: {
-      display: 'flex', 
-      flexDirection: 'column' as const,
-      gap: '15px', 
-      marginTop: isMobile ? '20px' : '30px', 
-      zIndex: 1, 
-      alignItems: 'center',
-      width: isMobile ? '100%' : 'auto',
-      maxWidth: '600px',
-      boxSizing: 'border-box' as const
-    },
-    subBtn: {
-      background: 'transparent',
-      border: '2px solid #d4af37',
-      color: '#d4af37',
-      padding: '12px 30px',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      textShadow: '0 1px 2px black',
-      width: isMobile ? '100%' : 'auto',
-      boxSizing: 'border-box' as const
-    },
-    mainBtn: {
-      background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)',
-      border: '2px solid #ffeba7',
-      padding: '18px 60px',
-      fontSize: isMobile ? '20px' : '24px',
-      fontWeight: 'bold',
-      color: '#fff',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      boxShadow: '0 5px 15px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
-      textShadow: '0 2px 0 #3e2723',
-      fontFamily: 'inherit',
-      letterSpacing: '2px',
-      width: isMobile ? '100%' : 'auto',
-      boxSizing: 'border-box' as const
-    },
-    roomList: {
-      width: '100%',
-      maxHeight: '150px',
-      overflowY: 'auto' as const,
-      background: '#222',
-      border: '1px solid #555',
-      borderRadius: '4px',
-      padding: '5px'
-    },
-    roomItem: {
-      padding: '8px',
-      borderBottom: '1px solid #444',
-      cursor: 'pointer',
-      color: '#ddd',
-      fontSize: '14px',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center'
-    }
+    vs: { textAlign: 'center' as const, fontSize: isMobile ? '24px' : '36px', fontWeight: 'bold', color: '#8b0000', textShadow: '0 2px 0 rgba(0,0,0,0.2)', margin: isMobile ? '-5px 0' : '-10px 0', fontStyle: 'italic' },
+    actions: { display: 'flex', flexDirection: 'column' as const, gap: '15px', marginTop: isMobile ? '20px' : '30px', zIndex: 1, alignItems: 'center', width: isMobile ? '100%' : 'auto', maxWidth: '600px', boxSizing: 'border-box' as const },
+    subBtn: { background: 'transparent', border: '2px solid #d4af37', color: '#d4af37', padding: '12px 30px', fontSize: '16px', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit', textShadow: '0 1px 2px black', width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' as const },
+    mainBtn: { background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)', border: '2px solid #ffeba7', padding: '18px 60px', fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#fff', borderRadius: '4px', cursor: 'pointer', boxShadow: '0 5px 15px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.3)', textShadow: '0 2px 0 #3e2723', fontFamily: 'inherit', letterSpacing: '2px', width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' as const }
   }), [isMobile]);
 
   return (
@@ -283,109 +167,29 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
       </div>
 
       <div style={styles.actions}>
-        
-        <button 
-          onClick={() => onStart(p1Deck, p2Deck, 'normal')}
-          style={styles.mainBtn}
-          className="hover-scale"
-        >
-          VS CPU / Rule Enforced
-        </button>
-
+        <button onClick={() => onStart(p1Deck, p2Deck, 'normal')} style={styles.mainBtn} className="hover-scale">VS CPU / Rule Enforced</button>
         <div style={{ width: '100%', height: 1, background: 'rgba(212, 175, 55, 0.3)', margin: '10px 0' }} />
-
         <div style={{ display: 'flex', width: '100%', gap: 10 }}>
-           <button 
-             onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'both' })}
-             style={{ ...styles.subBtn, flex: 1, borderColor: '#2ecc71', color: '#2ecc71' }}
-             className="hover-scale"
-           >
-             1人回し (Solo)
-           </button>
+           <button onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'both' })} style={{ ...styles.subBtn, flex: 1, borderColor: '#2ecc71', color: '#2ecc71' }} className="hover-scale">1人回し (Solo)</button>
         </div>
-
         <div style={{ display: 'flex', width: '100%', gap: 10 }}>
-           <button 
-             onClick={onDeckBuilder}
-             style={{ ...styles.subBtn, flex: 1 }}
-             className="hover-scale"
-           >
-             デッキ作成
-           </button>
-           <button 
-             onClick={onCardList}
-             style={{ ...styles.subBtn, flex: 1, borderColor: '#e67e22', color: '#e67e22' }}
-             className="hover-scale"
-           >
-             カードリスト
-           </button>
+           <button onClick={onDeckBuilder} style={{ ...styles.subBtn, flex: 1 }} className="hover-scale">デッキ作成</button>
+           <button onClick={onCardList} style={{ ...styles.subBtn, flex: 1, borderColor: '#e67e22', color: '#e67e22' }} className="hover-scale">カードリスト</button>
         </div>
-
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ color: '#aaa', fontSize: '12px', fontWeight: 'bold' }}>ONLINE BATTLE</div>
-            
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, border: '1px solid rgba(212,175,55,0.2)', padding: '15px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)' }}>
+            <div style={{ color: '#d4af37', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>ONLINE LOBBY</div>
+            <input 
+                type="text" 
+                placeholder="Room Name" 
+                value={roomName} 
+                onChange={(e) => setRoomName(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #555', background: '#222', color: '#fff', boxSizing: 'border-box' }}
+            />
             <div style={{ display: 'flex', gap: 10 }}>
-                <button 
-                  onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1' })}
-                  style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db', fontSize: '14px' }}
-                  className="hover-scale"
-                >
-                  ルーム作成
-                </button>
-                <button 
-                  onClick={() => setShowOnlinePanel(!showOnlinePanel)}
-                  style={{ ...styles.subBtn, flex: 1, borderColor: showOnlinePanel ? '#fff' : '#3498db', color: showOnlinePanel ? '#fff' : '#3498db', fontSize: '14px' }}
-                  className="hover-scale"
-                >
-                  {showOnlinePanel ? '閉じる' : '部屋に参加'}
-                </button>
+                <button onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName })} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }}>ルーム作成</button>
+                <button onClick={onLobby} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }}>部屋に参加</button>
             </div>
-
-            {showOnlinePanel && (
-                <div style={{ animation: 'slideUp 0.3s ease-out' }}>
-                    <div style={styles.roomList}>
-                        {rooms.length === 0 ? (
-                            <div style={{ padding: 10, color: '#666', textAlign: 'center' }}>ルームがありません</div>
-                        ) : (
-                            rooms.map(room => (
-                                <div 
-                                    key={room.game_id} 
-                                    style={styles.roomItem}
-                                    onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: room.game_id })}
-                                    className="room-item-hover"
-                                >
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span>Host: {room.p1_name} (Turn: {room.turn})</span>
-                                        <span style={{ fontSize: '10px', color: '#888' }}>{formatTime(room.created_at)}</span>
-                                    </div>
-                                    <span style={{ fontSize: '10px', background: '#3498db', padding: '2px 6px', borderRadius: 4, color: 'white' }}>JOIN</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                    
-                    <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
-                        <input 
-                          type="text" 
-                          placeholder="Manual Game ID"
-                          value={manualGameId}
-                          onChange={(e) => setManualGameId(e.target.value)}
-                          style={{ flex: 1, padding: '5px', borderRadius: 4, border: '1px solid #555', background: '#222', color: '#fff' }}
-                        />
-                        <button
-                          onClick={() => {
-                              if(!manualGameId) return alert("IDを入力してください");
-                              onStart(p1Deck, p2Deck, 'sandbox', { role: 'p2', gameId: manualGameId });
-                          }}
-                          style={{ ...styles.subBtn, padding: '5px 10px', fontSize: '12px', minWidth: 'fit-content' }}
-                        >
-                          ID参加
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
-
       </div>
     </div>
   );
