@@ -182,6 +182,16 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (checkDist(coords.getDonRestX(W), r3Y) < THRESHOLD) return 'don_rested';
             return null;
         };
+
+        if (distFromStart < 10) {
+            if (inspecting) { setDragState(null); return; }
+            const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
+            if (currentPlayer) { const stackInfo = findInStack(currentPlayer); if (stackInfo) { inspectScrollXRef.current = 15; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
+            if (!currentPlayer?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            setDragState(null); return;
+        }
+
         if (card.card_id === "DON" || card.type === "DON") {
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
@@ -199,14 +209,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return;
         } else if (detectedZone) {
             destZone = detectedZone;
-        }
-        if (distFromStart < 10) {
-            if (inspecting) { setDragState(null); return; }
-            const currentPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
-            if (currentPlayer) { const stackInfo = findInStack(currentPlayer); if (stackInfo) { inspectScrollXRef.current = 15; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
-            if (!currentPlayer?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            setDragState(null); return;
         }
         await handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null);
     };
