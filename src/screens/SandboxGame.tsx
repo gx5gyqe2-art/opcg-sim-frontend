@@ -7,6 +7,8 @@ import { createCardContainer } from '../ui/CardRenderer';
 import { createInspectOverlay } from '../ui/InspectOverlay';
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance } from '../game/types';
+import { API_CONFIG } from '../api/api.config';
+import { logger } from '../utils/logger';
 
 type DragState = {
   card: CardInstance;
@@ -37,7 +39,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX } = LAYOUT_PARAMS;
 
-  // 視点ロジック
   const isRotated = useMemo(() => {
     if (myPlayerId === 'p2') return true;
     if (myPlayerId === 'p1') return false;
@@ -54,7 +55,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
       return [];
   }, [gameState, inspecting]);
 
-  // 初期化 & WebSocket接続
   useEffect(() => {
     let ws: WebSocket | null = null;
 
@@ -62,7 +62,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
       try {
         let currentId = activeGameId;
 
-        // IDがない場合は新規作成
         if (!currentId) {
             const { state } = await apiClient.createSandboxGame(p1Deck, p2Deck);
             currentId = state.game_id;
@@ -70,30 +69,42 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
             setGameState(state);
         }
 
-        // WebSocket接続
         if (currentId) {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // ローカル開発用ポート考慮
-            const host = window.location.port === '5173' ? `${window.location.hostname}:8000` : window.location.host;
-            const wsUrl = `${protocol}//${host}/ws/sandbox/${currentId}`;
+            const baseUrl = API_CONFIG.BASE_URL;
+            const wsProtocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
+            const wsHost = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            const wsUrl = `${wsProtocol}//${wsHost}/ws/sandbox/${currentId}`;
             
             ws = new WebSocket(wsUrl);
             
-            ws.onopen = () => console.log("WS Connected to", wsUrl);
+            ws.onopen = () => {
+                logger.log({
+                    level: 'info',
+                    action: 'ws.connected',
+                    msg: `WS Connected to ${wsUrl}`
+                });
+            };
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === 'STATE_UPDATE') {
-                        // console.log("State updated via WS");
                         setGameState(data.state);
                     }
-                } catch(e) { console.error("WS Parse Error", e); }
+                } catch(e) {
+                    logger.error('ws.parse_error', String(e));
+                }
             };
-            ws.onclose = () => console.log("WS Disconnected");
+            ws.onclose = () => {
+                logger.log({
+                    level: 'info',
+                    action: 'ws.disconnected',
+                    msg: 'WS Disconnected'
+                });
+            };
         }
 
       } catch (e) {
-        console.error(e);
+        logger.error('sandbox.init_fail', String(e));
         alert("Failed to start sandbox");
         onBack();
       }
@@ -105,11 +116,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
     };
   }, []);
 
-  // PixiJS Setup
   useEffect(() => {
     if (!pixiContainerRef.current) return;
     
-    // 既存のCanvasがあれば削除（再マウント対策）
     while (pixiContainerRef.current.firstChild) {
       pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
     }
@@ -138,9 +147,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
-  }, []); // 初回のみ実行
+  }, []);
 
-  // 描画ループ
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
@@ -192,11 +200,9 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         if (inspecting) return;
         if (dragState) return;
 
-        // 対戦モード時の操作制限
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
              const player = gameState.players[myPlayerId];
              if (card.owner_id && player && card.owner_id !== player.name) {
-                 // 相手のカードは操作不可
                  return;
              }
         }
@@ -209,14 +215,12 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
 
     const isOnlineBattle = myPlayerId !== 'both';
 
-    // 自分側 (手札隠さない)
     const bottomSide = createSandboxBoardSide(
         bottomPlayer, false, W, coords, onCardDown, false
     );
     bottomSide.y = midY;
     app.stage.addChild(bottomSide);
 
-    // 相手側 (対戦中なら手札を隠す)
     const topSide = createSandboxBoardSide(
         topPlayer, true, W, coords, onCardDown, isOnlineBattle
     );
@@ -249,7 +253,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
 
   }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds]);
 
-  // イベントリスナー
   useEffect(() => {
     const app = appRef.current;
     if (!app) return;
@@ -411,7 +414,7 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
           });
           setGameState(res.state);
       } catch(e) {
-          console.error(e);
+          logger.error('sandbox.action_fail', String(e));
       } finally {
           setIsPending(false);
       }
@@ -420,10 +423,8 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', background: '#000' }}>
       
-      {/* Pixi Canvas - 常にレンダリングしておく */}
       <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
-      {/* Loading Overlay - gameStateがない時だけ表示 */}
       {!gameState && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}>
             <h2>Connecting to Room...</h2>
@@ -431,7 +432,6 @@ export const SandboxGame = ({ p1Deck, p2Deck, gameId: initialGameId, myPlayerId 
         </div>
       )}
 
-      {/* UI Layer - gameStateがある時のみ有効化 */}
       {gameState && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto', alignItems: 'center' }}>
