@@ -207,7 +207,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     app.stage.addChild(bg);
     
     const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
-        // ドラッグ中のカードは常に正位置
         const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {}, isOpponent: false });
         ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
         app.stage.addChild(ghost); 
@@ -338,7 +337,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
         const THRESHOLD = coords.CH; 
         const checkZone = (isTopSide: boolean) => {
-            // X軸座標の左右反転ヘルパー
             const getX = (val: number) => isTopSide ? W - val : val;
 
             const yBase = isTopSide ? 0 : midY;
@@ -452,7 +450,19 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             </div>
 
             {isMulliganPhase && (
-                <div style={{ position: 'absolute', top: '60px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'auto', display: 'flex', gap: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px', borderRadius: '12px', border: '1px solid #555' }}>
+                <div style={{ 
+                    position: 'absolute', 
+                    top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y}px` : '60px', 
+                    left: '50%', 
+                    transform: 'translateX(-50%)', 
+                    pointerEvents: 'auto', 
+                    display: 'flex', 
+                    gap: '20px', 
+                    background: 'rgba(0,0,0,0.6)', 
+                    padding: '15px', 
+                    borderRadius: '12px', 
+                    border: '1px solid #555' 
+                }}>
                     {(myPlayerId === 'p1' || myPlayerId === 'both') && !mulliganStatus.p1 && (
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>P1 マリガン</div>
