@@ -1,13 +1,17 @@
 import * as PIXI from 'pixi.js';
 import { createCardContainer } from './CardRenderer';
 import type { CardInstance } from '../game/types';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 
 // オーバーレイコンテナに更新用メソッドを追加した型定義
 export interface InspectOverlayContainer extends PIXI.Container {
   updateLayout: (draggingGlobalX: number | null, draggingUuid: string | null) => void;
   updateScroll: (x: number) => void;
 }
+
+// レンダリング用の基準サイズ定義 (レイアウト設定の比率を使用)
+const BASE_CARD_WIDTH = 120;
+const BASE_CARD_HEIGHT = BASE_CARD_WIDTH * LAYOUT_PARAMS.CARD.ASPECT_RATIO;
 
 export const createInspectOverlay = (
   type: string,
@@ -116,12 +120,13 @@ export const createInspectOverlay = (
     const isRevealed = type === 'trash' || type === 'hand' || revealedCardIds.has(card.uuid);
     const displayCard = { ...card, is_face_up: isRevealed };
     
-    // 【修正】定数参照を LAYOUT_CONSTANTS.SIZES.CARD_WIDTH 等に変更
-    const cardSprite = createCardContainer(displayCard, LAYOUT_CONSTANTS.SIZES.CARD_WIDTH, LAYOUT_CONSTANTS.SIZES.CARD_HEIGHT, { 
+    // 【修正】ローカル定義した BASE_CARD_WIDTH, BASE_CARD_HEIGHT を使用
+    const cardSprite = createCardContainer(displayCard, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, { 
       onClick: () => {}
     });
 
-    const scale = cardW / LAYOUT_CONSTANTS.SIZES.CARD_WIDTH;
+    // 表示サイズに合わせてスケール
+    const scale = cardW / BASE_CARD_WIDTH;
     cardSprite.scale.set(scale);
 
     if (!isRevealed) {
@@ -129,12 +134,12 @@ export const createInspectOverlay = (
       cover.beginFill(0x34495e);
       cover.lineStyle(2, 0xecf0f1);
       // 【修正】定数参照
-      cover.drawRoundedRect(0, 0, LAYOUT_CONSTANTS.SIZES.CARD_WIDTH, LAYOUT_CONSTANTS.SIZES.CARD_HEIGHT, 8);
+      cover.drawRoundedRect(0, 0, BASE_CARD_WIDTH, BASE_CARD_HEIGHT, 8);
       cover.endFill();
       const txt = new PIXI.Text("?", { fontSize: 60, fill: "white", fontWeight: 'bold' });
       txt.anchor.set(0.5);
       // 【修正】定数参照
-      txt.position.set(LAYOUT_CONSTANTS.SIZES.CARD_WIDTH/2, LAYOUT_CONSTANTS.SIZES.CARD_HEIGHT/2);
+      txt.position.set(BASE_CARD_WIDTH/2, BASE_CARD_HEIGHT/2);
       cover.addChild(txt);
       cardSprite.addChild(cover);
     }
@@ -142,12 +147,12 @@ export const createInspectOverlay = (
     const btn = new PIXI.Graphics();
     btn.beginFill(0x000000, 0.6);
     // 【修正】定数参照
-    btn.drawRoundedRect(10, LAYOUT_CONSTANTS.SIZES.CARD_HEIGHT - 40, LAYOUT_CONSTANTS.SIZES.CARD_WIDTH - 20, 30, 4);
+    btn.drawRoundedRect(10, BASE_CARD_HEIGHT - 40, BASE_CARD_WIDTH - 20, 30, 4);
     btn.endFill();
     const btnTxt = new PIXI.Text("Bot", { fontSize: 18, fill: 'white' });
     btnTxt.anchor.set(0.5);
     // 【修正】定数参照
-    btnTxt.position.set(LAYOUT_CONSTANTS.SIZES.CARD_WIDTH/2, LAYOUT_CONSTANTS.SIZES.CARD_HEIGHT - 25);
+    btnTxt.position.set(BASE_CARD_WIDTH/2, BASE_CARD_HEIGHT - 25);
     btn.addChild(btnTxt);
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
