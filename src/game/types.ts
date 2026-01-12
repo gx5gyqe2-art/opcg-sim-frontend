@@ -47,8 +47,8 @@ export interface PlayerState {
     hand: CardInstance[];
     life: CardInstance[];
     trash: CardInstance[];
-    deck?: CardInstance[];     // ★追加
-    don_deck?: CardInstance[]; // ★追加
+    deck?: CardInstance[];
+    don_deck?: CardInstance[];
   };
   don_count: number;
   active_don: number;
@@ -56,6 +56,12 @@ export interface PlayerState {
 
 export interface GameState {
   game_id: string;
+  room_name?: string;
+  status?: string;
+  ready_states?: {
+    p1: boolean;
+    p2: boolean;
+  };
   turn_info: {
     turn_count: number;
     active_player_id: string;

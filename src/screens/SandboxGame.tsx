@@ -39,7 +39,6 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { Z_INDEX } = LAYOUT_PARAMS;
 
   const isRotated = useMemo(() => {
     if (myPlayerId === 'p2') return true;
@@ -172,7 +171,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || inspecting || dragState) return;
         if ((myPlayerId === 'p1' || myPlayerId === 'p2') && gameState) {
-             const player = gameState.players[myPlayerId];
+             const player = gameState.players[myPlayerId as 'p1' | 'p2'];
              if (card.owner_id && player && card.owner_id !== player.name) return;
         }
         startDrag(card, { x: e.global.x, y: e.global.y });
@@ -303,16 +302,17 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   };
 
   if (gameState && gameState.status === 'WAITING') {
-    const canStart = gameState.ready_states.p1 && gameState.ready_states.p2;
+    const ready = gameState.ready_states ?? { p1: false, p2: false };
+    const canStart = ready.p1 && ready.p2;
     return (
       <div style={{ width: '100vw', height: '100vh', background: '#1a0b0b', color: '#f0e6d2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif' }}>
         <h1 style={{ color: '#ffd700', textShadow: '0 2px 4px black' }}>ROOM: {gameState.room_name}</h1>
         <div style={{ display: 'flex', gap: '40px', marginTop: '30px' }}>
-          {['p1', 'p2'].map(pid => (
+          {(['p1', 'p2'] as const).map(pid => (
             <div key={pid} style={{ background: 'rgba(255,255,255,0.05)', padding: '30px', borderRadius: '12px', border: '2px solid #5d4037', width: '250px', textAlign: 'center' }}>
               <h2 style={{ margin: '0 0 20px 0' }}>{pid.toUpperCase()} {gameState.players[pid].name}</h2>
               <div style={{ marginBottom: '20px' }}>
-                {gameState.ready_states[pid] ? <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>READY</span> : <span style={{ color: '#e74c3c' }}>NOT READY</span>}
+                {ready[pid] ? <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>READY</span> : <span style={{ color: '#e74c3c' }}>NOT READY</span>}
               </div>
               {(pid === myPlayerId || myPlayerId === 'both') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -320,8 +320,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                     <option value="">デッキを選択...</option>
                     {deckOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
                   </select>
-                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '10px', background: gameState.ready_states[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', cursor: 'pointer' }}>
-                    {gameState.ready_states[pid] ? 'キャンセル' : '準備完了'}
+                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '10px', background: ready[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', cursor: 'pointer' }}>
+                    {ready[pid] ? 'キャンセル' : '準備完了'}
                   </button>
                 </div>
               )}
