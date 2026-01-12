@@ -381,6 +381,14 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
     onUpdateDeck({ ...deck, card_uuids: newUuids });
   };
 
+  const handleNavigate = (direction: -1 | 1) => {
+    if (!viewingCard) return;
+    const currentIndex = groupedCards.list.findIndex(item => item.card.uuid === viewingCard.uuid);
+    if (currentIndex === -1) return;
+    const nextIndex = currentIndex + direction;
+    if (nextIndex >= 0 && nextIndex < groupedCards.list.length) { setViewingCard(groupedCards.list[nextIndex].card); }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
       <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '10px', alignItems: 'center' }}>
@@ -402,7 +410,7 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
           {groupedCards.list.map((item) => ( <CardImageStub key={item.card.uuid} card={item.card} count={item.count} onClick={() => setViewingCard(item.card)} /> ))}
         </div>
       </div>
-      {viewingCard && ( <CardDetailScreen card={viewingCard} currentCount={deck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} /> )}
+      {viewingCard && ( <CardDetailScreen card={viewingCard} currentCount={deck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} onNavigate={handleNavigate} /> )}
       {showStats && <DeckDistributionModal deck={deck} allCards={allCards} onClose={() => setShowStats(false)} />}
     </div>
   );
@@ -488,14 +496,45 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     });
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
 
+  const handleSelect = (card: CardData) => {
+    if (viewOnly) { setViewingCard(card); return; }
+    if (mode === 'leader') { onUpdateDeck({ ...currentDeck, leader_id: card.uuid }); onClose(); }
+    else { setViewingCard(card); }
+  };
+
+  const handleCountChange = (card: CardData, diff: number) => {
+    const newUuids = [...currentDeck.card_uuids];
+    if (diff > 0) { if (newUuids.length < 50) newUuids.push(card.uuid); }
+    else { const idx = newUuids.indexOf(card.uuid); if (idx !== -1) newUuids.splice(idx, 1); }
+    onUpdateDeck({ ...currentDeck, card_uuids: newUuids });
+  };
+
+  const handleNavigate = (direction: -1 | 1) => {
+    if (!viewingCard) return;
+    const currentIndex = filtered.findIndex(c => c.uuid === viewingCard.uuid);
+    if (currentIndex === -1) return;
+    const nextIndex = currentIndex + direction;
+    if (nextIndex >= 0 && nextIndex < filtered.length) { setViewingCard(filtered[nextIndex]); }
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 100) {
+      if (displayLimit < filtered.length) setDisplayLimit(prev => prev + 50);
+    }
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '5px 15px', background: '#2a2a2a', color: '#aaa', fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
         <span>{mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
         <span>Hit: {filtered.length}枚</span>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px' }}>
-        {filtered.slice(0, displayLimit).map(c => <CardImageStub key={c.uuid} card={c} onClick={() => handleSelect(c)} />)}
+      <div onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}>
+        {filtered.slice(0, displayLimit).map(c => {
+          const count = currentDeck.card_uuids.filter(u => u === c.uuid).length;
+          return <CardImageStub key={c.uuid} card={c} count={count > 0 ? count : undefined} onClick={() => handleSelect(c)} />;
+        })}
       </div>
       <div style={{ padding: '10px', background: '#333', borderTop: '1px solid #444', display: 'flex', gap: '10px', alignItems: 'center' }}>
         <button onClick={onClose} style={{ padding: '8px 12px', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>完了</button>
@@ -504,8 +543,26 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
         </div>
         <button onClick={() => setShowFilterModal(true)} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#444', border: 'none', color: 'white' }}>⚙️</button>
       </div>
-      {viewingCard && <CardDetailScreen card={viewingCard} currentCount={0} onCountChange={() => {}} onClose={() => setViewingCard(null)} viewOnly={viewOnly} />}
-      {showFilterModal && <FilterModal filters={filters} setFilters={setFilters} traitList={traitList} setList={setList} onClose={() => setShowFilterModal(false)} onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })} />}
+      {viewingCard && (
+        <CardDetailScreen 
+          card={viewingCard} 
+          currentCount={currentDeck.card_uuids.filter(u => u === viewingCard.uuid).length} 
+          onCountChange={(diff) => handleCountChange(viewingCard, diff)} 
+          onClose={() => setViewingCard(null)} 
+          onNavigate={handleNavigate}
+          viewOnly={viewOnly} 
+        />
+      )}
+      {showFilterModal && (
+        <FilterModal 
+          filters={filters} 
+          setFilters={setFilters} 
+          traitList={traitList} 
+          setList={setList} 
+          onClose={() => setShowFilterModal(false)} 
+          onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })} 
+        />
+      )}
     </div>
   );
 };
