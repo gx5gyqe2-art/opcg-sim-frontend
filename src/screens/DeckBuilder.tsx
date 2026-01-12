@@ -28,12 +28,12 @@ interface FilterState {
   color: string[];
   type: string[];
   attribute: string[];
-  trait: string;
+  traits: string[];
   counter: string[];
   cost: string[];
   power: string[];
   trigger: string[];
-  set: string;
+  sets: string[];
   sort: string;
 }
 
@@ -149,6 +149,8 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
 };
 
 const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset }: { filters: FilterState, setFilters: (f: FilterState) => void, traitList: string[], setList: string[], onClose: () => void, onReset: () => void }) => {
+  const [traitSearch, setTraitSearch] = useState('');
+
   const SectionTitle = ({ children }: { children: string }) => (
     <div style={{ color: '#aaa', fontSize: '12px', marginTop: '15px', marginBottom: '8px', fontWeight: 'bold' }}>{children}</div>
   );
@@ -201,6 +203,12 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
     );
   };
 
+  const filteredTraits = useMemo(() => {
+    if (!traitSearch) return traitList;
+    const lower = traitSearch.toLowerCase();
+    return traitList.filter(t => t.toLowerCase().includes(lower));
+  }, [traitList, traitSearch]);
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, display: 'flex' }}>
       <div style={{ width: '100%', background: '#222', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -208,6 +216,13 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
           <h3 style={{ margin: 0 }}>フィルタ設定</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
+
+        {/* ボタンを上部に移動 */}
+        <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', gap: '10px', background: '#2a2a2a' }}>
+          <button onClick={onReset} style={{ flex: 1, padding: '12px', borderRadius: '4px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>リセット</button>
+          <button onClick={onClose} style={{ flex: 2, padding: '12px', borderRadius: '4px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
+        </div>
+
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
           <SectionTitle>色 (COLOR)</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -218,6 +233,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             <ColorBtn colorKey="Black" label="黒" colorCode="#34495e" />
             <ColorBtn colorKey="Yellow" label="黄" colorCode="#f1c40f" />
           </div>
+
           <SectionTitle>コスト (COST)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(10)].map((_, i) => (
@@ -225,6 +241,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             ))}
             <FilterBtn label="10+" active={filters.cost.includes('10')} onClick={() => toggle('cost', '10')} />
           </div>
+
           <SectionTitle>パワー (POWER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(13)].map((_, i) => (
@@ -232,6 +249,28 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             ))}
             <FilterBtn label="13~" active={filters.power.includes('13')} onClick={() => toggle('power', '13')} />
           </div>
+
+          <SectionTitle>収録セット (SET) - 複数選択可</SectionTitle>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {setList.map(s => (
+              <FilterBtn key={s} label={s} active={filters.sets.includes(s)} onClick={() => toggle('sets', s)} />
+            ))}
+          </div>
+
+          <SectionTitle>特徴 (TRAITS) - 検索して選択</SectionTitle>
+          <input 
+            placeholder="特徴を検索..." 
+            value={traitSearch} 
+            onChange={e => setTraitSearch(e.target.value)}
+            style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', marginBottom: '10px', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', maxHeight: '200px', overflowY: 'auto', padding: '5px', border: '1px solid #444', borderRadius: '4px' }}>
+            {filteredTraits.map(t => (
+              <FilterBtn key={t} label={t} active={filters.traits.includes(t)} onClick={() => toggle('traits', t)} />
+            ))}
+            {filteredTraits.length === 0 && <div style={{ fontSize: '12px', color: '#666' }}>見つかりません</div>}
+          </div>
+
           <SectionTitle>種類 (TYPE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="リーダー" active={filters.type.includes('LEADER')} onClick={() => toggle('type', 'LEADER')} />
@@ -239,37 +278,20 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             <FilterBtn label="イベント" active={filters.type.includes('EVENT')} onClick={() => toggle('type', 'EVENT')} />
             <FilterBtn label="ステージ" active={filters.type.includes('STAGE')} onClick={() => toggle('type', 'STAGE')} />
           </div>
+
           <SectionTitle>カウンター (COUNTER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <FilterBtn label="なし" active={filters.counter.includes('NONE')} onClick={() => toggle('counter', 'NONE')} />
             <FilterBtn label="+1000" active={filters.counter.includes('1000')} onClick={() => toggle('counter', '1000')} />
             <FilterBtn label="+2000" active={filters.counter.includes('2000')} onClick={() => toggle('counter', '2000')} />
           </div>
-          <SectionTitle>トリガー (TRIGGER)</SectionTitle>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <FilterBtn label="あり" active={filters.trigger.includes('HAS')} onClick={() => toggle('trigger', 'HAS')} />
-            <FilterBtn label="なし" active={filters.trigger.includes('NONE')} onClick={() => toggle('trigger', 'NONE')} />
-          </div>
+
           <SectionTitle>属性 (ATTRIBUTE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['打', '斬', '特', '射', '知'].map(attr => (
               <FilterBtn key={attr} label={attr} active={filters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
             ))}
           </div>
-          <SectionTitle>収録セット (SET)</SectionTitle>
-          <select value={filters.set} onChange={(e) => setFilters({ ...filters, set: e.target.value })} style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}>
-            <option value="ALL">すべて</option>
-            {setList.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <SectionTitle>特徴 (TRAITS)</SectionTitle>
-          <select value={filters.trait} onChange={(e) => setFilters({ ...filters, trait: e.target.value })} style={{ width: '100%', padding: '10px', background: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}>
-            <option value="ALL">すべて</option>
-            {traitList.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div style={{ padding: '15px', borderTop: '1px solid #444', display: 'flex', gap: '10px' }}>
-          <button onClick={onReset} style={{ flex: 1, padding: '12px', borderRadius: '4px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer' }}>リセット</button>
-          <button onClick={onClose} style={{ flex: 2, padding: '12px', borderRadius: '4px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
         </div>
       </div>
     </div>
@@ -418,7 +440,7 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
 const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose, viewOnly }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void, viewOnly?: boolean }) => {
   const [filters, setFilters] = useState<FilterState>({
-    color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST'
+    color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST'
   });
   const [searchText, setSearchText] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -465,7 +487,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     if (filters.color.length > 0) res = res.filter(c => c.color && c.color.some(cc => filters.color.includes(cc)));
     if (filters.type.length > 0) res = res.filter(c => filters.type.includes(c.type));
     if (filters.attribute.length > 0) res = res.filter(c => c.attributes?.some(attr => filters.attribute.includes(attr)));
-    if (filters.trait !== 'ALL') res = res.filter(c => c.traits?.some(t => t.includes(filters.trait)));
+    if (filters.traits.length > 0) res = res.filter(c => c.traits?.some(t => filters.traits.includes(t)));
     if (filters.counter.length > 0) {
       res = res.filter(c => {
         if (filters.counter.includes('NONE') && !c.counter) return true;
@@ -488,7 +510,9 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     if (filters.trigger.length > 0) {
       res = res.filter(c => filters.trigger.includes(c.trigger_text ? 'HAS' : 'NONE'));
     }
-    if (filters.set !== 'ALL') res = res.filter(c => c.uuid.startsWith(filters.set));
+    if (filters.sets.length > 0) {
+      res = res.filter(c => filters.sets.some(s => c.uuid.startsWith(s)));
+    }
 
     if (searchText) {
       const lower = searchText.toLowerCase();
@@ -503,8 +527,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
     });
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
-
-  useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
 
   const handleSelect = (card: CardData) => {
     if (viewOnly) { setViewingCard(card); return; }
@@ -605,7 +627,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
           traitList={traitList} 
           setList={setList} 
           onClose={() => setShowFilterModal(false)} 
-          onReset={() => setFilters({ color: [], type: [], attribute: [], trait: 'ALL', counter: [], cost: [], power: [], trigger: [], set: 'ALL', sort: 'COST' })} 
+          onReset={() => setFilters({ color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST' })} 
         />
       )}
     </div>
