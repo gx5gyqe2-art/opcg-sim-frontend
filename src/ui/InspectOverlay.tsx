@@ -14,6 +14,7 @@ export const createInspectOverlay = (
   onToggleReveal: (uuid: string) => void,
   onRevealAll: () => void,
   onMoveToBottom: (uuid: string) => void,
+  onReorder: (uuid: string, newIndex: number) => void,
   onScroll?: (x: number) => void
 ) => {
   const container = new PIXI.Container();
@@ -27,7 +28,7 @@ export const createInspectOverlay = (
   container.addChild(bg);
 
   const panelW = W * 0.9;
-  const panelH = Math.min(H * 0.45, 320); 
+  const panelH = Math.min(H * 0.5, 380); 
   const panelX = (W - panelW) / 2;
   const panelY = 60;
 
@@ -81,12 +82,12 @@ export const createInspectOverlay = (
 
   const cardW = 60;
   const cardH = 84;
-  const gap = 10;
+  const gap = 15;
 
   let isScrolling = false;
   let startPos = { x: 0, y: 0 };
   let scrollStartX = 0;
-  let pendingCard: { card: CardInstance, e: PIXI.FederatedPointerEvent } | null = null;
+  let pendingCard: { card: CardInstance, index: number, e: PIXI.FederatedPointerEvent } | null = null;
   const maxScroll = Math.max(0, cards.length * (cardW + gap) - (panelW - 30));
 
   cards.forEach((card, i) => {
@@ -108,7 +109,7 @@ export const createInspectOverlay = (
     
     cardSprite.on('pointerdown', (e) => {
       e.stopPropagation();
-      pendingCard = { card, e }; 
+      pendingCard = { card, index: i, e }; 
       startPos = { x: e.global.x, y: e.global.y };
       scrollStartX = listContainer.x;
       isScrolling = false;
@@ -116,7 +117,7 @@ export const createInspectOverlay = (
 
     const btn = new PIXI.Graphics();
     btn.beginFill(0x34495e);
-    btn.drawRoundedRect(-cardW / 2, 45, cardW, 24, 4);
+    btn.drawRoundedRect(-baseW / 2, baseH / 2 + 10, baseW, 40, 6);
     btn.endFill();
     btn.eventMode = 'static';
     btn.cursor = 'pointer';
@@ -126,9 +127,9 @@ export const createInspectOverlay = (
     });
 
     const btnLabel = type === 'deck' ? 'デッキ下' : 'ライフ下';
-    const btnText = new PIXI.Text(btnLabel, { fontSize: 18, fill: '#ffffff' });
+    const btnText = new PIXI.Text(btnLabel, { fontSize: 24, fill: '#ffffff', fontWeight: 'bold' });
     btnText.anchor.set(0.5);
-    btnText.position.set(0, 57);
+    btnText.position.set(0, baseH / 2 + 30);
     btn.addChild(btnText);
     cardSprite.addChild(btn);
 
@@ -161,7 +162,8 @@ export const createInspectOverlay = (
                 }
                 return;
             } else {
-                isScrolling = true; pendingCard = null; 
+                isScrolling = true;
+                pendingCard = null; 
             }
         }
     }
@@ -174,10 +176,24 @@ export const createInspectOverlay = (
     }
   });
 
-  const endDrag = () => {
-      if (pendingCard) onToggleReveal(pendingCard.card.uuid);
-      isScrolling = false; pendingCard = null;
+  const endDrag = (e: PIXI.FederatedPointerEvent) => {
+      if (pendingCard) {
+          const dx = e.global.x - startPos.x;
+          if (Math.abs(dx) > cardW / 2) {
+              const shift = Math.round(dx / (cardW + gap));
+              const newIdx = Math.max(0, Math.min(cards.length - 1, pendingCard.index + shift));
+              if (newIdx !== pendingCard.index) {
+                  onReorder(pendingCard.card.uuid, newIdx);
+                  pendingCard = null;
+                  return;
+              }
+          }
+          onToggleReveal(pendingCard.card.uuid);
+      }
+      isScrolling = false;
+      pendingCard = null;
   };
+
   panel.on('pointerup', endDrag);
   panel.on('pointerupoutside', endDrag);
 

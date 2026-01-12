@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as PIXI from 'pixi.js';
-import { LAYOUT_CONSTANTS } from '../layout/layout.config';
+import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createSandboxBoardSide } from '../ui/SandboxBoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
@@ -29,6 +29,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [dropChoice, setDropChoice] = useState<{ card: CardInstance, destPid: string, destZone: string } | null>(null);
   const inspectScrollXRef = useRef(15);
   const { COLORS } = LAYOUT_CONSTANTS;
+  const { Z_INDEX } = LAYOUT_PARAMS;
+
+  const isMyTurn = useMemo(() => {
+    if (!gameState || myPlayerId === 'both') return true;
+    return gameState.turn_info.active_player_id === myPlayerId;
+  }, [gameState, myPlayerId]);
 
   const isRotated = useMemo(() => {
     if (myPlayerId === 'p2') return true;
@@ -146,7 +152,15 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     topSide.y = 0; app.stage.addChild(topSide);
 
     if (inspecting) {
-        const overlay = createInspectOverlay(inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, () => setInspecting(null), (card, startPos) => startDrag(card, startPos), (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); }, () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, (x) => { inspectScrollXRef.current = x; });
+        const overlay = createInspectOverlay(
+          inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
+          () => setInspecting(null), (card, startPos) => startDrag(card, startPos), 
+          (uuid) => { const newSet = new Set(revealedCardIds); if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); setRevealedCardIds(newSet); }, 
+          () => { const newSet = new Set(revealedCardIds); inspectingCards.forEach(c => newSet.add(c.uuid)); setRevealedCardIds(newSet); }, 
+          (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: -1 }); }, 
+          (uuid, newIdx) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: newIdx }); },
+          (x) => { inspectScrollXRef.current = x; }
+        );
         app.stage.addChild(overlay);
     }
     if (dragState) app.stage.addChild(dragState.sprite);
@@ -163,6 +177,9 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
         if (card.type === 'LEADER') { if (distFromStart < 10) handleAction('TOGGLE_REST', { card_uuid: card.uuid }); setDragState(null); return; }
         const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
         const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
+        
+        if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
+
         let destZone = 'field'; 
         const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
         const THRESHOLD = coords.CH; 
@@ -205,16 +222,13 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             setDragState(null); return;
         }
         const detectedZone = checkZone(isTopArea); 
-        if (detectedZone === 'deck' || detectedZone === 'life') {
-            setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return;
-        } else if (detectedZone) {
-            destZone = detectedZone;
-        }
+        if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
+        else if (detectedZone) { destZone = detectedZone; }
         await handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null);
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
-  }, [dragState, gameState, inspecting, isRotated]);
+  }, [dragState, gameState, inspecting, isRotated, myPlayerId]);
 
   const handleAction = async (type: string, params: any) => {
       if (isPending || !gameState || !activeGameId) return;
@@ -269,7 +283,20 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       {gameState && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: 10, pointerEvents: 'auto' }}><button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button></div>
-            <button onClick={() => handleAction('TURN_END', {})} disabled={isPending} style={{ position: 'absolute', left: layoutCoords ? `${layoutCoords.x}px` : 'auto', top: layoutCoords ? `${layoutCoords.y}px` : '50%', padding: '10px 20px', backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', pointerEvents: 'auto' }}>{isPending ? '送信中' : '終了'}</button>
+            <button 
+                onClick={() => handleAction('TURN_END', {})} 
+                disabled={isPending || !isMyTurn} 
+                style={{ 
+                    position: 'absolute', left: layoutCoords ? `${layoutCoords.x}px` : 'auto', top: layoutCoords ? `${layoutCoords.y}px` : '50%', 
+                    padding: '10px 20px', 
+                    backgroundColor: (isPending || !isMyTurn) ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, 
+                    color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', pointerEvents: 'auto',
+                    cursor: (isPending || !isMyTurn) ? 'not-allowed' : 'pointer',
+                    opacity: isMyTurn ? 1 : 0.6
+                }}
+            >
+                {isPending ? '送信中' : '終了'}
+            </button>
         </div>
       )}
     </div>
