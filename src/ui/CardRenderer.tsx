@@ -2,7 +2,7 @@ import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
 import { logger } from '../utils/logger';
-import { API_CONFIG } from '../api/api.config';
+import { getCardImageUrl, getBackImageUrl } from '../utils/imageAssets';
 
 const { COLORS, SIZES } = LAYOUT_CONSTANTS;
 const { SHAPE, UI_DETAILS, PHYSICS } = LAYOUT_PARAMS;
@@ -14,11 +14,9 @@ export const createCardContainer = (
   options: { count?: number; onClick: () => void; isOpponent?: boolean }
 ) => {
   const container = new PIXI.Container();
-  // ▼▼▼ 追加: UUIDをコンテナ名として設定（DnD用） ▼▼▼
   if (card?.uuid) {
     container.name = card.uuid;
   }
-  // ▲▲▲ 追加ここまで ▲▲▲
 
   const isOpponent = options.isOpponent ?? false;
   const isRest = card?.is_rest === true;
@@ -36,16 +34,16 @@ export const createCardContainer = (
   if (!isEmpty) {
     if (cardName === 'Don!! Deck') {
       // ドンデッキ裏面
-      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/DON_back.png`;
+      imageUrl = getBackImageUrl('DON');
     } else if (cardName === 'Deck' || cardName === 'Life') {
       // デッキ・ライフ裏面
-      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/OPCG_back.png`;
+      imageUrl = getBackImageUrl('MAIN');
     } else if (isBack) {
       // その他の裏面カード（手札など）
-      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/OPCG_back.png`;
+      imageUrl = getBackImageUrl('MAIN');
     } else if (card?.card_id) {
       // 表面: IDがある場合 (DONを含む)
-      imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.card_id}.png`;
+      imageUrl = getCardImageUrl(card.card_id);
     }
   }
 
@@ -64,11 +62,40 @@ export const createCardContainer = (
     container.addChild(txt);
 
   } else if (imageUrl) {
-    // 画像表示モード
-    const sprite = PIXI.Sprite.from(imageUrl);
+    // --- 画像表示モード (非同期読み込み対応版) ---
+    
+    // 1. まずフォールバック（裏面）用のテクスチャを用意
+    const fallbackUrl = getBackImageUrl('MAIN');
+    const fallbackTexture = PIXI.Texture.from(fallbackUrl);
+    
+    // 2. スプライトを生成（最初はフォールバックで初期化しても良いが、targetTextureが既にあればそちらを使う）
+    const targetTexture = PIXI.Texture.from(imageUrl);
+    
+    // ロード済みかどうかで初期テクスチャを決定
+    const initialTexture = targetTexture.valid ? targetTexture : fallbackTexture;
+    const sprite = new PIXI.Sprite(initialTexture);
+    
     sprite.width = cw;
     sprite.height = ch;
     sprite.anchor.set(0.5);
+
+    // 3. ロード未完了の場合、完了イベントを待機して差し替え
+    if (!targetTexture.valid) {
+      targetTexture.baseTexture.once('loaded', () => {
+        sprite.texture = targetTexture;
+        // テクスチャ差し替えでサイズが変わる可能性があるため再設定
+        sprite.width = cw;
+        sprite.height = ch;
+      });
+      
+      targetTexture.baseTexture.once('error', () => {
+        logger.warn('ui.card_image_error', `Failed to load image: ${imageUrl}`);
+        // エラー時はフォールバックのままにする（必要ならここで再セット）
+        sprite.texture = fallbackTexture;
+        sprite.width = cw;
+        sprite.height = ch;
+      });
+    }
     
     const mask = new PIXI.Graphics();
     mask.beginFill(0xFFFFFF);
@@ -89,7 +116,6 @@ export const createCardContainer = (
     // 画像なし & 裏面でない場合のフォールバック（色塗り）
     const g = new PIXI.Graphics();
     g.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
-    // isBackのケースは上でimageUrlが設定されるはずだが念のため
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
     g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
     g.endFill();
