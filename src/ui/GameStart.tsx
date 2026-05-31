@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { API_CONFIG } from '../api/api.config';
 import './GameUI.css'; 
-
-interface DeckOption {
-  id: string;
-  name: string;
-}
+import { prefetchAllCardImages } from '../utils/imageAssets';
+import { logger } from '../utils/logger';
 
 interface GameStartProps {
   onStart: (
@@ -20,154 +17,290 @@ interface GameStartProps {
 }
 
 const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby }) => {
-  const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
-  const [p1Deck, setP1Deck] = useState('imu.json');
-  const [p2Deck, setP2Deck] = useState('nami.json');
-  const [roomName, setRoomName] = useState(''); // デフォルト値を空に修正
-  const [showRoomCreateModal, setShowRoomCreateModal] = useState(false);
-  
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [activeModal, setActiveModal] = useState<'none' | 'multi'>('none');
+  const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
+  const [roomName, setRoomName] = useState('');
+
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const [contentScale, setContentScale] = useState(1);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const isMobile = windowSize.width < 768;
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    const fetchDecks = async () => {
-      try {
-        const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
-        const data = await res.json();
-        
-        const defaults = [
-          { id: 'imu.json', name: 'Imu (Default)' },
-          { id: 'nami.json', name: 'Nami (Default)' }
-        ];
+  useLayoutEffect(() => {
+    if (contentRef.current) {
+      const HEADER_HEIGHT = 60;
+      const BOTTOM_PADDING = 20;
+      const availableHeight = windowSize.height - HEADER_HEIGHT - BOTTOM_PADDING;
+      const contentHeight = contentRef.current.scrollHeight;
 
-        let loadedDecks: DeckOption[] = [];
-        if (data.success && Array.isArray(data.decks)) {
-          loadedDecks = data.decks.map((d: any) => ({
-            id: `db:${d.id}`,
-            name: d.name
-          }));
-        }
-        
-        setDeckOptions([...defaults, ...loadedDecks]);
-      } catch (e) {
-        console.error("Failed to load decks", e);
-        setDeckOptions([
-          { id: 'imu.json', name: 'Imu (Default)' },
-          { id: 'nami.json', name: 'Nami (Default)' }
-        ]);
+      if (contentHeight > availableHeight) {
+        const newScale = availableHeight / contentHeight;
+        setContentScale(newScale);
+      } else {
+        setContentScale(1);
       }
-    };
-    fetchDecks();
-  }, []);
+    }
+  }, [windowSize, isMobile]);
+
+  // ▼▼▼ 修正: モーダル表示ロジックを削除し、直接 onStart を呼ぶ形に戻しました ▼▼▼
+  const handleStartWithLog = (
+    mode: 'normal' | 'sandbox',
+    sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string }
+  ) => {
+    logger.log({
+      level: 'info',
+      action: 'game_menu.select',
+      msg: `Menu selected: ${mode}`,
+      payload: { mode, role: sandboxOptions?.role, room: sandboxOptions?.room_name }
+    });
+    // デッキIDは空文字で渡す（Sandbox側で選択させるため）
+    onStart('', '', mode, sandboxOptions);
+  };
+
+  const handleCacheImages = async () => {
+    if (!confirm("全てのカード画像をダウンロードしますか？\n(初回のみ通信量が発生します。Wi-Fi推奨)")) return;
+    try {
+      setDownloadProgress({ current: 0, total: 0 });
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/cards`);
+      const data = await res.json();
+      
+      if (data.success && Array.isArray(data.cards)) {
+        setDownloadProgress({ current: 0, total: data.cards.length });
+        await prefetchAllCardImages(data.cards, (current, total) => {
+          setDownloadProgress({ current, total });
+        });
+        alert("画像のダウンロードが完了しました。\nオフラインでも快適に動作します。");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("カードリストの取得に失敗しました");
+    } finally {
+      setDownloadProgress(null);
+    }
+  };
 
   const styles = useMemo(() => ({
     container: {
-      minHeight: '100vh', width: '100%', background: 'radial-gradient(circle at center, #3e2723 0%, #1a0b0b 100%)', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', color: '#f0e6d2', fontFamily: '"Times New Roman", "YuMincho", "Hiragino Mincho ProN", serif', position: 'relative' as const, overflowX: 'hidden' as const, padding: isMobile ? '20px' : '0', boxSizing: 'border-box' as const
+      height: '100vh', width: '100%', 
+      background: 'radial-gradient(circle at center, #2c3e50 0%, #000000 100%)', 
+      display: 'flex', flexDirection: 'column' as const, 
+      alignItems: 'center', 
+      color: '#f0e6d2', fontFamily: '"Times New Roman", serif', 
+      position: 'relative' as const, 
+      overflow: 'hidden' as const,
+      boxSizing: 'border-box' as const
     },
     bgOverlay: {
-      position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 20px)', pointerEvents: 'none' as const, zIndex: 0
+      position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, 
+      backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 20px)', 
+      pointerEvents: 'none' as const, zIndex: 0
+    },
+    header: {
+      width: '100%', display: 'flex', justifyContent: 'flex-end',
+      padding: '10px 20px', zIndex: 10, flexShrink: 0, height: '60px', boxSizing: 'border-box' as const
+    },
+    scaleWrapper: {
+      flex: 1, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden', zIndex: 1
+    },
+    scaledContent: {
+      width: '100%', maxWidth: '900px', padding: '0 20px', boxSizing: 'border-box' as const,
+      transform: `scale(${contentScale})`, transformOrigin: 'top center', transition: 'transform 0.1s ease-out',
+      display: 'flex', flexDirection: 'column' as const, gap: '30px'
     },
     title: {
-      fontSize: isMobile ? 'clamp(32px, 10vw, 50px)' : 'clamp(40px, 8vw, 80px)', fontWeight: '900', marginBottom: isMobile ? '20px' : '40px', background: 'linear-gradient(to bottom, #ffd700, #b8860b, #8b4513)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.8))', letterSpacing: isMobile ? '2px' : '6px', zIndex: 1, textTransform: 'uppercase' as const, textAlign: 'center' as const, maxWidth: '100%'
+      fontSize: isMobile ? '40px' : '60px', fontWeight: '900', textAlign: 'center' as const, 
+      margin: '0 0 10px 0',
+      background: 'linear-gradient(to bottom, #ffd700, #b8860b, #8b4513)', 
+      WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', 
+      filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.8))', letterSpacing: '4px', textTransform: 'uppercase' as const
     },
-    panel: {
-      background: '#f4e4bc', border: '6px solid #5d4037', boxShadow: '0 10px 40px rgba(0,0,0,0.7), inset 0 0 30px rgba(139, 69, 19, 0.2)', borderRadius: '8px', padding: isMobile ? '20px' : '40px', display: 'flex', flexDirection: 'column' as const, gap: isMobile ? '20px' : '30px', width: '100%', maxWidth: '600px', zIndex: 1, position: 'relative' as const, color: '#3e2723', boxSizing: 'border-box' as const
+    section: { display: 'flex', flexDirection: 'column' as const, gap: '15px' },
+    sectionTitle: {
+      fontSize: '18px', color: '#8b8b8b', borderBottom: '1px solid #444', paddingBottom: '5px', marginBottom: '5px',
+      textTransform: 'uppercase' as const, letterSpacing: '2px'
     },
-    rivet: (top: boolean, left: boolean) => ({
-      position: 'absolute' as const, width: isMobile ? '8px' : '12px', height: isMobile ? '8px' : '12px', borderRadius: '50%', background: 'linear-gradient(135deg, #ffd700, #8b4513)', boxShadow: '1px 1px 2px rgba(0,0,0,0.5)', top: top ? '10px' : 'auto', bottom: !top ? '10px' : 'auto', left: left ? '10px' : 'auto', right: !left ? '10px' : 'auto'
+    grid: { display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' },
+    menuCard: (color: string) => ({
+      background: 'rgba(255,255,255,0.05)', border: `1px solid ${color}`, borderRadius: '8px', padding: '20px',
+      display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: '10px',
+      cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', minHeight: '100px'
     }),
-    selectGroup: { display: 'flex', flexDirection: 'column' as const, gap: '8px' },
-    label: { fontSize: isMobile ? '14px' : '16px', fontWeight: 'bold', color: '#5d4037', textTransform: 'uppercase' as const, letterSpacing: '1px' },
-    select: {
-      width: '100%', padding: '12px', background: '#fff8e1', color: '#3e2723', border: '2px solid #8b4513', borderRadius: '4px', fontSize: isMobile ? '16px' : '18px', fontFamily: 'inherit', fontWeight: 'bold', outline: 'none', cursor: 'pointer', boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.1)', boxSizing: 'border-box' as const
+    cardLabel: { fontSize: '18px', fontWeight: 'bold', color: '#eee', textAlign: 'center' as const },
+    cardDesc: { fontSize: '12px', color: '#aaa', textAlign: 'center' as const },
+    dlBtn: {
+      background: 'rgba(0, 0, 0, 0.4)', border: '1px solid #555', color: '#888',
+      fontSize: '11px', padding: '6px 12px', borderRadius: '20px',
+      cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s',
+      backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', gap: '5px'
     },
-    vs: { textAlign: 'center' as const, fontSize: isMobile ? '24px' : '36px', fontWeight: 'bold', color: '#8b0000', textShadow: '0 2px 0 rgba(0,0,0,0.2)', margin: isMobile ? '-5px 0' : '-10px 0', fontStyle: 'italic' },
-    actions: { display: 'flex', flexDirection: 'column' as const, gap: '15px', marginTop: isMobile ? '20px' : '30px', zIndex: 1, alignItems: 'center', width: isMobile ? '100%' : 'auto', maxWidth: '600px', boxSizing: 'border-box' as const },
-    subBtn: { background: 'transparent', border: '2px solid #d4af37', color: '#d4af37', padding: '12px 30px', fontSize: '16px', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit', textShadow: '0 1px 2px black', width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' as const },
-    mainBtn: { background: 'linear-gradient(to bottom, #d32f2f, #b71c1c)', border: '2px solid #ffeba7', padding: '18px 60px', fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#fff', borderRadius: '4px', cursor: 'pointer', boxShadow: '0 5px 15px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.3)', textShadow: '0 2px 0 #3e2723', fontFamily: 'inherit', letterSpacing: '2px', width: isMobile ? '100%' : 'auto', boxSizing: 'border-box' as const }
-  }), [isMobile]);
+    modalOverlay: {
+      position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000,
+      display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)'
+    },
+    modalPanel: {
+      background: '#2c3e50', padding: '30px', borderRadius: '12px',
+      border: '2px solid #7f8c8d', width: '90%', maxWidth: '500px',
+      display: 'flex', flexDirection: 'column' as const, gap: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+    },
+    modalTitle: {
+      color: '#f1c40f', fontSize: '24px', fontWeight: 'bold', textAlign: 'center' as const,
+      borderBottom: '1px solid #7f8c8d', paddingBottom: '10px', marginBottom: '10px'
+    },
+    select: {
+      width: '100%', padding: '12px', background: '#2a1a1a', color: '#f0e6d2',
+      border: '1px solid #5d4037', borderRadius: '4px', fontSize: '16px', marginTop: '5px',
+      boxSizing: 'border-box' as const 
+    },
+    actionBtn: (primary: boolean) => ({
+      flex: 1, padding: '12px', borderRadius: '4px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer',
+      border: primary ? 'none' : '1px solid #95a5a6',
+      background: primary ? '#e67e22' : 'transparent',
+      color: primary ? '#fff' : '#95a5a6'
+    })
+  }), [isMobile, contentScale]);
+
+  const MenuCard = ({ label, desc, onClick, color = '#7f8c8d' }: { label: string, desc: string, onClick: () => void, color?: string }) => (
+    <div 
+      style={styles.menuCard(color)}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      className="hover-scale"
+      onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+      onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+    >
+      <div style={styles.cardLabel}>{label}</div>
+      <div style={styles.cardDesc}>{desc}</div>
+    </div>
+  );
 
   return (
     <div style={styles.container}>
       <div style={styles.bgOverlay}></div>
-      <div style={styles.title}>OPCG SIM</div>
-      <div style={styles.panel}>
-        <div style={styles.rivet(true, true)}></div>
-        <div style={styles.rivet(true, false)}></div>
-        <div style={styles.rivet(false, true)}></div>
-        <div style={styles.rivet(false, false)}></div>
-
-        <div style={styles.selectGroup}>
-          <label style={styles.label}>Player 1 (Host)</label>
-          <select value={p1Deck} onChange={(e) => setP1Deck(e.target.value)} style={styles.select}>
-            {deckOptions.map(opt => <option key={`p1-${opt.id}`} value={opt.id}>{opt.name}</option>)}
-          </select>
-        </div>
-
-        <div style={styles.vs}>VS</div>
-
-        <div style={styles.selectGroup}>
-          <label style={styles.label}>Player 2 (Opponent)</label>
-          <select value={p2Deck} onChange={(e) => setP2Deck(e.target.value)} style={styles.select}>
-            {deckOptions.map(opt => <option key={`p2-${opt.id}`} value={opt.id}>{opt.name}</option>)}
-          </select>
-        </div>
+      
+      <div style={styles.header}>
+        <button onClick={handleCacheImages} disabled={!!downloadProgress} style={styles.dlBtn} title="全てのカード画像をダウンロードしてキャッシュします">
+          {downloadProgress ? `DL中: ${Math.floor((downloadProgress.current / downloadProgress.total) * 100)}%` : <><span>📥</span> 画像一括DL</>}
+        </button>
       </div>
 
-      <div style={styles.actions}>
-        <button onClick={() => onStart(p1Deck, p2Deck, 'normal')} style={styles.mainBtn} className="hover-scale">VS CPU / Rule Enforced</button>
-        <div style={{ width: '100%', height: 1, background: 'rgba(212, 175, 55, 0.3)', margin: '10px 0' }} />
-        <div style={{ display: 'flex', width: '100%', gap: 10 }}>
-           <button onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'both' })} style={{ ...styles.subBtn, flex: 1, borderColor: '#2ecc71', color: '#2ecc71' }} className="hover-scale">1人回し (Solo)</button>
-        </div>
-        <div style={{ display: 'flex', width: '100%', gap: 10 }}>
-           <button onClick={onDeckBuilder} style={{ ...styles.subBtn, flex: 1 }} className="hover-scale">デッキ作成</button>
-           <button onClick={onCardList} style={{ ...styles.subBtn, flex: 1, borderColor: '#e67e22', color: '#e67e22' }} className="hover-scale">カードリスト</button>
-        </div>
-        <div style={{ display: 'flex', width: '100%', gap: 10, marginTop: 10 }}>
-            <button onClick={() => setShowRoomCreateModal(true)} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }} className="hover-scale">ルーム作成</button>
-            <button onClick={onLobby} style={{ ...styles.subBtn, flex: 1, borderColor: '#3498db', color: '#3498db' }} className="hover-scale">部屋に参加</button>
-        </div>
-      </div>
+      <div style={styles.scaleWrapper}>
+        <div ref={contentRef} style={styles.scaledContent}>
+          <div style={styles.title}>OPCG SIM</div>
 
-      {showRoomCreateModal && (
-        <div className="ui-overlay" style={{ zIndex: 2000 }}>
-          <div className="action-menu" style={{ maxWidth: '400px' }}>
-            <h3 className="menu-title">新規ルーム作成</h3>
-            <div style={{ padding: '10px 0' }}>
-              <label style={{ fontSize: '12px', color: '#666', display: 'block', textAlign: 'left', marginBottom: '5px' }}>部屋名</label>
-              <input 
-                type="text" 
-                value={roomName} 
-                onChange={(e) => setRoomName(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px', boxSizing: 'border-box' }}
-                autoFocus
-                placeholder="部屋名を入力"
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && roomName.trim()) {
-                        onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName });
-                    }
-                }}
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>Deck & Cards</div>
+            <div style={styles.grid}>
+              <MenuCard 
+                label="デッキ作成 / 一覧" 
+                desc="Deck Builder" 
+                onClick={() => { 
+                  logger.log({level:'info', action:'menu.deck_builder', msg: 'Open DeckBuilder'}); 
+                  onDeckBuilder(); 
+                }} 
+                color="#3498db" 
+              />
+              <MenuCard 
+                label="カードリスト" 
+                desc="Card Catalog" 
+                onClick={() => { 
+                  logger.log({level:'info', action:'menu.card_list', msg: 'Open CardList'}); 
+                  onCardList(); 
+                }} 
+                color="#e67e22" 
               />
             </div>
-            <div className="menu-buttons" style={{ marginTop: '20px' }}>
-              <button 
-                className="menu-btn primary" 
-                disabled={!roomName.trim()}
-                onClick={() => onStart(p1Deck, p2Deck, 'sandbox', { role: 'p1', room_name: roomName })}
-              >
-                作成して開始
-              </button>
-              <button className="menu-btn cancel" onClick={() => setShowRoomCreateModal(false)}>キャンセル</button>
+          </div>
+
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>Simulation</div>
+            <div style={styles.grid}>
+              {/* ▼▼▼ 修正: handleStartWithLog を呼んで、デッキID空で開始する ▼▼▼ */}
+              <MenuCard 
+                label="1人回しモード" 
+                desc="Solo Sandbox Mode" 
+                onClick={() => handleStartWithLog('sandbox', { role: 'both' })} 
+                color="#2ecc71" 
+              />
+              <MenuCard 
+                label="対戦モード" 
+                desc="Online Multiplayer" 
+                onClick={() => setActiveModal('multi')} 
+                color="#9b59b6" 
+              />
+              <MenuCard 
+                label="自動モード" 
+                desc="VS CPU (Rule Enforced)" 
+                onClick={() => handleStartWithLog('normal')} 
+                color="#e74c3c" 
+              />
             </div>
           </div>
         </div>
+      </div>
+
+      {activeModal === 'multi' && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalPanel}>
+            <div style={styles.modalTitle}>Online Multiplayer</div>
+            
+            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+              <label style={{ display: 'block', color: '#bdc3c7', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>新規ルーム作成</label>
+              <input 
+                type="text" 
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+                placeholder="部屋名を入力"
+                style={{ ...styles.select, marginTop: 0 }} 
+                autoFocus
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && roomName.trim()) {
+                        handleStartWithLog('sandbox', { role: 'p1', room_name: roomName });
+                    }
+                }}
+              />
+              <button 
+                onClick={() => handleStartWithLog('sandbox', { role: 'p1', room_name: roomName })}
+                disabled={!roomName.trim()}
+                style={{ ...styles.actionBtn(true), width: '100%', marginTop: '15px', opacity: roomName.trim() ? 1 : 0.5 }}
+              >
+                部屋を作成して開始
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', color: '#95a5a6', fontSize: '12px', margin: '-10px 0' }}>- OR -</div>
+
+            <button 
+              onClick={() => { 
+                logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); 
+                onLobby(); 
+              }} 
+              style={styles.actionBtn(false)}
+            >
+              ロビーで部屋を探す
+            </button>
+
+            <button onClick={() => setActiveModal('none')} style={{ background: 'none', border: 'none', color: '#7f8c8d', marginTop: '10px', cursor: 'pointer', textDecoration: 'underline' }}>
+              キャンセル
+            </button>
+          </div>
+        </div>
       )}
+
+      <style>{`
+        @keyframes spin { 
+          0% { transform: rotate(0deg); } 
+          100% { transform: rotate(360deg); } 
+        }
+      `}</style>
     </div>
   );
 };

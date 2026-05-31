@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -7,16 +7,63 @@ import { createCardContainer } from '../ui/CardRenderer';
 import { createInspectOverlay } from '../ui/InspectOverlay';
 import type { InspectOverlayContainer } from '../ui/InspectOverlay';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
+import { CardSelectModal } from '../ui/CardSelectModal';
+import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
 import { logger } from '../utils/logger';
+import { handleLocalAction } from '../game/localActionHandler';
+import { getCardImageUrl } from '../utils/imageAssets';
+
+const MOCK_DECKS: Record<string, any> = {
+  'imu.json': {
+    leader: { name: "イム", card_id: "ST01-001", power: 5000, type: "LEADER", life: 5 },
+    cards: Array.from({ length: 50 }, (_, i) => ({
+      name: `聖地マリージョア兵 ${i + 1}`,
+      card_id: `OP01-${String(i + 1).padStart(3, '0')}`,
+      power: 3000 + (i % 5) * 1000,
+      cost: 1 + (i % 5),
+      counter: 1000,
+      type: "CHARACTER",
+      trigger_text: i % 3 === 0 ? "トリガーあり" : "",
+      effect_text: "登場時: カードを1枚引く。"
+    }))
+  },
+  'nami.json': {
+    leader: { name: "ナミ", card_id: "OP03-040", power: 5000, type: "LEADER", life: 5 },
+    cards: Array.from({ length: 50 }, (_, i) => ({
+      name: `クリマ・タクト ${i + 1}`,
+      card_id: `OP03-${String(i + 1).padStart(3, '0')}`,
+      power: 2000 + (i % 4) * 1000,
+      cost: 1 + (i % 4),
+      counter: 2000,
+      type: "EVENT",
+      trigger_text: i % 2 === 0 ? "トリガー: 手札に加える" : "",
+      effect_text: "メイン: 相手のキャラ1枚をレストにする。"
+    }))
+  }
+};
 
 type DragState = { card: CardInstance; sprite: PIXI.Container; startPos: { x: number, y: number }; } | null;
 
-interface SandboxGameProps { gameId?: string; myPlayerId?: string; roomName?: string; onBack: () => void; }
+interface SandboxGameProps { 
+  gameId?: string; 
+  myPlayerId?: string; 
+  roomName?: string; 
+  onBack: () => void;
+  initialP1DeckId?: string;
+  initialP2DeckId?: string;
+}
 
-export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomName, onBack }: SandboxGameProps) => {
+export const SandboxGame = ({ 
+  gameId: initialGameId, 
+  myPlayerId = 'both', 
+  roomName, 
+  onBack,
+  initialP1DeckId, 
+  initialP2DeckId 
+}: SandboxGameProps) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const overlayRef = useRef<InspectOverlayContainer | null>(null);
@@ -25,21 +72,31 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   const [activeGameId, setActiveGameId] = useState<string | null>(initialGameId || null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
-  const [deckOptions, setDeckOptions] = useState<{id: string, name: string}[]>([]);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
+  const [selectingDeckFor, setSelectingDeckFor] = useState<string | null>(null);
+
   const [inspecting, setInspecting] = useState<{ type: 'deck' | 'life' | 'trash', pid: string } | null>(null);
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   const [dropChoice, setDropChoice] = useState<{ card: CardInstance, destPid: string, destZone: string } | null>(null);
+  
+  const [replacementState, setReplacementState] = useState<{ card: CardInstance, destPid: string } | null>(null);
+  
   const [selectedCard, setSelectedCard] = useState<CardInstance | null>(null);
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
   const longPressTimerRef = useRef<any>(null);
   const pressStartPosRef = useRef<{x: number, y: number} | null>(null);
+  
+  const pendingDragRef = useRef<{ card: CardInstance, x: number, y: number } | null>(null);
+  const longPressTriggeredRef = useRef(false);
 
   const dragStateRef = useRef(dragState);
   useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
+
+  const isLocalMode = useMemo(() => myPlayerId === 'both', [myPlayerId]);
 
   const isMyTurn = useMemo(() => {
     if (!gameState || myPlayerId === 'both') return true;
@@ -84,6 +141,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
           setSelectedCard(card);
           setDragState(null);
+          longPressTriggeredRef.current = true;
           longPressTimerRef.current = null;
       }, 500);
   };
@@ -96,26 +154,69 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
       pressStartPosRef.current = null;
   };
 
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+  const startDrag = useCallback((card: CardInstance, startPoint: { x: number, y: number }) => {
+    const app = appRef.current;
+    if (!app) return;
+    const { width: W, height: H } = app.screen;
+    const coords = calculateCoordinates(W, H);
+    
+    const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {}, isOpponent: false });
+    ghost.position.set(startPoint.x, startPoint.y); 
+    ghost.alpha = 0.8; 
+    ghost.scale.set(1.1);
+    app.stage.addChild(ghost); 
+    setDragState({ card, sprite: ghost, startPos: startPoint });
   }, []);
 
   useEffect(() => {
     const fetchDecks = async () => {
+      const options: DeckOption[] = [];
+
       try {
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
         if (data.success) {
-          setDeckOptions([{ id: 'imu.json', name: 'Imu (Default)' }, { id: 'nami.json', name: 'Nami (Default)' }, ...data.decks.map((d: any) => ({ id: `db:${d.id}`, name: d.name }))]);
+          data.decks.forEach((d: any) => { 
+            if (!d.id.endsWith('.json')) {
+              options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id }); 
+            }
+          });
         }
       } catch(e) { console.error(e); }
+
+      const uniqueMap = new Map();
+      options.forEach(o => uniqueMap.set(o.id, o));
+      setDeckOptions(Array.from(uniqueMap.values()));
     };
     fetchDecks();
   }, []);
 
   useEffect(() => {
+    if (isLocalMode) {
+      const hasInitialDecks = !!(initialP1DeckId && initialP2DeckId);
+
+      setGameState({
+        game_id: 'local-init',
+        room_name: roomName || 'LOCAL',
+        status: 'WAITING',
+        ready_states: { p1: hasInitialDecks, p2: hasInitialDecks },
+        players: {
+          p1: { 
+            name: initialP1DeckId || '', 
+            player_id: 'p1', 
+            zones: { hand: [], field: [], life: [], trash: [] } 
+          } as any,
+          p2: { 
+            name: initialP2DeckId || '', 
+            player_id: 'p2', 
+            zones: { hand: [], field: [], life: [], trash: [] } 
+          } as any
+        },
+        turn_info: { turn_count: 0, active_player_id: 'p1', current_phase: 'SETUP', winner: null }
+      });
+      return;
+    }
+
     let ws: WebSocket | null = null;
     const initGame = async () => {
       try {
@@ -142,7 +243,24 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     };
     initGame();
     return () => { if (ws) ws.close(); };
-  }, []);
+  }, [isLocalMode, initialP1DeckId, initialP2DeckId]); 
+
+  const hasAutoStartedRef = useRef(false);
+  useEffect(() => {
+    if (
+      isLocalMode && 
+      gameState && 
+      gameState.status === 'WAITING' && 
+      initialP1DeckId && 
+      initialP2DeckId &&
+      !hasAutoStartedRef.current
+    ) {
+      hasAutoStartedRef.current = true;
+      setTimeout(() => {
+        handleAction('START', {});
+      }, 100);
+    }
+  }, [gameState, isLocalMode, initialP1DeckId, initialP2DeckId]);
 
   useEffect(() => {
     if (!pixiContainerRef.current || (gameState && gameState.status === 'WAITING')) return;
@@ -188,15 +306,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
-    const children = [...app.stage.children];
-    children.forEach(child => { 
-        if (dragState && child === dragState.sprite) { }
-        else if (inspecting && overlayRef.current && child === overlayRef.current) { 
-             app.stage.removeChild(child); child.destroy({ children: true });
-        } else {
-             app.stage.removeChild(child); child.destroy({ children: true });
-        }
-    });
+    app.stage.removeChildren();
     
     const { width: W, height: H } = app.screen;
     const coords = calculateCoordinates(W, H);
@@ -206,20 +316,14 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     bg.beginFill(COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
     app.stage.addChild(bg);
     
-    const startDrag = (card: CardInstance, startPoint: { x: number, y: number }) => {
-        const ghost = createCardContainer(card, coords.CW, coords.CH, { onClick: () => {}, isOpponent: false });
-        ghost.position.set(startPoint.x, startPoint.y); ghost.alpha = 0.8; ghost.scale.set(1.1);
-        app.stage.addChild(ghost); 
-        setDragState({ card, sprite: ghost, startPos: startPoint });
-    };
-
     const onCardDown = (e: PIXI.FederatedPointerEvent, card: CardInstance) => {
         if (isPending || dragState || isActionBlockedByMulligan) return;
-        if ((card.type || '').toUpperCase() === 'LEADER') { handleAction('TOGGLE_REST', { card_uuid: card.uuid }); return; }
+        
         if (myPlayerId !== 'both' && gameState) { const me = gameState.players[myPlayerId as 'p1' | 'p2']; if (me && card.owner_id && card.owner_id !== me.name) return; }
         
+        longPressTriggeredRef.current = false;
         startLongPress(card, e.global.x, e.global.y);
-        startDrag(card, { x: e.global.x, y: e.global.y });
+        pendingDragRef.current = { card, x: e.global.x, y: e.global.y };
     };
 
     const bottomPlayer = isRotated ? gameState.players.p2 : gameState.players.p1;
@@ -237,6 +341,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           () => setInspecting(null), 
           (card, startPos) => onCardDown({ global: startPos } as any, card),
           (uuid) => { 
+              if (longPressTriggeredRef.current) return;
               const newSet = new Set(revealedCardIds); 
               if (newSet.has(uuid)) newSet.delete(uuid); else newSet.add(uuid); 
               setRevealedCardIds(newSet); 
@@ -246,7 +351,12 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'hand' }); },
           (uuid) => { handleAction('MOVE_CARD', { card_uuid: uuid, dest_player_id: inspecting.pid, dest_zone: 'trash' }); },
           (x) => { inspectScrollXRef.current = x; },
-          () => handleAction('SHUFFLE', { player_id: inspecting.pid })
+          () => handleAction('SHUFFLE', { player_id: inspecting.pid }),
+          (count) => {
+            const newSet = new Set(revealedCardIds);
+            inspectingCards.slice(0, count).forEach(c => newSet.add(c.uuid));
+            setRevealedCardIds(newSet);
+          }
         );
         app.stage.addChild(overlay);
         overlayRef.current = overlay;
@@ -256,7 +366,7 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     }
 
     if (dragState) app.stage.addChild(dragState.sprite);
-  }, [gameState, isPending, dragState, inspecting, isRotated, inspectingCards, revealedCardIds, isActionBlockedByMulligan]);
+  }, [gameState, isPending, dragState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan, startDrag]);
 
   useEffect(() => {
     const app = appRef.current;
@@ -269,6 +379,16 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
             if (Math.sqrt(dx * dx + dy * dy) > 10) cancelLongPress();
         }
 
+        if (pendingDragRef.current && !dragState) {
+             const dx = e.clientX - pendingDragRef.current.x;
+             const dy = e.clientY - pendingDragRef.current.y;
+             if (Math.sqrt(dx * dx + dy * dy) > 10) {
+                 startDrag(pendingDragRef.current.card, { x: pendingDragRef.current.x, y: pendingDragRef.current.y });
+                 pendingDragRef.current = null;
+                 cancelLongPress();
+             }
+        }
+
         if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; 
         dragState.sprite.position.set(e.clientX, e.clientY); 
         if (overlayRef.current) overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
@@ -276,147 +396,374 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
     
     const onPointerUp = async (e: PointerEvent) => {
         cancelLongPress();
-
-        if (!dragState) return;
-        const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
-        if ((card.type || '').toUpperCase() === 'LEADER') { setDragState(null); return; }
-        const distFromStart = Math.sqrt(Math.pow(endPos.x - dragState.startPos.x, 2) + Math.pow(endPos.y - dragState.startPos.y, 2));
-
-        if (distFromStart < 10) {
-            if (inspecting) {
-                if (inspectingCards.some(c => c.uuid === card.uuid)) {
-                    const newSet = new Set(revealedCardIds);
-                    if (newSet.has(card.uuid)) newSet.delete(card.uuid);
-                    else newSet.add(card.uuid);
-                    setRevealedCardIds(newSet);
-                }
-                setDragState(null); 
-                return;
-            }
-        }
-
-        const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
-        const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
         
-        if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
-
-        if (inspecting && overlayRef.current && inspecting.pid === destPid) {
-             const PANEL_W = Math.min(W * 0.95, 1200);
-             const PANEL_X = (W - PANEL_W) / 2;
-             const PANEL_Y = 15; 
-             const PANEL_H = Math.min(H * 0.48, 450);
-             const isInsidePanel = endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W && endPos.y >= PANEL_Y && endPos.y <= PANEL_Y + PANEL_H;
-
-             if (isInsidePanel) {
-                 const HEADER_HEIGHT = 40;
-                 const SCROLL_ZONE_HEIGHT = 70;
-                 if (endPos.y > PANEL_Y + HEADER_HEIGHT && endPos.y < PANEL_Y + PANEL_H - SCROLL_ZONE_HEIGHT) {
-                     const DISPLAY_CARD_WIDTH = 70; 
-                     const CARD_GAP = 15;
-                     const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
-                     const listStartX = PANEL_X; 
-                     const relativeX = endPos.x + inspectScrollXRef.current - listStartX;
-                     let newIndex = Math.floor(relativeX / TOTAL_CARD_WIDTH);
-                     newIndex = Math.max(0, newIndex);
-                     handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: newIndex });
-                 }
-                 setDragState(null);
-                 return;
-             }
-        }
-
-        if (distFromStart < 10) {
-            const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
-            if (destP) { const stackInfo = findInStack(destP); if (stackInfo) { inspectScrollXRef.current = 20; setInspecting({ type: stackInfo.type as any, pid: destPid }); setRevealedCardIds(new Set()); setDragState(null); return; } }
-            if (!destP?.zones.hand.some(c => c.uuid === card.uuid)) handleAction('TOGGLE_REST', { card_uuid: card.uuid });
-            setDragState(null); return;
-        }
-
-        let destZone = 'field'; 
-        const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
-        const THRESHOLD = coords.CH; 
-        const checkZone = (isTopSide: boolean) => {
-            const getX = (val: number) => isTopSide ? W - val : val;
-
-            const yBase = isTopSide ? 0 : midY;
-            const r2Y = isTopSide ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
-            const r3Y = isTopSide ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
-            const r4Y = isTopSide ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
+        if (dragState) {
+            const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
+            if ((card.type || '').toUpperCase() === 'LEADER') { setDragState(null); return; }
             
-            if (checkDist(getX(coords.getLeaderX(W)), r2Y) < THRESHOLD) return 'leader';
-            if (checkDist(getX(coords.getStageX(W)), r2Y) < THRESHOLD) return 'stage';
-            if (checkDist(getX(coords.getLifeX(W)), r2Y) < THRESHOLD) return 'life';
-            if (checkDist(getX(coords.getTrashX(W)), r3Y) < THRESHOLD) return 'trash';
-            if (checkDist(getX(coords.getDeckX(W)), r2Y) < THRESHOLD) return 'deck';
-            if (Math.abs(r4Y - endPos.y) < coords.CH) return 'hand';
-            if (checkDist(getX(coords.getDonDeckX(W)), r3Y) < THRESHOLD) return 'don_deck';
-            if (checkDist(getX(coords.getDonActiveX(W)), r3Y) < THRESHOLD) return 'don_active';
-            if (checkDist(getX(coords.getDonRestX(W)), r3Y) < THRESHOLD) return 'don_rested';
-            return null;
-        };
+            if (inspecting && overlayRef.current) {
+                 const { width: W, height: H } = app.screen;
+                 const PANEL_W = Math.min(W * 0.95, 1200);
+                 const PANEL_X = (W - PANEL_W) / 2;
+                 const PANEL_Y = 40; 
+                 const PLAYER_AREA_RESERVE = Math.max(250, H * 0.4); 
+                 
+                 const isInsidePanel = endPos.x >= PANEL_X && endPos.x <= PANEL_X + PANEL_W && endPos.y >= PANEL_Y && endPos.y <= H - PLAYER_AREA_RESERVE;
+                 
+                 if (inspecting.pid === ((endPos.y < H/2) ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1'))) {
+                     if (isInsidePanel) {
+                         const HEADER_HEIGHT = 130;
+                         const SCROLL_ZONE_HEIGHT = 50;
+                         const listAreaTop = PANEL_Y + HEADER_HEIGHT;
+                         const listAreaBottom = Math.min(H - PLAYER_AREA_RESERVE, 450 + PANEL_Y) - SCROLL_ZONE_HEIGHT;
 
-        if (card.card_id === "DON" || card.type === "DON") {
-            const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
-            if (targetPlayer) {
-                const getX = (val: number) => isTopArea ? W - val : val;
-                const yBase = isTopArea ? 0 : midY; const leaderY = isTopArea ? (midY - coords.getY(2) - coords.CH/2) : (yBase + coords.getY(2) + coords.CH/2);
-                if (targetPlayer.leader && Math.abs(endPos.x - getX(coords.getLeaderX(W))) < THRESHOLD && Math.abs(endPos.y - leaderY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid }); setDragState(null); return; }
-                const fieldY = isTopArea ? (midY - coords.getY(1) - coords.CH/2) : (yBase + coords.getY(1) + coords.CH/2);
-                const fieldCards = targetPlayer.zones.field;
-                for (let i = 0; i < fieldCards.length; i++) { 
-                    const cx = getX(coords.getFieldX(i, W, coords.CW, fieldCards.length));
-                    if (Math.abs(endPos.x - cx) < THRESHOLD && Math.abs(endPos.y - fieldY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: fieldCards[i].uuid }); setDragState(null); return; } 
+                         if (endPos.y > listAreaTop && endPos.y < listAreaBottom) {
+                             const DISPLAY_CARD_WIDTH = 55; 
+                             const CARD_GAP = 10;
+                             const TOTAL_CARD_WIDTH = DISPLAY_CARD_WIDTH + CARD_GAP;
+                             const relativeX = endPos.x + inspectScrollXRef.current - PANEL_X;
+                             let newIndex = Math.floor(relativeX / TOTAL_CARD_WIDTH);
+                             newIndex = Math.max(0, newIndex);
+                             handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: newIndex });
+                         }
+                         setDragState(null);
+                         return;
+                     }
+                 }
+            }
+
+            const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
+            const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
+            
+            if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
+
+            const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
+            const THRESHOLD = coords.CH; 
+            const checkZone = (isTopSide: boolean) => {
+                const getX = (val: number) => isTopSide ? W - val : val;
+                const yBase = isTopSide ? 0 : midY;
+                const r2Y = isTopSide ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
+                const r3Y = isTopSide ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
+                const r4Y = isTopSide ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
+                if (checkDist(getX(coords.getLeaderX(W)), r2Y) < THRESHOLD) return 'leader';
+                if (checkDist(getX(coords.getStageX(W)), r2Y) < THRESHOLD) return 'stage';
+                if (checkDist(getX(coords.getLifeX(W)), r2Y) < THRESHOLD) return 'life';
+                if (checkDist(getX(coords.getTrashX(W)), r3Y) < THRESHOLD) return 'trash';
+                if (checkDist(getX(coords.getDeckX(W)), r2Y) < THRESHOLD) return 'deck';
+                if (Math.abs(r4Y - endPos.y) < coords.CH) return 'hand';
+                if (checkDist(getX(coords.getDonDeckX(W)), r3Y) < THRESHOLD) return 'don_deck';
+                if (checkDist(getX(coords.getDonActiveX(W)), r3Y) < THRESHOLD) return 'don_active';
+                if (checkDist(getX(coords.getDonRestX(W)), r3Y) < THRESHOLD) return 'don_rested';
+                return null;
+            };
+
+            if (card.card_id === "DON" || card.type === "DON") {
+                const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+                if (targetPlayer) {
+                    const getX = (val: number) => isTopArea ? W - val : val;
+                    const yBase = isTopArea ? 0 : midY; const leaderY = isTopArea ? (midY - coords.getY(2) - coords.CH/2) : (yBase + coords.getY(2) + coords.CH/2);
+                    if (targetPlayer.leader && Math.abs(endPos.x - getX(coords.getLeaderX(W))) < THRESHOLD && Math.abs(endPos.y - leaderY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid }); setDragState(null); return; }
+                    const fieldY = isTopArea ? (midY - coords.getY(1) - coords.CH/2) : (yBase + coords.getY(1) + coords.CH/2);
+                    const fieldCards = targetPlayer.zones.field;
+                    for (let i = 0; i < fieldCards.length; i++) { 
+                        const cx = getX(coords.getFieldX(i, W, coords.CW, fieldCards.length));
+                        if (Math.abs(endPos.x - cx) < THRESHOLD && Math.abs(endPos.y - fieldY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: fieldCards[i].uuid }); setDragState(null); return; } 
+                    }
+                }
+                const dZone = checkZone(isTopArea); if (dZone && ['don_active', 'don_rested', 'don_deck'].includes(dZone)) handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
+                setDragState(null); return;
+            }
+
+            const detectedZone = checkZone(isTopArea);
+            
+            if (detectedZone === 'deck' || detectedZone === 'life') { 
+                setDropChoice({ card, destPid, destZone: detectedZone }); 
+                setDragState(null); 
+                return; 
+            } 
+            
+            const destZone = detectedZone || 'field';
+            
+            if (destZone === 'field') {
+                const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+                if (destP && destP.zones.field.length >= 5) {
+                    const isAlreadyOnField = destP.zones.field.some(c => c.uuid === card.uuid);
+                    if (!isAlreadyOnField) {
+                        setReplacementState({ card, destPid });
+                        setDragState(null);
+                        return;
+                    }
                 }
             }
-            const dZone = checkZone(isTopArea); if (dZone && ['don_active', 'don_rested', 'don_deck'].includes(dZone)) handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
-            setDragState(null); return;
-        }
-        const detectedZone = checkZone(isTopArea); 
-        if (detectedZone === 'deck' || detectedZone === 'life') { setDropChoice({ card, destPid, destZone: detectedZone }); setDragState(null); return; } 
-        else if (detectedZone) { destZone = detectedZone; }
-        const animateAndSend = () => {
-            const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
-            const step = () => {
-                const dx = tx - sprite.x; const dy = ty - sprite.y;
-                if (Math.sqrt(dx*dx + dy*dy) < 5) { app.ticker.remove(step); handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null); } else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
+
+            const animateAndSend = () => {
+                const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
+                const step = () => {
+                    const dx = tx - sprite.x; const dy = ty - sprite.y;
+                    if (Math.sqrt(dx*dx + dy*dy) < 5) { app.ticker.remove(step); handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: destZone }); setDragState(null); } else { sprite.x += dx * 0.3; sprite.y += dy * 0.3; }
+                };
+                app.ticker.add(step);
             };
-            app.ticker.add(step);
-        };
-        animateAndSend();
+            animateAndSend();
+            return;
+        }
+
+        if (pendingDragRef.current) {
+            const card = pendingDragRef.current.card;
+            pendingDragRef.current = null;
+
+            if (longPressTriggeredRef.current) return;
+
+            if ((card.type || '').toUpperCase() === 'LEADER') { 
+                handleAction('TOGGLE_REST', { card_uuid: card.uuid }); 
+                return; 
+            }
+
+            if (inspecting) return;
+
+            const { height: H } = app.screen; const midY = H / 2;
+            const isTopArea = e.clientY < midY; 
+            let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
+            
+            if (myPlayerId !== 'both' && destPid !== myPlayerId) return;
+
+            const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+            
+            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
+            if (destP) { 
+                const stackInfo = findInStack(destP); 
+                if (stackInfo) { 
+                    inspectScrollXRef.current = 20; 
+                    setInspecting({ type: stackInfo.type as any, pid: destPid }); 
+                    setRevealedCardIds(new Set()); 
+                    return; 
+                } 
+            }
+
+            if (destP && !destP.zones.hand.some(c => c.uuid === card.uuid)) {
+                 handleAction('TOGGLE_REST', { card_uuid: card.uuid });
+            }
+        }
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
-  }, [dragState, gameState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan]);
+  }, [dragState, gameState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan, startDrag]);
 
-  const handleAction = async (type: string, params: any) => {
-      if (isPending || !gameState || !activeGameId) return;
-      setIsPending(true);
-      try { const pid = myPlayerId === 'both' ? (params.player_id || 'p1') : myPlayerId; const res = await apiClient.sendSandboxAction(activeGameId, { action_type: type, player_id: pid, ...params }); setGameState(res.state); } catch(e) { logger.error('sandbox.action_fail', String(e)); } finally { setIsPending(false); }
+  const handleReplacement = async (trashCardUuids: string[]) => {
+    if (!replacementState || trashCardUuids.length === 0 || !gameState) return;
+    const { card, destPid } = replacementState;
+    const trashUuid = trashCardUuids[0];
+    const pid = myPlayerId === 'both' ? destPid : myPlayerId;
+
+    let tempState = gameState;
+
+    const trashParams = { 
+      card_uuid: trashUuid, 
+      dest_player_id: destPid, 
+      dest_zone: 'trash', 
+      player_id: pid 
+    };
+    tempState = handleLocalAction(tempState, 'MOVE_CARD', trashParams);
+
+    const fieldParams = { 
+      card_uuid: card.uuid, 
+      dest_player_id: destPid, 
+      dest_zone: 'field', 
+      player_id: pid 
+    };
+    tempState = handleLocalAction(tempState, 'MOVE_CARD', fieldParams);
+
+    setGameState(tempState);
+    setReplacementState(null);
+
+    if (!isLocalMode && activeGameId) {
+      try {
+        await apiClient.sendSandboxAction(activeGameId, { action_type: 'MOVE_CARD', ...trashParams });
+        await apiClient.sendSandboxAction(activeGameId, { action_type: 'MOVE_CARD', ...fieldParams });
+      } catch (e) {
+        console.error("Failed to sync replacement actions", e);
+      }
+    }
   };
 
-  if (gameState && gameState.status === 'WAITING') {
+  const handleAction = async (type: string, params: any) => {
+      if (isPending || !gameState) return;
+      if (!isLocalMode && !activeGameId) return;
+      setIsPending(true);
+      try { 
+          let localParams = { ...params };
+          const pid = myPlayerId === 'both' ? (params.player_id || 'p1') : myPlayerId;
+
+          const getDeckData = async (deckId: string) => {
+              if (!deckId) return { leader: [], cards: [] };
+              if (MOCK_DECKS[deckId]) return MOCK_DECKS[deckId];
+              let cacheKey = `opcg_deck_${deckId}`;
+              if (deckId.startsWith('db:')) cacheKey = `opcg_deck_${deckId.substring(3)}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) { try { return JSON.parse(cached); } catch(e) {} }
+              if (!deckId.startsWith('db:') && !['imu.json', 'nami.json'].includes(deckId)) return { leader: [], cards: [] };
+              const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/get?id=${deckId}`);
+              if (!res.ok) throw new Error();
+              const data = await res.json();
+              const finalData = data.deck || data;
+              localStorage.setItem(cacheKey, JSON.stringify(finalData));
+              return finalData;
+          };
+
+          const normalizeDeckData = (data: any) => {
+            if (!data) return { leader: null, cards: [] };
+            let leader = data.leader;
+            if (Array.isArray(leader)) {
+                leader = leader.length > 0 ? leader[0] : null;
+            }
+            if (data.deck && data.deck.leader) {
+                 if (Array.isArray(data.deck.leader)) {
+                     leader = data.deck.leader.length > 0 ? data.deck.leader[0] : null;
+                 } else {
+                     leader = data.deck.leader;
+                 }
+            }
+            return {
+                ...data,
+                leader: leader,
+                cards: data.cards || (data.deck ? data.deck.cards : [])
+            };
+          };
+
+          if (isLocalMode && type === 'SET_DECK') {
+              const rawData = await getDeckData(params.deck_id);
+              localParams.deckData = normalizeDeckData(rawData);
+          }
+
+          if (type === 'START') {
+              const p1DeckId = gameState.players.p1.name;
+              const p2DeckId = gameState.players.p2.name;
+              const [d1, d2] = await Promise.all([getDeckData(p1DeckId), getDeckData(p2DeckId)]);
+              localParams.p1Deck = normalizeDeckData(d1);
+              localParams.p2Deck = normalizeDeckData(d2);
+          }
+
+          const newState = handleLocalAction(gameState, type, { ...localParams, player_id: pid });
+          setGameState(newState);
+
+          if (!isLocalMode) {
+              await apiClient.sendSandboxAction(activeGameId!, { action_type: type, player_id: pid, ...params }); 
+          }
+      } catch(e) { console.error(e); alert('アクションエラー'); } finally { setIsPending(false); }
+  };
+
+  const shouldShowSetupScreen = gameState && gameState.status === 'WAITING' && !(initialP1DeckId && initialP2DeckId);
+
+  if (shouldShowSetupScreen) {
     return (
-      <div style={{ width: '100vw', height: '100vh', background: '#1a0b0b', color: '#f0e6d2', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box', overflowY: 'auto' }}>
-        <h1 style={{ color: '#ffd700', fontSize: isMobile ? '24px' : '32px', marginBottom: '20px' }}>ROOM: {gameState.room_name}</h1>
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '15px' : '30px', width: '100%', maxWidth: '900px', justifyContent: 'center' }}>
-          {(['p1', 'p2'] as const).map(pid => (
-            <div key={pid} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', border: '2px solid #5d4037', flex: 1, textAlign: 'center', maxWidth: isMobile ? '100%' : '350px' }}>
-              <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>{pid.toUpperCase()}: {gameState.players[pid].name}</h2>
-              <div style={{ marginBottom: '15px' }}>{gameState.ready_states?.[pid] ? <span style={{ color: '#2ecc71', fontWeight: 'bold' }}>READY</span> : <span style={{ color: '#e74c3c' }}>NOT READY</span>}</div>
-              {(pid === myPlayerId || myPlayerId === 'both') && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <select style={{ padding: '10px', background: '#fff8e1', border: '2px solid #8b4513', borderRadius: '4px' }} onChange={(e) => handleAction('SET_DECK', { player_id: pid, deck_id: e.target.value })}><option value="">デッキを選択...</option>{deckOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}</select>
-                  <button onClick={() => handleAction('READY', { player_id: pid })} style={{ padding: '12px', background: gameState.ready_states?.[pid] ? '#555' : '#d32f2f', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{gameState.ready_states?.[pid] ? 'キャンセル' : '準備完了'}</button>
+      <div style={{ width: '100vw', height: '100vh', background: 'radial-gradient(circle at center, #2c3e50 0%, #000000 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
+        <div style={{ 
+          background: '#2c3e50', padding: '30px', borderRadius: '12px', border: '2px solid #7f8c8d', 
+          width: '90%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '20px', 
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)', color: '#ecf0f1'
+        }}>
+          <h2 style={{ color: '#f1c40f', fontSize: '24px', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid #7f8c8d', paddingBottom: '10px', margin: 0 }}>
+            {gameState?.room_name || 'GAME SETUP'}
+          </h2>
+
+          {(['p1', 'p2'] as const).map(pid => {
+            const playerState = gameState?.players[pid];
+            const leaderCard = playerState?.leader;
+            const hasDeck = !!leaderCard;
+            
+            return (
+              <div key={pid} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ color: '#bdc3c7', fontSize: '12px', fontWeight: 'bold' }}>
+                    {pid === 'p1' ? 'Player 1' : 'Player 2'}
+                  </label>
+                  {gameState?.ready_states?.[pid] ? (
+                    <span style={{ color: '#2ecc71', fontSize: '10px', fontWeight: 'bold' }}>READY</span>
+                  ) : (
+                    <span style={{ color: '#e74c3c', fontSize: '10px' }}>NOT READY</span>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+                
+                {(pid === myPlayerId || myPlayerId === 'both') ? (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div 
+                      onClick={() => setSelectingDeckFor(pid)}
+                      style={{ 
+                        flex: 1, height: '60px', 
+                        background: '#2a1a1a', border: '1px solid #5d4037', borderRadius: '4px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', overflow: 'hidden', position: 'relative'
+                      }}
+                    >
+                      {hasDeck ? (
+                        <>
+                          <img 
+                            src={getCardImageUrl(leaderCard?.card_id)} 
+                            alt="leader"
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} 
+                          />
+                          <span style={{ zIndex: 1, fontWeight: 'bold', textShadow: '0 2px 4px black' }}>{leaderCard?.name || 'Deck Selected'}</span>
+                        </>
+                      ) : (
+                        <span style={{ color: '#7f8c8d', fontSize: '14px' }}>＋ デッキを選択</span>
+                      )}
+                    </div>
+
+                    <button 
+                      onClick={() => handleAction('READY', { player_id: pid })} 
+                      disabled={!hasDeck}
+                      style={{ 
+                        width: '80px', height: '60px',
+                        background: gameState?.ready_states?.[pid] ? '#2ecc71' : (hasDeck ? '#e67e22' : '#555'), 
+                        color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: hasDeck ? 'pointer' : 'not-allowed'
+                      }}
+                    >
+                      {gameState?.ready_states?.[pid] ? 'OK' : 'SET'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ height: '60px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7f8c8d', fontSize: '14px', border: '1px dashed #555' }}>
+                    {hasDeck ? 'Deck Selected' : 'Waiting for selection...'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div style={{ textAlign: 'center', color: '#95a5a6', fontStyle: 'italic', margin: '-10px 0' }}>VS</div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button onClick={onBack} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #95a5a6', color: '#95a5a6', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
+              退出
+            </button>
+            {(myPlayerId === 'p1' || myPlayerId === 'both') && (
+              <button 
+                disabled={!(gameState?.ready_states?.p1 && gameState?.ready_states?.p2)} 
+                onClick={() => handleAction('START', {})} 
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: (gameState?.ready_states?.p1 && gameState?.ready_states?.p2) ? '#e67e22' : '#34495e', 
+                  color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', 
+                  cursor: (gameState?.ready_states?.p1 && gameState?.ready_states?.p2) ? 'pointer' : 'not-allowed'
+                }}
+              >
+                GAME START
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{ marginTop: '40px', display: 'flex', gap: '15px' }}>
-          <button onClick={onBack} style={{ padding: '12px 25px', background: '#555', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>退出</button>
-          {(myPlayerId === 'p1' || myPlayerId === 'both') && <button disabled={!(gameState.ready_states?.p1 && gameState.ready_states?.p2)} onClick={() => handleAction('START', {})} style={{ padding: '12px 50px', background: (gameState.ready_states?.p1 && gameState.ready_states?.p2) ? '#2ecc71' : '#333', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>開始</button>}
-        </div>
+
+        {selectingDeckFor && (
+          <DeckSelectModal 
+            title={`デッキを選択 (${selectingDeckFor.toUpperCase()})`}
+            options={deckOptions}
+            onSelect={(deckId) => {
+              handleAction('SET_DECK', { player_id: selectingDeckFor, deck_id: deckId });
+              setSelectingDeckFor(null);
+            }}
+            onClose={() => setSelectingDeckFor(null)}
+          />
+        )}
       </div>
     );
   }
@@ -436,10 +783,22 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
           </div>
         </div>
       )}
-      {!gameState && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}><h2>Connecting...</h2></div>}
+      {(!gameState || (gameState.status === 'WAITING' && initialP1DeckId && initialP2DeckId)) && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', color: 'white' }}>
+          <h2>Loading...</h2>
+        </div>
+      )}
+      {selectedCard && <CardDetailSheet card={selectedCard} location="unknown" isMyTurn={false} onAction={async () => {}} onClose={() => setSelectedCard(null)} />}
       
-      {selectedCard && (
-        <CardDetailSheet card={selectedCard} location="unknown" isMyTurn={false} onAction={async () => {}} onClose={() => setSelectedCard(null)} />
+      {replacementState && gameState && (
+        <CardSelectModal
+          candidates={gameState.players[replacementState.destPid as 'p1'|'p2'].zones.field}
+          message="キャラクターエリアが一杯です。入れ替えるカード（トラッシュに送るカード）を選択してください。"
+          minSelect={1}
+          maxSelect={1}
+          onConfirm={handleReplacement}
+          onCancel={() => setReplacementState(null)}
+        />
       )}
 
       {gameState && (
@@ -448,21 +807,8 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                 <button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button>
                 <button onClick={() => { if(window.confirm('ゲームを初期状態にリセットしますか？')) handleAction('RESET', {}); }} style={{ background: 'rgba(200, 0, 0, 0.8)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>リセット</button>
             </div>
-
             {isMulliganPhase && (
-                <div style={{ 
-                    position: 'absolute', 
-                    top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y + 22}px` : '60px', 
-                    left: '50%', 
-                    transform: (myPlayerId === 'both' && layoutCoords) ? 'translate(-50%, -50%)' : 'translateX(-50%)', 
-                    pointerEvents: 'auto', 
-                    display: 'flex', 
-                    gap: '20px', 
-                    background: 'rgba(0,0,0,0.6)', 
-                    padding: '15px', 
-                    borderRadius: '12px', 
-                    border: '1px solid #555' 
-                }}>
+                <div style={{ position: 'absolute', top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y + 22}px` : '60px', left: '50%', transform: (myPlayerId === 'both' && layoutCoords) ? 'translate(-50%, -50%)' : 'translateX(-50%)', pointerEvents: 'auto', display: 'flex', gap: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px', borderRadius: '12px', border: '1px solid #555' }}>
                     {(myPlayerId === 'p1' || myPlayerId === 'both') && !mulliganStatus.p1 && (
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>P1 マリガン</div>
@@ -483,22 +829,23 @@ export const SandboxGame = ({ gameId: initialGameId, myPlayerId = 'both', roomNa
                     )}
                 </div>
             )}
-
             <button 
-                onClick={() => handleAction('TURN_END', {})} 
-                disabled={isPending || !isMyTurn || isActionBlockedByMulligan} 
-                style={{ 
-                    position: 'absolute', 
-                    left: layoutCoords ? `${layoutCoords.x + 40}px` : 'auto', 
-                    top: layoutCoords ? `${layoutCoords.y}px` : '50%', 
-                    padding: '10px 20px', 
-                    backgroundColor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, 
-                    color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', pointerEvents: 'auto',
-                    cursor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? 'not-allowed' : 'pointer',
-                    opacity: (isMyTurn && !isActionBlockedByMulligan) ? 1 : 0.6
-                }}
+              onClick={() => handleAction('TURN_END', {})} 
+              disabled={isPending || !isMyTurn || isActionBlockedByMulligan} 
+              style={{ 
+                position: 'absolute', 
+                left: layoutCoords ? `${layoutCoords.x + 40}px` : 'auto', 
+                top: layoutCoords ? `${layoutCoords.y}px` : '50%', 
+                transform: 'translateY(-50%)',
+                padding: '5px 20px',
+                backgroundColor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY, 
+                color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', pointerEvents: 'auto', 
+                cursor: (isPending || !isMyTurn || isActionBlockedByMulligan) ? 'not-allowed' : 'pointer', 
+                opacity: (isMyTurn && !isActionBlockedByMulligan) ? 1 : 0.6,
+                whiteSpace: 'nowrap'
+              }}
             >
-                {isPending ? '送信中' : '終了'}
+              {isPending ? '送信中' : '終了'}
             </button>
         </div>
       )}

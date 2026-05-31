@@ -7,11 +7,15 @@ import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
 import { DebugReporter } from '../ui/DebugReporter';
+import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
+import { API_CONFIG } from '../api/api.config';
+import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 
-export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
+
+export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -27,6 +31,12 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
+  const [p1DeckId, setP1DeckId] = useState(initialP1 || 'imu.json');
+  const [p2DeckId, setP2DeckId] = useState(initialP2 || 'nami.json');
+  const [isSetupComplete, setIsSetupComplete] = useState(!!(initialP1 && initialP2));
+  const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
+  const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
+
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
 
@@ -38,6 +48,52 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     setPendingRequest,
     pendingRequest
   );
+
+  useEffect(() => {
+    if (isSetupComplete) return;
+
+    const fetchDecks = async () => {
+      const options: DeckOption[] = [];
+      try {
+        const localIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
+        localIds.forEach((id: string) => {
+          const deckData = localStorage.getItem(`opcg_deck_${id}`);
+          if (deckData) {
+            const parsed = JSON.parse(deckData);
+            options.push({ id: id, name: parsed.name || `Local Deck ${id}`, leaderId: parsed.leader_id });
+          }
+        });
+      } catch(e) { console.error(e); }
+
+      try {
+        const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
+        const data = await res.json();
+        if (data.success) {
+          data.decks.forEach((d: any) => { 
+            if (!d.id.endsWith('.json')) {
+              options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id }); 
+            }
+          });
+        }
+      } catch(e) { console.error(e); }
+
+      options.unshift(
+        { id: 'imu.json', name: 'Imu (Default)', leaderId: 'ST01-001' },
+        { id: 'nami.json', name: 'Nami (Default)', leaderId: 'OP03-040' }
+      );
+
+      const uniqueMap = new Map();
+      options.forEach(o => uniqueMap.set(o.id, o));
+      setDeckOptions(Array.from(uniqueMap.values()));
+    };
+    fetchDecks();
+  }, [isSetupComplete]);
+
+  const handleGameStart = () => {
+    if (p1DeckId && p2DeckId) {
+      setIsSetupComplete(true);
+    }
+  };
 
   const handleSelectionResolve = async (selectedUuids: string[]) => {
     if (!gameState?.game_id || !pendingRequest) return;
@@ -184,7 +240,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
   };
   
   useEffect(() => {
-    if (!pixiContainerRef.current) return;
+    if (!pixiContainerRef.current || !isSetupComplete) return;
 
     const app = new PIXI.Application({
       width: window.innerWidth,
@@ -201,7 +257,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
-    startGame(p1Deck, p2Deck);
+    startGame(p1DeckId, p2DeckId);
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
@@ -214,7 +270,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
-  }, []);
+  }, [isSetupComplete]);
 
   useEffect(() => {
     const app = appRef.current;
@@ -272,6 +328,104 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
     logger.flushLogs();
     onBack();
   };
+
+  if (!isSetupComplete) {
+    const getLeaderImage = (deckId: string) => {
+      const opt = deckOptions.find(d => d.id === deckId);
+      return opt?.leaderId ? getCardImageUrl(opt.leaderId) : null;
+    };
+    const getDeckName = (deckId: string) => {
+      const opt = deckOptions.find(d => d.id === deckId);
+      return opt?.name || deckId;
+    };
+
+    return (
+      <div style={{ width: '100vw', height: '100vh', background: 'radial-gradient(circle at center, #2c3e50 0%, #000000 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
+        <div style={{ 
+          background: '#2c3e50', padding: '30px', borderRadius: '12px', border: '2px solid #7f8c8d', 
+          width: '90%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '20px', 
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)', color: '#ecf0f1'
+        }}>
+          <h2 style={{ color: '#f1c40f', fontSize: '24px', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid #7f8c8d', paddingBottom: '10px', margin: 0 }}>
+            VS CPU SETUP
+          </h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <label style={{ color: '#bdc3c7', fontSize: '12px', fontWeight: 'bold' }}>Player 1 (あなた)</label>
+            <div 
+              onClick={() => setSelectingDeckFor('p1')}
+              style={{ 
+                height: '60px', background: '#2a1a1a', border: '1px solid #5d4037', borderRadius: '4px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', position: 'relative'
+              }}
+            >
+              {p1DeckId ? (
+                <>
+                  <img src={getLeaderImage(p1DeckId) || ''} alt="leader" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
+                  <span style={{ zIndex: 1, fontWeight: 'bold', textShadow: '0 2px 4px black' }}>{getDeckName(p1DeckId)}</span>
+                </>
+              ) : (
+                <span style={{ color: '#7f8c8d', fontSize: '14px' }}>＋ デッキを選択</span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center', color: '#95a5a6', fontStyle: 'italic', margin: '-10px 0' }}>VS</div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <label style={{ color: '#bdc3c7', fontSize: '12px', fontWeight: 'bold' }}>Player 2 (CPU)</label>
+            <div 
+              onClick={() => setSelectingDeckFor('p2')}
+              style={{ 
+                height: '60px', background: '#2a1a1a', border: '1px solid #5d4037', borderRadius: '4px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', position: 'relative'
+              }}
+            >
+              {p2DeckId ? (
+                <>
+                  <img src={getLeaderImage(p2DeckId) || ''} alt="leader" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
+                  <span style={{ zIndex: 1, fontWeight: 'bold', textShadow: '0 2px 4px black' }}>{getDeckName(p2DeckId)}</span>
+                </>
+              ) : (
+                <span style={{ color: '#7f8c8d', fontSize: '14px' }}>＋ デッキを選択</span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button onClick={onBack} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #95a5a6', color: '#95a5a6', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
+              キャンセル
+            </button>
+            <button 
+              onClick={handleGameStart} 
+              disabled={!p1DeckId || !p2DeckId}
+              style={{ 
+                flex: 1, padding: '12px', 
+                background: (p1DeckId && p2DeckId) ? '#e67e22' : '#34495e', 
+                color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', 
+                cursor: (p1DeckId && p2DeckId) ? 'pointer' : 'not-allowed'
+              }}
+            >
+              GAME START
+            </button>
+          </div>
+        </div>
+
+        {selectingDeckFor && (
+          <DeckSelectModal 
+            title={`デッキを選択 (${selectingDeckFor.toUpperCase()})`}
+            options={deckOptions}
+            onSelect={(deckId) => {
+              if (selectingDeckFor === 'p1') setP1DeckId(deckId);
+              else setP2DeckId(deckId);
+              setSelectingDeckFor(null);
+            }}
+            onClose={() => setSelectingDeckFor(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   const showSearchModal = 
     pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
@@ -425,6 +579,7 @@ export const RealGame = ({ p1Deck, p2Deck, onBack }: { p1Deck: string, p2Deck: s
 
     {showSearchModal && modalCandidates.length > 0 && (
       <CardSelectModal
+        key={pendingRequest?.request_id} 
         candidates={modalCandidates}
         message={pendingRequest?.message || ""}
         minSelect={constraints.min ?? 1}

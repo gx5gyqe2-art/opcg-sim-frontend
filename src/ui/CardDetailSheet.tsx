@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
-import { API_CONFIG } from '../api/api.config';
+// ▼ 変更: imageAssetsから関数をインポート
+import { getCardImageUrl } from '../utils/imageAssets';
 import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 
 interface CardDetailSheetProps {
   card: CardInstance & { cards?: CardInstance[] };
   location: string;
   isMyTurn: boolean;
-  activeDonCount?: number; // 【追加】アクティブドン枚数
+  activeDonCount?: number;
   onAction: (type: string, payload: any) => Promise<void>;
   onClose: () => void;
 }
@@ -45,7 +46,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
   // ドン付与一括実行ロジック
   const handleAttachDonBatch = async () => {
-    // 指定回数分ループして送信
     for (let i = 0; i < donAmount; i++) {
         await onAction(ACTIONS.ATTACH_DON, { uuid: card.uuid });
     }
@@ -54,7 +54,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   };
 
   const renderButtons = () => {
-    // ドン付与モード中は専用UIを表示
     if (donMode) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: '#f0f0f0', padding: '10px', borderRadius: '8px' }}>
@@ -95,7 +94,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
         </button>
       );
       
-      // ドン付与ボタン: アクティブドンがある場合のみ押せるようにし、押すとモード切替
       if (activeDonCount > 0) {
         btns.push(
           <button key="don" onClick={() => { setDonAmount(1); setDonMode(true); }} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>
@@ -156,7 +154,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     fontWeight: 'bold'
   });
 
-  const mainImageUrl = ('card_id' in card) ? `${API_CONFIG.IMAGE_BASE_URL}/${(card as any).card_id}.png` : null;
+  // ▼ 変更: getCardImageUrlを使用
+  const mainImageUrl = ('card_id' in card) ? getCardImageUrl((card as any).card_id) : null;
 
   if (card.cards && card.cards.length > 0) {
     return (
@@ -168,7 +167,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
           </div>
           <div style={{ maxHeight: '60vh', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
             {card.cards.map((c, idx) => {
-              const imgUrl = `${API_CONFIG.IMAGE_BASE_URL}/${c.card_id}.png`;
+              // ▼ 変更: getCardImageUrlを使用
+              const imgUrl = getCardImageUrl(c.card_id);
               return (
                 <div key={idx} style={{ 
                   aspectRatio: '0.714',

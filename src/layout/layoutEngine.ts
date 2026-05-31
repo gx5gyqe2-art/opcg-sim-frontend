@@ -37,7 +37,24 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
   
   const CH = Math.min(chByHeight, chByWidth); 
   const CW = CH / P.CARD.ASPECT_RATIO;
-  const V_GAP = CH * P.SPACING.V_GAP_RATIO;
+  
+  // V_GAPの自動調整ロジック
+  let V_GAP = CH * P.SPACING.V_GAP_RATIO;
+  
+  // 4行分の高さが必要: (カード高 * 4) + (隙間 * 3)
+  const totalHeightNeeded = (CH * 4) + (V_GAP * 3);
+
+  // 画面の高さ（半分）からはみ出す場合、隙間を縮めて調整する
+  if (totalHeightNeeded > availHeight) {
+    const remainingSpace = availHeight - (CH * 4);
+    if (remainingSpace > 0) {
+      V_GAP = remainingSpace / 3;
+    } else {
+      // カードだけで溢れる場合（極端なケース）は最小限の隙間にする
+      V_GAP = 2; 
+    }
+    V_GAP = Math.max(0, V_GAP);
+  }
   
   const validateCoordinate = (val: number, label: string) => {
     if (isNaN(val)) {
@@ -63,10 +80,28 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     getDonRestX: (width) => validateCoordinate(width * P.X_RATIOS.DON_REST, 'donRestX'),
     getTrashX: (width) => validateCoordinate(width * P.X_RATIOS.TRASH, 'trashX'),
     getFieldX: (i, width, cardWidth, totalCards) => {
-      // フィールドカードは中央揃え
-      const totalW = totalCards * cardWidth + (totalCards - 1) * P.FIELD.GAP;
-      const startX = (width - totalW) / 2 + P.FIELD.X_OFFSET; 
-      return validateCoordinate(startX + i * (cardWidth + P.FIELD.GAP), `fieldX_${i}`);
+      // 横幅の自動調整ロジック
+      const maxFieldWidth = width * 0.96;
+      const standardGap = P.FIELD.GAP;
+      let gap = standardGap;
+
+      const standardTotalW = totalCards * cardWidth + (totalCards - 1) * standardGap;
+
+      // 規定の幅を超える場合は、隙間(gap)を縮小して押し込む
+      if (totalCards > 1 && standardTotalW > maxFieldWidth) {
+          gap = (maxFieldWidth - (totalCards * cardWidth)) / (totalCards - 1);
+      }
+
+      // 最終的な全体幅を再計算
+      const currentTotalW = totalCards * cardWidth + (totalCards - 1) * gap;
+      
+      // 中央揃え (左端の座標)
+      const rectLeftX = (width - currentTotalW) / 2 + P.FIELD.X_OFFSET;
+      
+      // カードは中心基準(anchor=0.5)なので、半径分ずらす
+      const startX = rectLeftX + cardWidth / 2;
+
+      return validateCoordinate(startX + i * (cardWidth + gap), `fieldX_${i}`);
     },
     // 手札X座標: スクロール前提なので、単純に並べる
     getHandX: (i, width) => {

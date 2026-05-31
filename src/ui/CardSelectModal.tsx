@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
-import { API_CONFIG } from '../api/api.config'; // 追加
+// ▼ 変更: imageAssetsから関数をインポート
+import { getCardImageUrl } from '../utils/imageAssets';
 
 interface CardSelectModalProps {
   candidates: CardInstance[];
@@ -56,7 +57,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
 
   const gridStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', // 画像に合わせてサイズ調整
+    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', 
     gap: '10px',
     overflowY: 'auto',
     flex: 1,
@@ -76,7 +77,8 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
         <div style={gridStyle}>
           {candidates.map(card => {
             const isSelected = selected.includes(card.uuid);
-            const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.card_id}.png`;
+            // ▼ 変更: getCardImageUrlを使用
+            const imageUrl = getCardImageUrl(card.card_id);
 
             return (
               <div 
@@ -86,9 +88,9 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                   border: isSelected ? `3px solid ${COLORS.BTN_PRIMARY}` : '1px solid #ccc',
                   borderRadius: SHAPE.CORNER_RADIUS_CARD,
                   cursor: 'pointer',
-                  backgroundColor: '#444', // 画像読み込み前用の背景
+                  backgroundColor: '#444',
                   position: 'relative',
-                  aspectRatio: '0.714', // カード比率
+                  aspectRatio: '0.714',
                   overflow: 'hidden',
                   display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}
@@ -98,13 +100,11 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                   alt={card.name}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={(e) => {
-                    // 読み込み失敗時はテキストを表示
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.parentElement!.innerHTML = `<span style="color:white;font-size:0.7rem;padding:2px;text-align:center;">${card.name}</span>`;
                   }}
                 />
                 
-                {/* 選択中のチェックマーク */}
                 {isSelected && (
                   <div style={{
                     position: 'absolute', top: '4px', right: '4px',

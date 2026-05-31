@@ -82,8 +82,8 @@ export const LAYOUT_PARAMS = {
   // カード・グリッド計算設定
   CARD: {
     ASPECT_RATIO: 1.4,        // カードの縦横比 (高さ / 幅)
-    MAX_ROWS_IN_HALF: 5.2,    // 画面半分(自陣)に縦に何枚分収めるか (高さ計算の基準)
-    MAX_COLS_ON_SCREEN: 8.5,  // 画面横幅に何枚分収めるか (幅計算の基準)
+    MAX_ROWS_IN_HALF: 4.2,    // 画面半分(自陣)に縦に何枚分収めるか (高さ計算の基準) - 修正済
+    MAX_COLS_ON_SCREEN: 6.8,  // 画面横幅に何枚分収めるか (幅計算の基準) - 修正済
     SCALE_ADJUST: 1.4,        // 幅基準で計算した際のスケール補正係数
   },
 
@@ -154,7 +154,7 @@ export const LAYOUT_PARAMS = {
 
   // 各ゾーンの配置座標比率 (画面幅に対する割合 0.0 ~ 1.0)
   // レイアウトエンジン (layoutEngine.ts) で使用
-  FIELD: { GAP: 35, X_OFFSET: 20 }, // フィールドカード間のギャップ(px)とXオフセット
+  FIELD: { GAP: 35, X_OFFSET: 0 }, // フィールドカード間のギャップ(px)とXオフセット - 修正済
   HAND: { X_START_RATIO: 0.08, OVERLAP_RATIO: 1.2 }, // 手札開始位置と重なり率
   ROWS: { ROW1_Y_OFFSET: 0.2, DEFAULT_MULTIPLIER: 0.55 }, // 行配置の計算係数
   

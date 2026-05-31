@@ -1,4 +1,4 @@
-import { Component, useState } from 'react';
+import { Component, useState, useEffect } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { RealGame } from './screens/RealGame';
 import { SandboxGame } from './screens/SandboxGame';
@@ -45,16 +45,45 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby'>('start');
-  const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>({ p1: 'imu.json', p2: 'nami.json' });
-  const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string, room_name?: string }>({ role: 'both' });
+  // 対策①：初期値をsessionStorageから復元するように変更
+  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby'>(() => {
+    return (sessionStorage.getItem('opcg_app_mode') as any) || 'start';
+  });
+
+  const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>(() => {
+    const saved = sessionStorage.getItem('opcg_selected_decks');
+    return saved ? JSON.parse(saved) : { p1: 'imu.json', p2: 'nami.json' };
+  });
+
+  const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string, room_name?: string }>(() => {
+    const saved = sessionStorage.getItem('opcg_sandbox_options');
+    return saved ? JSON.parse(saved) : { role: 'both' };
+  });
+
+  // 対策①：状態が変更されるたびにsessionStorageへ保存
+  useEffect(() => {
+    sessionStorage.setItem('opcg_app_mode', mode);
+  }, [mode]);
+
+  useEffect(() => {
+    sessionStorage.setItem('opcg_selected_decks', JSON.stringify(selectedDecks));
+  }, [selectedDecks]);
+
+  useEffect(() => {
+    sessionStorage.setItem('opcg_sandbox_options', JSON.stringify(sandboxOptions));
+  }, [sandboxOptions]);
 
   const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: any) => {
-    setSelectedDecks({ p1, p2 });
+    
     if (gameMode === 'sandbox') {
+        setSelectedDecks({ p1, p2 });
         setSandboxOptions(sbOptions || { role: 'both' });
         setMode('sandbox');
     } else {
+        setSelectedDecks({ 
+          p1: p1 || 'imu.json', 
+          p2: p2 || 'nami.json' 
+        });
         setMode('game');
     }
   };
@@ -73,6 +102,8 @@ export default function App() {
             myPlayerId={sandboxOptions.role === 'both' ? 'both' : sandboxOptions.role} 
             gameId={sandboxOptions.gameId} 
             roomName={sandboxOptions.room_name} 
+            initialP1DeckId={selectedDecks.p1}
+            initialP2DeckId={selectedDecks.p2}
             onBack={() => { if (confirm("終了しますか？")) setMode('start'); }} 
           />
         )}

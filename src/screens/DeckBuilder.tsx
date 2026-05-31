@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { logger } from '../utils/logger';
 import { API_CONFIG } from '../api/api.config';
+import { getCardImageUrl } from '../utils/imageAssets';
 
 interface CardData {
   uuid: string;
@@ -37,9 +38,19 @@ interface FilterState {
   sort: string;
 }
 
+const getLocalDecks = (): DeckData[] => {
+  try {
+    const ids = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
+    return ids.map((id: string) => {
+      const data = localStorage.getItem(`opcg_deck_${id}`);
+      return data ? JSON.parse(data) : null;
+    }).filter((d: any) => d !== null);
+  } catch (e) { return []; }
+};
+
 const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
   const [imgError, setImgError] = useState(false);
-  const imageUrl = card.uuid ? `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png` : null;
+  const imageUrl = getCardImageUrl(card.uuid || '');
 
   return (
     <div 
@@ -78,7 +89,7 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
 const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate, viewOnly }: {
   card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void, viewOnly?: boolean
 }) => {
-  const imageUrl = `${API_CONFIG.IMAGE_BASE_URL}/${card.uuid}.png`;
+  const imageUrl = getCardImageUrl(card.uuid);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const minSwipeDistance = 50;
@@ -148,7 +159,8 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
   );
 };
 
-const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset }: { filters: FilterState, setFilters: (f: FilterState) => void, traitList: string[], setList: string[], onClose: () => void, onReset: () => void }) => {
+const FilterModal = ({ initialFilters, onApply, traitList, setList, onClose }: { initialFilters: FilterState, onApply: (f: FilterState) => void, traitList: string[], setList: string[], onClose: () => void }) => {
+  const [localFilters, setLocalFilters] = useState<FilterState>(initialFilters);
   const [traitSearch, setTraitSearch] = useState('');
 
   const SectionTitle = ({ children, onSelectAll }: { children: string, onSelectAll?: () => void }) => (
@@ -166,11 +178,17 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
   );
 
   const toggle = (key: keyof FilterState, value: string) => {
-    const current = filters[key];
+    const current = localFilters[key];
     if (Array.isArray(current)) {
       const newArray = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
-      setFilters({ ...filters, [key]: newArray });
+      setLocalFilters({ ...localFilters, [key]: newArray });
     }
+  };
+
+  const handleReset = () => {
+    setLocalFilters({ 
+      color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST' 
+    });
   };
 
   const FilterBtn = ({ label, active, onClick, color }: { label: string, active: boolean, onClick: () => void, color?: string }) => (
@@ -193,7 +211,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
   );
 
   const ColorBtn = ({ colorKey, label, colorCode }: { colorKey: string, label: string, colorCode: string }) => {
-    const isActive = filters.color.includes(colorKey);
+    const isActive = localFilters.color.includes(colorKey);
     return (
       <div 
         title={label}
@@ -205,7 +223,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
           boxShadow: isActive ? '0 0 10px white' : 'none',
           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'black', fontWeight: 'bold', fontSize: '10px',
-          opacity: (filters.color.length === 0 || isActive) ? 1 : 0.4
+          opacity: (localFilters.color.length === 0 || isActive) ? 1 : 0.4
         }}
       >
         {isActive && "✓"}
@@ -228,7 +246,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-          <SectionTitle onSelectAll={() => setFilters({...filters, color: ['Red', 'Green', 'Blue', 'Purple', 'Black', 'Yellow']})}>色 (COLOR)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, color: ['Red', 'Green', 'Blue', 'Purple', 'Black', 'Yellow']})}>色 (COLOR)</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <ColorBtn colorKey="Red" label="赤" colorCode="#e74c3c" />
             <ColorBtn colorKey="Green" label="緑" colorCode="#27ae60" />
@@ -238,53 +256,52 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
             <ColorBtn colorKey="Yellow" label="黄" colorCode="#f1c40f" />
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, cost: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']})}>コスト (COST)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, cost: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']})}>コスト (COST)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(10)].map((_, i) => (
-              <FilterBtn key={i} label={`${i+1}`} active={filters.cost.includes(`${i+1}`)} onClick={() => toggle('cost', `${i+1}`)} />
+              <FilterBtn key={i} label={`${i+1}`} active={localFilters.cost.includes(`${i+1}`)} onClick={() => toggle('cost', `${i+1}`)} />
             ))}
-            <FilterBtn label="10+" active={filters.cost.includes('10')} onClick={() => toggle('cost', '10')} />
+            <FilterBtn label="10+" active={localFilters.cost.includes('10')} onClick={() => toggle('cost', '10')} />
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, power: [...Array(14)].map((_, i) => i.toString())})}>パワー (POWER)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, power: [...Array(14)].map((_, i) => i.toString())})}>パワー (POWER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[...Array(13)].map((_, i) => (
-              <FilterBtn key={i} label={`${i}`} active={filters.power.includes(`${i}`)} onClick={() => toggle('power', `${i}`)} />
+              <FilterBtn key={i} label={`${i}`} active={localFilters.power.includes(`${i}`)} onClick={() => toggle('power', `${i}`)} />
             ))}
-            <FilterBtn label="13~" active={filters.power.includes('13')} onClick={() => toggle('power', '13')} />
+            <FilterBtn label="13~" active={localFilters.power.includes('13')} onClick={() => toggle('power', '13')} />
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, sets: setList})}>収録セット (SET)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, sets: setList})}>収録セット (SET)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {setList.map(s => (
-              <FilterBtn key={s} label={s} active={filters.sets.includes(s)} onClick={() => toggle('sets', s)} />
+              <FilterBtn key={s} label={s} active={localFilters.sets.includes(s)} onClick={() => toggle('sets', s)} />
             ))}
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, type: ['LEADER', 'CHARACTER', 'EVENT', 'STAGE']})}>種類 (TYPE)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, type: ['LEADER', 'CHARACTER', 'EVENT', 'STAGE']})}>種類 (TYPE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <FilterBtn label="リーダー" active={filters.type.includes('LEADER')} onClick={() => toggle('type', 'LEADER')} />
-            <FilterBtn label="キャラ" active={filters.type.includes('CHARACTER')} onClick={() => toggle('type', 'CHARACTER')} />
-            <FilterBtn label="イベント" active={filters.type.includes('EVENT')} onClick={() => toggle('type', 'EVENT')} />
-            <FilterBtn label="ステージ" active={filters.type.includes('STAGE')} onClick={() => toggle('type', 'STAGE')} />
+            <FilterBtn label="リーダー" active={localFilters.type.includes('LEADER')} onClick={() => toggle('type', 'LEADER')} />
+            <FilterBtn label="キャラ" active={localFilters.type.includes('CHARACTER')} onClick={() => toggle('type', 'CHARACTER')} />
+            <FilterBtn label="イベント" active={localFilters.type.includes('EVENT')} onClick={() => toggle('type', 'EVENT')} />
+            <FilterBtn label="ステージ" active={localFilters.type.includes('STAGE')} onClick={() => toggle('type', 'STAGE')} />
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, counter: ['NONE', '1000', '2000']})}>カウンター (COUNTER)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, counter: ['NONE', '1000', '2000']})}>カウンター (COUNTER)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <FilterBtn label="なし" active={filters.counter.includes('NONE')} onClick={() => toggle('counter', 'NONE')} />
-            <FilterBtn label="+1000" active={filters.counter.includes('1000')} onClick={() => toggle('counter', '1000')} />
-            <FilterBtn label="+2000" active={filters.counter.includes('2000')} onClick={() => toggle('counter', '2000')} />
+            <FilterBtn label="なし" active={localFilters.counter.includes('NONE')} onClick={() => toggle('counter', 'NONE')} />
+            <FilterBtn label="+1000" active={localFilters.counter.includes('1000')} onClick={() => toggle('counter', '1000')} />
+            <FilterBtn label="+2000" active={localFilters.counter.includes('2000')} onClick={() => toggle('counter', '2000')} />
           </div>
 
-          <SectionTitle onSelectAll={() => setFilters({...filters, attribute: ['打', '斬', '特', '射', '知']})}>属性 (ATTRIBUTE)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, attribute: ['打', '斬', '特', '射', '知']})}>属性 (ATTRIBUTE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['打', '斬', '特', '射', '知'].map(attr => (
-              <FilterBtn key={attr} label={attr} active={filters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
+              <FilterBtn key={attr} label={attr} active={localFilters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
             ))}
           </div>
 
-          {/* 特徴（TRAITS）を最下部に移動 */}
-          <SectionTitle onSelectAll={() => setFilters({...filters, traits: filteredTraits})}>特徴 (TRAITS)</SectionTitle>
+          <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, traits: filteredTraits})}>特徴 (TRAITS)</SectionTitle>
           <input 
             placeholder="特徴を検索..." 
             value={traitSearch} 
@@ -293,7 +310,7 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
           />
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', maxHeight: '200px', overflowY: 'auto', padding: '5px', border: '1px solid #444', borderRadius: '4px' }}>
             {filteredTraits.map(t => (
-              <FilterBtn key={t} label={t} active={filters.traits.includes(t)} onClick={() => toggle('traits', t)} />
+              <FilterBtn key={t} label={t} active={localFilters.traits.includes(t)} onClick={() => toggle('traits', t)} />
             ))}
             {filteredTraits.length === 0 && <div style={{ fontSize: '12px', color: '#666' }}>見つかりません</div>}
           </div>
@@ -307,8 +324,8 @@ const FilterModal = ({ filters, setFilters, traitList, setList, onClose, onReset
           background: '#2a2a2a',
           zIndex: 10
         }}>
-          <button onClick={onReset} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>リセット</button>
-          <button onClick={onClose} style={{ flex: 2, padding: '12px', borderRadius: '8px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
+          <button onClick={handleReset} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #555', background: '#333', color: 'white', cursor: 'pointer', fontWeight: 'bold' }}>リセット</button>
+          <button onClick={() => onApply(localFilters)} style={{ flex: 2, padding: '12px', borderRadius: '8px', border: 'none', background: '#e74c3c', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>決定</button>
         </div>
       </div>
     </div>
@@ -359,7 +376,6 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
       <div style={{ background: '#222', width: '100%', maxWidth: '400px', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
         <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>デッキ分布</h3>
-          {/* onCloseプロパティではなくonClickを使用しビルドエラーを回避 */}
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ padding: '20px', overflowY: 'auto' }}>
@@ -372,7 +388,7 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
   );
 };
 
-const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void }) => {
+const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
       <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -383,17 +399,31 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack }: { decks: Dec
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>デッキがありません</div>}
         {decks.map((deck, idx) => (
-            <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer' }}>
+            <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer', position: 'relative' }}>
                 <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa', overflow: 'hidden', flexShrink: 0 }}>
                     {deck.leader_id ? (
-                      <img src={`${API_CONFIG.IMAGE_BASE_URL}/${deck.leader_id}.png`} alt="leader" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerText = deck.leader_id || "Err"; }} />
+                      <img src={getCardImageUrl(deck.leader_id)} alt="leader" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLElement).style.display = 'none'; e.currentTarget.parentElement!.innerText = deck.leader_id || "Err"; }} />
                     ) : "No Leader"}
                 </div>
                 <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{deck.name}</div>
                     <div style={{ fontSize: '12px', color: '#888' }}>{deck.card_uuids.length}枚</div>
+                    {deck.id && deck.id.startsWith('local-') && <div style={{ fontSize: '10px', color: '#e67e22' }}>Local Draft</div>}
                 </div>
-                <div style={{ fontSize: '20px', color: '#555' }}>›</div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation(); 
+                    if(deck.id) onDelete(deck.id);
+                  }}
+                  style={{
+                    padding: '8px 12px', marginLeft: '10px',
+                    background: '#c0392b', border: 'none', borderRadius: '4px',
+                    color: 'white', cursor: 'pointer', fontSize: '14px'
+                  }}
+                >
+                  🗑️
+                </button>
+                <div style={{ fontSize: '20px', color: '#555', marginLeft: '10px' }}>›</div>
             </div>
         ))}
       </div>
@@ -461,8 +491,10 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST'
   });
   const [searchText, setSearchText] = useState('');
+  const [inputText, setInputText] = useState('');
+
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [displayLimit, setDisplayLimit] = useState(50);
+  const [displayLimit, setDisplayLimit] = useState(100);
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
 
   const traitList = useMemo(() => {
@@ -512,7 +544,6 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       const selected = filters.color.map(c => normalizeColor(c));
       res = res.filter(c => {
         if (!c.color) return false;
-        // スラッシュ区切りの多色にも対応
         const cardColors = c.color.flatMap(col => col.split(/[\/／]/)).map(col => normalizeColor(col));
         return cardColors.some(cc => selected.includes(cc));
       });
@@ -550,7 +581,23 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
 
     if (searchText) {
       const lower = searchText.toLowerCase();
-      res = res.filter(c => (c.name?.toLowerCase().includes(lower)) || (c.text?.toLowerCase().includes(lower)));
+      res = res.filter(c => {
+        const searchTarget = [
+          c.name,
+          c.text,
+          c.type,
+          ...(c.color || []),
+          ...(c.attributes || []),
+          ...(c.traits || []),
+          c.uuid,
+          c.cost?.toString(),
+          c.power?.toString(),
+          c.counter?.toString(),
+          c.trigger_text
+        ].filter(Boolean).join(' ').toLowerCase();
+        
+        return searchTarget.includes(lower);
+      });
     }
 
     const typeOrder: Record<string, number> = { 'LEADER': 1, 'CHARACTER': 2, 'EVENT': 3, 'STAGE': 4 };
@@ -562,7 +609,9 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     });
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
 
-  useEffect(() => { setDisplayLimit(50); }, [filters, mode, searchText]);
+  useEffect(() => { 
+    setDisplayLimit(100); 
+  }, [filters, mode, searchText]);
 
   const handleSelect = (card: CardData) => {
     if (viewOnly) { setViewingCard(card); return; }
@@ -587,9 +636,13 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 100) {
-      if (displayLimit < filtered.length) setDisplayLimit(prev => prev + 50);
+    if (scrollHeight - scrollTop <= clientHeight + 300) {
+      if (displayLimit < filtered.length) setDisplayLimit(prev => prev + 100);
     }
+  };
+
+  const executeSearch = () => {
+    setSearchText(inputText);
   };
 
   return (
@@ -618,9 +671,15 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
         </button>
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           <input 
-            placeholder="キーワード検索" 
-            value={searchText} 
-            onChange={e => setSearchText(e.target.value)} 
+            placeholder="キーワード検索 (Enterで検索)" 
+            value={inputText} 
+            onChange={e => setInputText(e.target.value)} 
+            onKeyDown={e => {
+                if (e.key === 'Enter') {
+                    executeSearch();
+                    (e.target as HTMLInputElement).blur();
+                }
+            }}
             style={{ 
               width: '100%', 
               padding: '10px 10px 10px 35px', 
@@ -632,7 +691,15 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
               boxSizing: 'border-box'
             }} 
           />
-          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#777', pointerEvents: 'none' }}>🔍</span>
+          <button 
+            onClick={executeSearch}
+            style={{ 
+                position: 'absolute', left: '5px', top: '50%', transform: 'translateY(-50%)', 
+                background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '5px' 
+            }}
+          >
+            🔍
+          </button>
         </div>
         <button 
           onClick={() => setShowFilterModal(true)} 
@@ -658,12 +725,14 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       )}
       {showFilterModal && (
         <FilterModal 
-          filters={filters} 
-          setFilters={setFilters} 
+          initialFilters={filters} 
+          onApply={(newFilters) => { 
+             setFilters(newFilters);
+             setShowFilterModal(false); 
+          }}
           traitList={traitList} 
           setList={setList} 
           onClose={() => setShowFilterModal(false)} 
-          onReset={() => setFilters({ color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST' })} 
         />
       )}
     </div>
@@ -679,28 +748,160 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
 
   useEffect(() => {
     const fetchData = async () => {
+      let loadedFromCache = false;
+      try {
+        const cachedCards = localStorage.getItem('opcg_card_db');
+        if (cachedCards) {
+           const parsed = JSON.parse(cachedCards);
+           if (Array.isArray(parsed) && parsed.length > 0) {
+             setAllCards(parsed);
+             loadedFromCache = true;
+             logger.log({ level: 'info', action: 'deck_builder.cache_hit', msg: 'Loaded cards from local storage' });
+           }
+        }
+      } catch(e) { console.error(e); }
+
       try {
         const cRes = await fetch(`${API_CONFIG.BASE_URL}/api/cards`);
         const cData = await cRes.json();
-        if (cData.success) setAllCards(cData.cards);
-        if (!viewOnly) {
+        if (cData.success) {
+           setAllCards(cData.cards);
+           localStorage.setItem('opcg_card_db', JSON.stringify(cData.cards));
+        }
+      } catch (e) {
+         if (!loadedFromCache) {
+           logger.error('deck_builder.init', 'Failed to load cards');
+         }
+      }
+
+      if (!viewOnly) {
+        let serverDecks: DeckData[] = [];
+        try {
           const dRes = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
           const dData = await dRes.json();
-          if (dData.success) setDecks(dData.decks);
-        }
-      } catch (e) { logger.error('deck_builder.init', String(e)); }
+          if (dData.success && Array.isArray(dData.decks)) {
+             serverDecks = dData.decks.filter((d: DeckData) => !d.id || !d.id.endsWith('.json'));
+          }
+        } catch(e) { console.log('Offline'); }
+
+        const localDecks = getLocalDecks();
+        const merged = [...serverDecks];
+        localDecks.forEach(ld => {
+          if (!merged.find(md => md.id === ld.id)) {
+            merged.push(ld);
+          }
+        });
+        setDecks(merged);
+      }
     };
     fetchData();
   }, [mode, viewOnly]);
 
-  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} />;
-  if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={async () => {
+  const handleSaveDeck = async () => {
+    if (!currentDeck) return;
+    
+    const deckData = { ...currentDeck };
+    const oldId = deckData.id; 
+    
+    if (oldId && oldId.startsWith('local-')) {
+        delete deckData.id;
+    }
+
     try {
-      const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentDeck) });
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(deckData) 
+      });
       const data = await res.json();
-      if (data.success) { alert('保存しました'); setCurrentDeck({...currentDeck, id: data.deck_id}); }
-    } catch (e) { alert('エラー'); }
-  }} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
+      
+      if (data.success) {
+         const serverId = data.deck_id;
+         const finalDeck = { ...deckData, id: serverId }; 
+
+         const leaderCard = allCards.find(c => c.uuid === finalDeck.leader_id);
+         const cardObjects = finalDeck.card_uuids.map(uuid => allCards.find(c => c.uuid === uuid)).filter(Boolean);
+         const sandboxFormat = {
+            deck: { 
+                leader: leaderCard ? [leaderCard] : [],
+                cards: cardObjects
+            },
+            ...finalDeck
+         };
+         localStorage.setItem(`opcg_deck_${serverId}`, JSON.stringify(sandboxFormat));
+         
+         const currentIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
+         
+         let newIds = currentIds.filter((id: string) => id !== oldId);
+         
+         if (!newIds.includes(serverId)) {
+            newIds.push(serverId);
+         }
+
+         if (oldId && oldId.startsWith('local-') && oldId !== serverId) {
+            localStorage.removeItem(`opcg_deck_${oldId}`);
+            fetch(`${API_CONFIG.BASE_URL}/api/deck/${oldId}`, { method: 'DELETE' }).catch(() => {});
+         }
+         
+         localStorage.setItem('opcg_local_deck_ids', JSON.stringify(newIds));
+
+         setDecks(prev => {
+            const filtered = prev.filter(d => d.id !== oldId && d.id !== serverId);
+            return [finalDeck, ...filtered];
+         });
+         
+         setCurrentDeck(finalDeck);
+         alert('保存しました');
+      } else {
+         logger.error('deck_builder.save', 'Server returned error', { error: data.error });
+         alert(`保存に失敗しました: ${data.error}`);
+      }
+    } catch (e) { 
+        logger.error('deck_builder.save', 'Network error', { error: e });
+        alert('サーバー通信エラーが発生しました。保存できません。'); 
+    }
+  };
+
+  const handleDeleteDeck = async (deckId: string) => {
+    console.log(`[Delete] 削除開始: ID=${deckId}`);
+
+    if (!confirm('本当にこのデッキを削除しますか？')) return;
+
+    try {
+      console.log(`[Delete] サーバー削除API呼び出し: ${API_CONFIG.BASE_URL}/api/deck/${deckId}`);
+      
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/${deckId}`, { 
+          method: 'DELETE' 
+      });
+      
+      console.log(`[Delete] APIレスポンス: Status=${res.status}`);
+      
+      if (!res.ok) {
+        console.warn(`[Delete] サーバー上の削除に失敗しましたが、ローカル削除を続行します。Status: ${res.status}`);
+      }
+    } catch (e) {
+      console.error('[Delete] サーバー通信エラー:', e);
+    }
+
+    try {
+      localStorage.removeItem(`opcg_deck_${deckId}`);
+      
+      const ids = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
+      const newIds = ids.filter((id: string) => id !== deckId);
+      localStorage.setItem('opcg_local_deck_ids', JSON.stringify(newIds));
+      
+      setDecks(prev => prev.filter(d => d.id !== deckId));
+      
+      console.log('[Delete] 削除処理完了');
+      alert('削除しました');
+    } catch (e) {
+      console.error(e);
+      alert('ローカルデータの削除中にエラーが発生しました');
+    }
+  };
+
+  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} />;
+  if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
   if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
   return <div>Loading...</div>;
 };
