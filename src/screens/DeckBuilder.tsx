@@ -15,6 +15,7 @@ interface CardData {
   text?: string;
   traits?: string[];
   trigger_text?: string;
+  block_icon?: string;
 }
 
 interface DeckData {
@@ -35,6 +36,7 @@ interface FilterState {
   power: string[];
   trigger: string[];
   sets: string[];
+  block_icon: string[];
   sort: string;
 }
 
@@ -159,7 +161,7 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
   );
 };
 
-const FilterModal = ({ initialFilters, onApply, traitList, setList, onClose }: { initialFilters: FilterState, onApply: (f: FilterState) => void, traitList: string[], setList: string[], onClose: () => void }) => {
+const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconList, onClose }: { initialFilters: FilterState, onApply: (f: FilterState) => void, traitList: string[], setList: string[], blockIconList: string[], onClose: () => void }) => {
   const [localFilters, setLocalFilters] = useState<FilterState>(initialFilters);
   const [traitSearch, setTraitSearch] = useState('');
 
@@ -186,8 +188,8 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, onClose }: {
   };
 
   const handleReset = () => {
-    setLocalFilters({ 
-      color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST' 
+    setLocalFilters({
+      color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST'
     });
   };
 
@@ -300,6 +302,17 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, onClose }: {
               <FilterBtn key={attr} label={attr} active={localFilters.attribute.includes(attr)} onClick={() => toggle('attribute', attr)} />
             ))}
           </div>
+
+          {blockIconList.length > 0 && (
+            <>
+              <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, block_icon: blockIconList})}>ブロック (BLOCK)</SectionTitle>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {blockIconList.map(b => (
+                  <FilterBtn key={b} label={b} active={localFilters.block_icon.includes(b)} onClick={() => toggle('block_icon', b)} />
+                ))}
+              </div>
+            </>
+          )}
 
           <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, traits: filteredTraits})}>特徴 (TRAITS)</SectionTitle>
           <input 
@@ -488,7 +501,7 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
 const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose, viewOnly }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void, viewOnly?: boolean }) => {
   const [filters, setFilters] = useState<FilterState>({
-    color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], sort: 'COST'
+    color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST'
   });
   const [searchText, setSearchText] = useState('');
   const [inputText, setInputText] = useState('');
@@ -507,6 +520,12 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
     const sets = new Set<string>();
     allCards.forEach(c => { if (c.uuid) { const parts = c.uuid.split('-'); if (parts.length > 1) sets.add(parts[0]); } });
     return Array.from(sets).sort();
+  }, [allCards]);
+
+  const blockIconList = useMemo(() => {
+    const s = new Set<string>();
+    allCards.forEach(c => { if (c.block_icon) s.add(c.block_icon.toString()); });
+    return Array.from(s).sort((a, b) => (parseInt(a) || 99) - (parseInt(b) || 99));
   }, [allCards]);
 
   const normalizeColor = (c: string) => {
@@ -559,6 +578,9 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
         return c.counter && filters.counter.includes(c.counter.toString());
       });
     }
+    if (filters.block_icon.length > 0) {
+      res = res.filter(c => c.block_icon != null && filters.block_icon.includes(c.block_icon.toString()));
+    }
     if (filters.cost.length > 0) {
       res = res.filter(c => {
         const costVal = c.cost || 0;
@@ -593,6 +615,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
           c.cost?.toString(),
           c.power?.toString(),
           c.counter?.toString(),
+          c.block_icon?.toString(),
           c.trigger_text
         ].filter(Boolean).join(' ').toLowerCase();
         
@@ -730,9 +753,10 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
              setFilters(newFilters);
              setShowFilterModal(false); 
           }}
-          traitList={traitList} 
-          setList={setList} 
-          onClose={() => setShowFilterModal(false)} 
+          traitList={traitList}
+          setList={setList}
+          blockIconList={blockIconList}
+          onClose={() => setShowFilterModal(false)}
         />
       )}
     </div>
