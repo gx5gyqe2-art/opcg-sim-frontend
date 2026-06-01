@@ -47,6 +47,66 @@ const MOCK_DECKS: Record<string, any> = {
 
 type DragState = { card: CardInstance; sprite: PIXI.Container; startPos: { x: number, y: number }; } | null;
 
+const SMALL_SCALE = 0.7;
+
+const getDropZone = (
+  pos: { x: number; y: number },
+  isTopArea: boolean,
+  W: number,
+  H: number,
+  coords: ReturnType<typeof calculateCoordinates>
+): string | null => {
+  const midY = H / 2;
+  const THRESHOLD = coords.CH;
+  const getX = (val: number) => isTopArea ? W - val : val;
+  const yBase = isTopArea ? 0 : midY;
+  const r2Y = isTopArea ? coords.midY - coords.getY(2) - coords.CH / 2 : yBase + coords.getY(2) + coords.CH / 2;
+  const r3Y = isTopArea ? coords.midY - coords.getY(3) - coords.CH / 2 : yBase + coords.getY(3) + coords.CH / 2;
+  const r4Y = isTopArea ? coords.midY - coords.getY(4) - coords.CH / 2 : yBase + coords.getY(4) + coords.CH / 2;
+  const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - pos.x, 2) + Math.pow(ty - pos.y, 2));
+  if (checkDist(getX(coords.getLeaderX(W)), r2Y) < THRESHOLD) return 'leader';
+  if (checkDist(getX(coords.getStageX(W)), r2Y) < THRESHOLD) return 'stage';
+  if (checkDist(getX(coords.getLifeX(W)), r2Y) < THRESHOLD) return 'life';
+  if (checkDist(getX(coords.getTrashX(W)), r3Y) < THRESHOLD) return 'trash';
+  if (checkDist(getX(coords.getDeckX(W)), r2Y) < THRESHOLD) return 'deck';
+  if (Math.abs(r4Y - pos.y) < coords.CH) return 'hand';
+  if (checkDist(getX(coords.getDonDeckX(W)), r3Y) < THRESHOLD) return 'don_deck';
+  if (checkDist(getX(coords.getDonActiveX(W)), r3Y) < THRESHOLD) return 'don_active';
+  if (checkDist(getX(coords.getDonRestX(W)), r3Y) < THRESHOLD) return 'don_rested';
+  return null;
+};
+
+const getZoneRect = (
+  zone: string,
+  isTopArea: boolean,
+  W: number,
+  H: number,
+  coords: ReturnType<typeof calculateCoordinates>
+): { x: number; y: number; w: number; h: number } | null => {
+  const midY = H / 2;
+  const { CW, CH } = coords;
+  const sCW = CW * SMALL_SCALE, sCH = CH * SMALL_SCALE;
+  const getX = (val: number) => isTopArea ? W - val : val;
+  const yBase = isTopArea ? 0 : midY;
+  const r1Y = isTopArea ? coords.midY - coords.getY(1) - CH / 2 : yBase + coords.getY(1) + CH / 2;
+  const r2Y = isTopArea ? coords.midY - coords.getY(2) - CH / 2 : yBase + coords.getY(2) + CH / 2;
+  const r3Y = isTopArea ? coords.midY - coords.getY(3) - CH / 2 : yBase + coords.getY(3) + CH / 2;
+  const r4Y = isTopArea ? coords.midY - coords.getY(4) - CH / 2 : yBase + coords.getY(4) + CH / 2;
+  switch (zone) {
+    case 'leader':     return { x: getX(coords.getLeaderX(W)),    y: r2Y, w: CW,      h: CH };
+    case 'stage':      return { x: getX(coords.getStageX(W)),     y: r2Y, w: CW,      h: CH };
+    case 'life':       return { x: getX(coords.getLifeX(W)),      y: r2Y, w: CW,      h: CH };
+    case 'deck':       return { x: getX(coords.getDeckX(W)),      y: r2Y, w: CW,      h: CH };
+    case 'trash':      return { x: getX(coords.getTrashX(W)),     y: r3Y, w: sCW,     h: sCH };
+    case 'don_deck':   return { x: getX(coords.getDonDeckX(W)),   y: r3Y, w: sCW,     h: sCH };
+    case 'don_active': return { x: getX(coords.getDonActiveX(W)), y: r3Y, w: sCW,     h: sCH };
+    case 'don_rested': return { x: getX(coords.getDonRestX(W)),   y: r3Y, w: sCW,     h: sCH };
+    case 'hand':       return { x: W / 2,                         y: r4Y, w: W * 0.9, h: CH };
+    case 'field':      return { x: W / 2,                         y: r1Y, w: W * 0.9, h: CH };
+    default: return null;
+  }
+};
+
 interface SandboxGameProps { 
   gameId?: string; 
   myPlayerId?: string; 
@@ -95,6 +155,15 @@ export const SandboxGame = ({
 
   const dragStateRef = useRef(dragState);
   useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
+
+  const dropHighlightRef = useRef<PIXI.Graphics | null>(null);
+
+  const clearDropHighlight = () => {
+    if (dropHighlightRef.current) {
+      dropHighlightRef.current.destroy();
+      dropHighlightRef.current = null;
+    }
+  };
 
   const isLocalMode = useMemo(() => myPlayerId === 'both', [myPlayerId]);
 
@@ -389,9 +458,35 @@ export const SandboxGame = ({
              }
         }
 
-        if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return; 
-        dragState.sprite.position.set(e.clientX, e.clientY); 
+        if (!dragState || (dragState.card.type || '').toUpperCase() === 'LEADER') return;
+        dragState.sprite.position.set(e.clientX, e.clientY);
         if (overlayRef.current) overlayRef.current.updateLayout(e.clientX, dragState.card.uuid);
+
+        // ドロップ先ゾーンのハイライト更新
+        const appForHL = appRef.current;
+        if (appForHL) {
+          const { width: W, height: H } = appForHL.screen;
+          const coords = calculateCoordinates(W, H);
+          const isTopArea = e.clientY < H / 2;
+          const zone = getDropZone({ x: e.clientX, y: e.clientY }, isTopArea, W, H, coords);
+
+          if (!dropHighlightRef.current) {
+            const g = new PIXI.Graphics();
+            appForHL.stage.addChildAt(g, Math.max(0, appForHL.stage.children.length - 1));
+            dropHighlightRef.current = g;
+          }
+          const g = dropHighlightRef.current;
+          g.clear();
+          if (zone) {
+            const rect = getZoneRect(zone, isTopArea, W, H, coords);
+            if (rect) {
+              g.lineStyle(3, 0xffd700, 1);
+              g.beginFill(0xffd700, 0.2);
+              g.drawRoundedRect(rect.x - rect.w / 2, rect.y - rect.h / 2, rect.w, rect.h, 8);
+              g.endFill();
+            }
+          }
+        }
     };
     
     const onPointerUp = async (e: PointerEvent) => {
@@ -399,7 +494,7 @@ export const SandboxGame = ({
         
         if (dragState) {
             const card = dragState.card; const endPos = { x: e.clientX, y: e.clientY };
-            if ((card.type || '').toUpperCase() === 'LEADER') { setDragState(null); return; }
+            if ((card.type || '').toUpperCase() === 'LEADER') { clearDropHighlight(); setDragState(null); return; }
             
             if (inspecting && overlayRef.current) {
                  const { width: W, height: H } = app.screen;
@@ -426,7 +521,7 @@ export const SandboxGame = ({
                              newIndex = Math.max(0, newIndex);
                              handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: inspecting.pid, dest_zone: inspecting.type, index: newIndex });
                          }
-                         setDragState(null);
+                         clearDropHighlight(); setDragState(null);
                          return;
                      }
                  }
@@ -434,69 +529,53 @@ export const SandboxGame = ({
 
             const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
             const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
-            
-            if (myPlayerId !== 'both' && destPid !== myPlayerId) { setDragState(null); return; }
+
+            if (myPlayerId !== 'both' && destPid !== myPlayerId) { clearDropHighlight(); setDragState(null); return; }
 
             const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
-            const THRESHOLD = coords.CH; 
-            const checkZone = (isTopSide: boolean) => {
-                const getX = (val: number) => isTopSide ? W - val : val;
-                const yBase = isTopSide ? 0 : midY;
-                const r2Y = isTopSide ? coords.midY - coords.getY(2) - coords.CH/2 : yBase + coords.getY(2) + coords.CH/2;
-                const r3Y = isTopSide ? coords.midY - coords.getY(3) - coords.CH/2 : yBase + coords.getY(3) + coords.CH/2;
-                const r4Y = isTopSide ? coords.midY - coords.getY(4) - coords.CH/2 : yBase + coords.getY(4) + coords.CH/2;
-                if (checkDist(getX(coords.getLeaderX(W)), r2Y) < THRESHOLD) return 'leader';
-                if (checkDist(getX(coords.getStageX(W)), r2Y) < THRESHOLD) return 'stage';
-                if (checkDist(getX(coords.getLifeX(W)), r2Y) < THRESHOLD) return 'life';
-                if (checkDist(getX(coords.getTrashX(W)), r3Y) < THRESHOLD) return 'trash';
-                if (checkDist(getX(coords.getDeckX(W)), r2Y) < THRESHOLD) return 'deck';
-                if (Math.abs(r4Y - endPos.y) < coords.CH) return 'hand';
-                if (checkDist(getX(coords.getDonDeckX(W)), r3Y) < THRESHOLD) return 'don_deck';
-                if (checkDist(getX(coords.getDonActiveX(W)), r3Y) < THRESHOLD) return 'don_active';
-                if (checkDist(getX(coords.getDonRestX(W)), r3Y) < THRESHOLD) return 'don_rested';
-                return null;
-            };
+            const THRESHOLD = coords.CH;
 
             if (card.card_id === "DON" || card.type === "DON") {
                 const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
                 if (targetPlayer) {
                     const getX = (val: number) => isTopArea ? W - val : val;
                     const yBase = isTopArea ? 0 : midY; const leaderY = isTopArea ? (midY - coords.getY(2) - coords.CH/2) : (yBase + coords.getY(2) + coords.CH/2);
-                    if (targetPlayer.leader && Math.abs(endPos.x - getX(coords.getLeaderX(W))) < THRESHOLD && Math.abs(endPos.y - leaderY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid }); setDragState(null); return; }
+                    if (targetPlayer.leader && Math.abs(endPos.x - getX(coords.getLeaderX(W))) < THRESHOLD && Math.abs(endPos.y - leaderY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid }); clearDropHighlight(); setDragState(null); return; }
                     const fieldY = isTopArea ? (midY - coords.getY(1) - coords.CH/2) : (yBase + coords.getY(1) + coords.CH/2);
                     const fieldCards = targetPlayer.zones.field;
-                    for (let i = 0; i < fieldCards.length; i++) { 
+                    for (let i = 0; i < fieldCards.length; i++) {
                         const cx = getX(coords.getFieldX(i, W, coords.CW, fieldCards.length));
-                        if (Math.abs(endPos.x - cx) < THRESHOLD && Math.abs(endPos.y - fieldY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: fieldCards[i].uuid }); setDragState(null); return; } 
+                        if (Math.abs(endPos.x - cx) < THRESHOLD && Math.abs(endPos.y - fieldY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: fieldCards[i].uuid }); clearDropHighlight(); setDragState(null); return; }
                     }
                 }
-                const dZone = checkZone(isTopArea); if (dZone && ['don_active', 'don_rested', 'don_deck'].includes(dZone)) handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
-                setDragState(null); return;
+                const dZone = getDropZone(endPos, isTopArea, W, H, coords); if (dZone && ['don_active', 'don_rested', 'don_deck'].includes(dZone)) handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
+                clearDropHighlight(); setDragState(null); return;
             }
 
-            const detectedZone = checkZone(isTopArea);
-            
-            if (detectedZone === 'deck' || detectedZone === 'life') { 
-                setDropChoice({ card, destPid, destZone: detectedZone }); 
-                setDragState(null); 
-                return; 
-            } 
-            
+            const detectedZone = getDropZone(endPos, isTopArea, W, H, coords);
+
+            if (detectedZone === 'deck' || detectedZone === 'life') {
+                setDropChoice({ card, destPid, destZone: detectedZone });
+                clearDropHighlight(); setDragState(null);
+                return;
+            }
+
             const destZone = detectedZone || 'field';
-            
+
             if (destZone === 'field') {
                 const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
                 if (destP && destP.zones.field.length >= 5) {
                     const isAlreadyOnField = destP.zones.field.some(c => c.uuid === card.uuid);
                     if (!isAlreadyOnField) {
                         setReplacementState({ card, destPid });
-                        setDragState(null);
+                        clearDropHighlight(); setDragState(null);
                         return;
                     }
                 }
             }
 
             const animateAndSend = () => {
+                clearDropHighlight();
                 const tx = endPos.x; const ty = endPos.y; const sprite = dragState.sprite;
                 const step = () => {
                     const dx = tx - sprite.x; const dy = ty - sprite.y;
