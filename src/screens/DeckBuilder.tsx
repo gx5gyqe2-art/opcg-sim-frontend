@@ -151,7 +151,7 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
         <div style={{ display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '40px' }}>
           <button onClick={() => onCountChange(-1)} disabled={currentCount <= 0} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount > 0 ? '#e74c3c' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>－</button>
           <div style={{ fontSize: '64px', fontWeight: 'bold', color: 'white', width: '80px', textAlign: 'center', textShadow: '0 2px 4px black' }}>{currentCount}</div>
-          <button onClick={() => onCountChange(1)} disabled={currentCount >= 4} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: currentCount < 4 ? '#3498db' : '#444', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>＋</button>
+          <button onClick={() => onCountChange(1)} style={{ width: '70px', height: '70px', borderRadius: '50%', border: 'none', background: '#3498db', color: 'white', fontSize: '28px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}>＋</button>
         </div>
       )}
 
@@ -459,7 +459,7 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
   const handleCountChange = (card: CardData, diff: number) => {
     const newUuids = [...deck.card_uuids];
-    if (diff > 0) { if (newUuids.length < 50) newUuids.push(card.uuid); } 
+    if (diff > 0) { newUuids.push(card.uuid); }
     else { const idx = newUuids.indexOf(card.uuid); if (idx !== -1) newUuids.splice(idx, 1); }
     onUpdateDeck({ ...deck, card_uuids: newUuids });
   };
@@ -478,7 +478,7 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
         <button onClick={onBack} style={{ padding: '5px 10px', cursor: 'pointer' }}>←</button>
         <input value={deck.name} onChange={e => onUpdateDeck({...deck, name: e.target.value})} style={{ background: '#222', color: 'white', border: '1px solid #555', padding: '5px', borderRadius: '4px' }} />
         <button onClick={() => setShowStats(true)} style={{ padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}>📊</button>
-        <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{deck.card_uuids.length}/50</div>
+        <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{deck.card_uuids.length}枚</div>
         <button onClick={onSave} style={{ padding: '5px 15px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>保存</button>
       </div>
       <div style={{ padding: '10px', background: '#2a2a2a', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'center' }}>
@@ -644,7 +644,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
 
   const handleCountChange = (card: CardData, diff: number) => {
     const newUuids = [...currentDeck.card_uuids];
-    if (diff > 0) { if (newUuids.length < 50) newUuids.push(card.uuid); }
+    if (diff > 0) { newUuids.push(card.uuid); }
     else { const idx = newUuids.indexOf(card.uuid); if (idx !== -1) newUuids.splice(idx, 1); }
     onUpdateDeck({ ...currentDeck, card_uuids: newUuids });
   };
