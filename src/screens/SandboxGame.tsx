@@ -532,7 +532,6 @@ export const SandboxGame = ({
 
             if (myPlayerId !== 'both' && destPid !== myPlayerId) { clearDropHighlight(); setDragState(null); return; }
 
-            const checkDist = (tx: number, ty: number) => Math.sqrt(Math.pow(tx - endPos.x, 2) + Math.pow(ty - endPos.y, 2));
             const THRESHOLD = coords.CH;
 
             if (card.card_id === "DON" || card.type === "DON") {
