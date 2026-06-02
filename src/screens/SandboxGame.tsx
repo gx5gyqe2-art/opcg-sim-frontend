@@ -928,24 +928,24 @@ export const SandboxGame = ({
             </div>
             {isMulliganPhase && (
                 <div style={{ position: 'absolute', top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y + 22}px` : '60px', left: '50%', transform: (myPlayerId === 'both' && layoutCoords) ? 'translate(-50%, -50%)' : 'translateX(-50%)', pointerEvents: 'auto', display: 'flex', gap: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px', borderRadius: '12px', border: '1px solid #555' }}>
-                    {(myPlayerId === 'p1' || myPlayerId === 'both') && !mulliganStatus.p1 && (
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>P1 マリガン</div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => handleAction('MULLIGAN', { player_id: 'p1' })} style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>引き直す</button>
-                                <button onClick={() => handleAction('MULLIGAN_FINISH', { player_id: 'p1' })} style={{ background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>完了</button>
+                    {(['p1', 'p2'] as const).map(pid => {
+                        if (myPlayerId !== 'both' && myPlayerId !== pid) return null;
+                        const finished = pid === 'p1' ? mulliganStatus.p1 : mulliganStatus.p2;
+                        // スロット幅を固定し、完了しても残ったボタンが動かないようにする
+                        return (
+                            <div key={pid} style={{ width: '160px', textAlign: 'center', flexShrink: 0 }}>
+                                <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>{pid.toUpperCase()} マリガン</div>
+                                {!finished ? (
+                                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                        <button onClick={() => handleAction('MULLIGAN', { player_id: pid })} style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>引き直す</button>
+                                        <button onClick={() => handleAction('MULLIGAN_FINISH', { player_id: pid })} style={{ background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>完了</button>
+                                    </div>
+                                ) : (
+                                    <div style={{ color: '#2ecc71', fontSize: '14px', fontWeight: 'bold', padding: '8px 0' }}>完了 ✓</div>
+                                )}
                             </div>
-                        </div>
-                    )}
-                    {(myPlayerId === 'p2' || myPlayerId === 'both') && !mulliganStatus.p2 && (
-                        <div style={{ textAlign: 'center' }}>
-                            <div style={{ color: '#ffd700', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>P2 マリガン</div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => handleAction('MULLIGAN', { player_id: 'p2' })} style={{ background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>引き直す</button>
-                                <button onClick={() => handleAction('MULLIGAN_FINISH', { player_id: 'p2' })} style={{ background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', padding: '8px 12px', fontWeight: 'bold' }}>完了</button>
-                            </div>
-                        </div>
-                    )}
+                        );
+                    })}
                 </div>
             )}
             <button 
