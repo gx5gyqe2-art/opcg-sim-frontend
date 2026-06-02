@@ -17,9 +17,7 @@ interface GameStartProps {
 }
 
 const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby }) => {
-  const [activeModal, setActiveModal] = useState<'none' | 'multi'>('none');
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
-  const [roomName, setRoomName] = useState('');
 
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [contentScale, setContentScale] = useState(1);
@@ -230,11 +228,11 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
                 onClick={() => handleStartWithLog('sandbox', { role: 'both' })} 
                 color="#2ecc71" 
               />
-              <MenuCard 
-                label="対戦モード" 
-                desc="Online Multiplayer" 
-                onClick={() => setActiveModal('multi')} 
-                color="#9b59b6" 
+              <MenuCard
+                label="対戦モード"
+                desc="Online Multiplayer"
+                onClick={() => { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }}
+                color="#9b59b6"
               />
               <MenuCard 
                 label="自動モード" 
@@ -247,53 +245,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
         </div>
       </div>
 
-      {activeModal === 'multi' && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalPanel}>
-            <div style={styles.modalTitle}>Online Multiplayer</div>
-            
-            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
-              <label style={{ display: 'block', color: '#bdc3c7', fontSize: '12px', marginBottom: '5px', fontWeight: 'bold' }}>新規ルーム作成</label>
-              <input 
-                type="text" 
-                value={roomName}
-                onChange={(e) => setRoomName(e.target.value)}
-                placeholder="部屋名を入力"
-                style={{ ...styles.select, marginTop: 0 }} 
-                autoFocus
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && roomName.trim()) {
-                        handleStartWithLog('sandbox', { role: 'p1', room_name: roomName });
-                    }
-                }}
-              />
-              <button 
-                onClick={() => handleStartWithLog('sandbox', { role: 'p1', room_name: roomName })}
-                disabled={!roomName.trim()}
-                style={{ ...styles.actionBtn(true), width: '100%', marginTop: '15px', opacity: roomName.trim() ? 1 : 0.5 }}
-              >
-                部屋を作成して開始
-              </button>
-            </div>
-
-            <div style={{ textAlign: 'center', color: '#95a5a6', fontSize: '12px', margin: '-10px 0' }}>- OR -</div>
-
-            <button 
-              onClick={() => { 
-                logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); 
-                onLobby(); 
-              }} 
-              style={styles.actionBtn(false)}
-            >
-              ロビーで部屋を探す
-            </button>
-
-            <button onClick={() => setActiveModal('none')} style={{ background: 'none', border: 'none', color: '#7f8c8d', marginTop: '10px', cursor: 'pointer', textDecoration: 'underline' }}>
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
 
       <style>{`
         @keyframes spin { 
