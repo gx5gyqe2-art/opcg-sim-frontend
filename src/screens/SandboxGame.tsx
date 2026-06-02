@@ -818,41 +818,27 @@ export const SandboxGame = ({
                 </div>
                 
                 {(pid === myPlayerId || myPlayerId === 'both') ? (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <div 
-                      onClick={() => setSelectingDeckFor(pid)}
-                      style={{ 
-                        flex: 1, height: '60px', 
-                        background: '#2a1a1a', border: '1px solid #5d4037', borderRadius: '4px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', overflow: 'hidden', position: 'relative'
-                      }}
-                    >
-                      {hasDeck ? (
-                        <>
-                          <img 
-                            src={getCardImageUrl(leaderCard?.card_id)} 
-                            alt="leader"
-                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} 
-                          />
-                          <span style={{ zIndex: 1, fontWeight: 'bold', textShadow: '0 2px 4px black' }}>{leaderCard?.name || 'Deck Selected'}</span>
-                        </>
-                      ) : (
-                        <span style={{ color: '#7f8c8d', fontSize: '14px' }}>＋ デッキを選択</span>
-                      )}
-                    </div>
-
-                    <button 
-                      onClick={() => handleAction('READY', { player_id: pid })} 
-                      disabled={!hasDeck}
-                      style={{ 
-                        width: '80px', height: '60px',
-                        background: gameState?.ready_states?.[pid] ? '#2ecc71' : (hasDeck ? '#e67e22' : '#555'), 
-                        color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: hasDeck ? 'pointer' : 'not-allowed'
-                      }}
-                    >
-                      {gameState?.ready_states?.[pid] ? 'OK' : 'SET'}
-                    </button>
+                  <div
+                    onClick={() => setSelectingDeckFor(pid)}
+                    style={{
+                      height: '60px',
+                      background: '#2a1a1a', border: '1px solid #5d4037', borderRadius: '4px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', overflow: 'hidden', position: 'relative'
+                    }}
+                  >
+                    {hasDeck ? (
+                      <>
+                        <img
+                          src={getCardImageUrl(leaderCard?.card_id)}
+                          alt="leader"
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }}
+                        />
+                        <span style={{ zIndex: 1, fontWeight: 'bold', textShadow: '0 2px 4px black' }}>{leaderCard?.name || 'Deck Selected'}</span>
+                      </>
+                    ) : (
+                      <span style={{ color: '#7f8c8d', fontSize: '14px' }}>＋ デッキを選択</span>
+                    )}
                   </div>
                 ) : (
                   <div style={{ height: '60px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7f8c8d', fontSize: '14px', border: '1px dashed #555' }}>

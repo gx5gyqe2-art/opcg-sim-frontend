@@ -25,14 +25,15 @@ export const handleLocalAction = (state: GameState, actionType: string, params: 
     case 'SET_DECK': {
       const newState = JSON.parse(JSON.stringify(state));
       const pid = params.player_id as 'p1' | 'p2';
-      
+      if (!newState.ready_states) newState.ready_states = { p1: false, p2: false };
+
       newState.players[pid].name = params.deck_id;
 
       if (params.deckData && params.deckData.leader) {
-        const leaderData = Array.isArray(params.deckData.leader) 
-          ? params.deckData.leader[0] 
+        const leaderData = Array.isArray(params.deckData.leader)
+          ? params.deckData.leader[0]
           : params.deckData.leader;
-          
+
         if (leaderData) {
           // ▼ 修正: uuidを上書きする前に、元のID（カード品番）を card_id として確保する
           const originalId = leaderData.card_id || leaderData.uuid || leaderData.id;
@@ -43,9 +44,11 @@ export const handleLocalAction = (state: GameState, actionType: string, params: 
             uuid: `leader-${pid}-${Date.now()}`, // ゲーム内での一意なID
             owner_id: params.deck_id
           };
+          // デッキ選択＝準備完了とみなす（SETボタンを廃止し操作を簡略化）
+          newState.ready_states[pid] = true;
         }
       }
-      
+
       return newState;
     }
 
