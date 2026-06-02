@@ -149,22 +149,24 @@ const getDonAttachTarget = (
   return best;
 };
 
-interface SandboxGameProps { 
-  gameId?: string; 
-  myPlayerId?: string; 
-  roomName?: string; 
+interface SandboxGameProps {
+  gameId?: string;
+  myPlayerId?: string;
+  roomName?: string;
   onBack: () => void;
+  onForceBack?: () => void;
   initialP1DeckId?: string;
   initialP2DeckId?: string;
 }
 
-export const SandboxGame = ({ 
-  gameId: initialGameId, 
-  myPlayerId = 'both', 
-  roomName, 
+export const SandboxGame = ({
+  gameId: initialGameId,
+  myPlayerId = 'both',
+  roomName,
   onBack,
-  initialP1DeckId, 
-  initialP2DeckId 
+  onForceBack,
+  initialP1DeckId,
+  initialP2DeckId
 }: SandboxGameProps) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -372,7 +374,13 @@ export const SandboxGame = ({
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'STATE_UPDATE') setGameState(data.state);
+          if (data.type === 'STATE_UPDATE') {
+            setGameState(data.state);
+            if (data.kicked_player && data.kicked_player === myPlayerId) {
+              if (onForceBack) onForceBack();
+              else onBack();
+            }
+          }
         } catch(e) { logger.error('ws.parse_error', String(e)); }
       };
       ws.onerror = () => { logger.error('ws.error', 'WebSocket error'); };
@@ -920,6 +928,23 @@ export const SandboxGame = ({
                   <div style={{ height: '60px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7f8c8d', fontSize: '14px', border: '1px dashed #555' }}>
                     {hasDeck ? 'Deck Selected' : 'Waiting for selection...'}
                   </div>
+                )}
+                {myPlayerId === 'p1' && pid === 'p2' && (
+                  <button
+                    onClick={() => handleAction('KICK_PLAYER', { target_player_id: 'p2' })}
+                    style={{
+                      alignSelf: 'flex-end',
+                      padding: '4px 10px',
+                      background: 'transparent',
+                      border: '1px solid #e74c3c',
+                      color: '#e74c3c',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    キック
+                  </button>
                 )}
               </div>
             );

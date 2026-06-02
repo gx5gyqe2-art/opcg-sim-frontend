@@ -101,13 +101,14 @@ export default function App() {
           <RealGame p1Deck={selectedDecks.p1} p2Deck={selectedDecks.p2} onBack={() => { if (confirm("終了しますか？")) setMode('start'); }} />
         )}
         {mode === 'sandbox' && (
-          <SandboxGame 
-            myPlayerId={sandboxOptions.role === 'both' ? 'both' : sandboxOptions.role} 
-            gameId={sandboxOptions.gameId} 
-            roomName={sandboxOptions.room_name} 
+          <SandboxGame
+            myPlayerId={sandboxOptions.role === 'both' ? 'both' : sandboxOptions.role}
+            gameId={sandboxOptions.gameId}
+            roomName={sandboxOptions.room_name}
             initialP1DeckId={selectedDecks.p1}
             initialP2DeckId={selectedDecks.p2}
-            onBack={() => { if (confirm("終了しますか？")) setMode('start'); }} 
+            onBack={() => { if (confirm("終了しますか？")) setMode('start'); }}
+            onForceBack={() => setMode('lobby')}
           />
         )}
         {(mode === 'deck' || mode === 'cardList') && (
@@ -116,7 +117,7 @@ export default function App() {
         {mode === 'lobby' && (
           <RoomLobby
             onBack={() => setMode('start')}
-            onJoin={(gameId) => handleStart('', '', 'sandbox', { role: 'p2', gameId })}
+            onJoin={(gameId, role) => handleStart('', '', 'sandbox', { role, gameId })}
             onCreate={(gameId) => handleStart('', '', 'sandbox', { role: 'p1', gameId })}
           />
         )}
