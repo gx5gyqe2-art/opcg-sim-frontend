@@ -118,7 +118,10 @@ export default function App() {
           <RoomLobby
             onBack={() => setMode('start')}
             onJoin={(gameId, role) => handleStart('', '', 'sandbox', { role, gameId })}
-            onCreate={(gameId) => handleStart('', '', 'sandbox', { role: 'p1', gameId })}
+            onCreate={(gameId) => {
+              localStorage.setItem('opcg_host_game', gameId);
+              handleStart('', '', 'sandbox', { role: 'p1', gameId });
+            }}
           />
         )}
       </ErrorBoundary>

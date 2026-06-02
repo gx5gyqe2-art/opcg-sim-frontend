@@ -25,6 +25,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }
   const [loading, setLoading] = useState(true);
   const [newRoomName, setNewRoomName] = useState('');
   const [creating, setCreating] = useState(false);
+  const lastHostedGameId = localStorage.getItem('opcg_host_game');
 
   const handleCreate = async () => {
     if (!newRoomName.trim() || creating) return;
@@ -116,21 +117,24 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
             {rooms.filter(r => r.status === 'WAITING').map(room => {
-              const isFull = room.active_connections >= 2;
-              const role: 'p1' | 'p2' = room.active_connections === 0 ? 'p1' : 'p2';
+              const isMyRoom = room.game_id === lastHostedGameId;
+              const isFull = !isMyRoom && room.active_connections >= 2;
+              const role: 'p1' | 'p2' = isMyRoom ? 'p1' : (room.active_connections === 0 ? 'p1' : 'p2');
               return (
               <div
                 key={room.game_id}
                 onClick={() => { if (!isFull) onJoin(room.game_id, role); }}
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #555', borderRadius: '12px', padding: '20px', cursor: isFull ? 'not-allowed' : 'pointer', transition: 'transform 0.2s', position: 'relative', opacity: isFull ? 0.6 : 1 }}
-                onMouseOver={(e) => { if (!isFull) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                style={{ background: isMyRoom ? 'rgba(155,89,182,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isMyRoom ? '#9b59b6' : '#555'}`, borderRadius: '12px', padding: '20px', cursor: isFull ? 'not-allowed' : 'pointer', transition: 'transform 0.2s', position: 'relative', opacity: isFull ? 0.6 : 1 }}
+                onMouseOver={(e) => { if (!isFull) e.currentTarget.style.background = isMyRoom ? 'rgba(155,89,182,0.25)' : 'rgba(255,255,255,0.1)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = isMyRoom ? 'rgba(155,89,182,0.15)' : 'rgba(255,255,255,0.05)'; }}
               >
                 <div style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '18px', marginBottom: '10px' }}>{room.room_name}</div>
                 <div style={{ fontSize: '14px', color: '#ccc' }}>Host: {room.p1_name}</div>
                 <div style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>Turn: {room.turn} | Created: {formatTime(room.created_at)}</div>
                 {isFull ? (
                   <div style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '4px 12px', background: '#7f8c8d', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>FULL</div>
+                ) : isMyRoom ? (
+                  <div style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '4px 12px', background: '#9b59b6', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>再入室</div>
                 ) : (
                   <div style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '4px 12px', background: '#3498db', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>JOIN</div>
                 )}
