@@ -470,8 +470,6 @@ export const SandboxGame = ({
           const { width: W, height: H } = appForHL.screen;
           const coords = calculateCoordinates(W, H);
           const isTopArea = e.clientY < H / 2;
-          const zone = getDropZone({ x: e.clientX, y: e.clientY }, isTopArea, W, H, coords);
-
           if (!dropHighlightRef.current) {
             const g = new PIXI.Graphics();
             appForHL.stage.addChildAt(g, Math.max(0, appForHL.stage.children.length - 1));
@@ -481,11 +479,10 @@ export const SandboxGame = ({
           g.clear();
 
           let hlRect: { x: number; y: number; w: number; h: number } | null = null;
+          const isDon = dragState.card.card_id === "DON" || dragState.card.type === "DON";
 
-          if (zone) {
-            hlRect = getZoneRect(zone, isTopArea, W, H, coords);
-          } else if (dragState.card.card_id === "DON" || dragState.card.type === "DON") {
-            // DONカードをフィールドキャラへアタッチする場合の個別ポジション判定
+          if (isDon) {
+            // DONカード: フィールドキャラへのアタッチを個別カード単位で判定（バンド表示しない）
             const midY = H / 2;
             const THRESHOLD = coords.CH;
             const destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
@@ -503,6 +500,14 @@ export const SandboxGame = ({
                 }
               }
             }
+            // フィールドキャラ以外はゾーン検出（'field'バンドはDONの有効ドロップ先でないためスキップ）
+            if (!hlRect) {
+              const zone = getDropZone({ x: e.clientX, y: e.clientY }, isTopArea, W, H, coords);
+              if (zone && zone !== 'field') hlRect = getZoneRect(zone, isTopArea, W, H, coords);
+            }
+          } else {
+            const zone = getDropZone({ x: e.clientX, y: e.clientY }, isTopArea, W, H, coords);
+            if (zone) hlRect = getZoneRect(zone, isTopArea, W, H, coords);
           }
 
           if (hlRect) {
