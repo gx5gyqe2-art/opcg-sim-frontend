@@ -15,13 +15,38 @@ interface RoomInfo {
 interface RoomLobbyProps {
   onBack: () => void;
   onJoin: (gameId: string) => void;
-  onCreate: (roomName: string) => void;
+  onCreate: (gameId: string) => void;
 }
 
 export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }) => {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [newRoomName, setNewRoomName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = async () => {
+    if (!newRoomName.trim() || creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch(`${API_CONFIG.BASE_URL}/api/sandbox/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p1_name: 'P1', p2_name: 'P2', room_name: newRoomName.trim() })
+      });
+      const data = await res.json();
+      if (data.success && data.game_id) {
+        onCreate(data.game_id);
+      } else {
+        logger.error('lobby.create_fail', data.error || 'Unknown error');
+        alert('ルームの作成に失敗しました');
+      }
+    } catch (e) {
+      logger.error('lobby.create_fail', String(e));
+      alert('ルームの作成に失敗しました');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const fetchRooms = async () => {
     try {
@@ -65,16 +90,16 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }
           type="text"
           value={newRoomName}
           onChange={(e) => setNewRoomName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && newRoomName.trim()) { onCreate(newRoomName.trim()); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
           placeholder="部屋名を入力..."
           style={{ flex: 1, padding: '8px 12px', background: '#1a1a2e', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none' }}
         />
         <button
-          onClick={() => { if (newRoomName.trim()) onCreate(newRoomName.trim()); }}
-          disabled={!newRoomName.trim()}
-          style={{ padding: '8px 20px', background: newRoomName.trim() ? '#9b59b6' : '#444', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: newRoomName.trim() ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}
+          onClick={handleCreate}
+          disabled={!newRoomName.trim() || creating}
+          style={{ padding: '8px 20px', background: (newRoomName.trim() && !creating) ? '#9b59b6' : '#444', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: (newRoomName.trim() && !creating) ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}
         >
-          ＋ ルームを作成
+          {creating ? '作成中...' : '＋ ルームを作成'}
         </button>
       </div>
 
