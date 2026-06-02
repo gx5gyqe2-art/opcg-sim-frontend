@@ -47,6 +47,9 @@ const MOCK_DECKS: Record<string, any> = {
 
 type DragState = { card: CardInstance; sprite: PIXI.Container; startPos: { x: number, y: number }; } | null;
 
+// 進行中のローカルサンドボックス状態を保存するsessionStorageキー（クラッシュ/リロード復帰用）
+const SANDBOX_STATE_KEY = 'opcg_sandbox_state';
+
 const SMALL_SCALE = 0.7;
 
 const getDropZone = (
@@ -301,6 +304,20 @@ export const SandboxGame = ({
 
   useEffect(() => {
     if (isLocalMode) {
+      // 進行中ゲームの復元: クラッシュ/リロードでメモリ上のgameStateが失われても、
+      // sessionStorageに保存済みのPLAYING状態があればそれを復元してゲームを継続する。
+      // （新規開始時はApp.handleStartでこのキーがクリアされるため、古いゲームの誤復元は起きない）
+      try {
+        const saved = sessionStorage.getItem(SANDBOX_STATE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as GameState;
+          if (parsed && parsed.status && parsed.status !== 'WAITING') {
+            setGameState(parsed);
+            return;
+          }
+        }
+      } catch (e) { /* 復元失敗時は通常の初期化にフォールバック */ }
+
       const hasInitialDecks = !!(initialP1DeckId && initialP2DeckId);
 
       setGameState({
@@ -309,15 +326,15 @@ export const SandboxGame = ({
         status: 'WAITING',
         ready_states: { p1: hasInitialDecks, p2: hasInitialDecks },
         players: {
-          p1: { 
-            name: initialP1DeckId || '', 
-            player_id: 'p1', 
-            zones: { hand: [], field: [], life: [], trash: [] } 
+          p1: {
+            name: initialP1DeckId || '',
+            player_id: 'p1',
+            zones: { hand: [], field: [], life: [], trash: [] }
           } as any,
-          p2: { 
-            name: initialP2DeckId || '', 
-            player_id: 'p2', 
-            zones: { hand: [], field: [], life: [], trash: [] } 
+          p2: {
+            name: initialP2DeckId || '',
+            player_id: 'p2',
+            zones: { hand: [], field: [], life: [], trash: [] }
           } as any
         },
         turn_info: { turn_count: 0, active_player_id: 'p1', current_phase: 'SETUP', winner: null }
@@ -370,6 +387,19 @@ export const SandboxGame = ({
     }
   }, [gameState, isLocalMode, initialP1DeckId, initialP2DeckId]);
 
+  // 進行中ゲームの永続化: ローカルモードでPLAYING中はgameStateをsessionStorageへ保存し、
+  // 万一のクラッシュ/リロードでも復元できるようにする。WAITING(セットアップ中)は保存しない。
+  useEffect(() => {
+    if (!isLocalMode || !gameState) return;
+    try {
+      if (gameState.status === 'WAITING') {
+        sessionStorage.removeItem(SANDBOX_STATE_KEY);
+      } else {
+        sessionStorage.setItem(SANDBOX_STATE_KEY, JSON.stringify(gameState));
+      }
+    } catch (e) { /* 保存失敗(容量超過等)は致命的でないため握りつぶす */ }
+  }, [isLocalMode, gameState]);
+
   useEffect(() => {
     if (!pixiContainerRef.current || (gameState && gameState.status === 'WAITING')) return;
     while (pixiContainerRef.current.firstChild) pixiContainerRef.current.removeChild(pixiContainerRef.current.firstChild);
@@ -414,8 +444,17 @@ export const SandboxGame = ({
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState || gameState.status === 'WAITING') return;
-    app.stage.removeChildren();
-    
+    // 前フレームの表示オブジェクトを破棄してメモリリークを防止する。
+    // ・ドラッグ中のゴースト(dragState.sprite)は再利用するため破棄しない
+    // ・共有テクスチャ(Texture.fromキャッシュ)は temporarily 残す(texture:false)
+    const liveGhost = dragState?.sprite || null;
+    const removedChildren = app.stage.removeChildren();
+    for (const child of removedChildren) {
+      if (child === liveGhost) continue;
+      if (child === dropHighlightRef.current) dropHighlightRef.current = null;
+      try { child.destroy({ children: true, texture: false, baseTexture: false }); } catch (e) { /* already destroyed */ }
+    }
+
     const { width: W, height: H } = app.screen;
     const coords = calculateCoordinates(W, H);
     const midY = H / 2;
