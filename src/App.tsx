@@ -117,7 +117,7 @@ export default function App() {
           <RoomLobby
             onBack={() => setMode('start')}
             onJoin={(gameId) => handleStart('', '', 'sandbox', { role: 'p2', gameId })}
-            onCreate={(roomName) => handleStart('', '', 'sandbox', { role: 'p1', room_name: roomName })}
+            onCreate={(gameId) => handleStart('', '', 'sandbox', { role: 'p1', gameId })}
           />
         )}
       </ErrorBoundary>
