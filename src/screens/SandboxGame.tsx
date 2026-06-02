@@ -109,6 +109,43 @@ const getZoneRect = (
   }
 };
 
+type DonTarget = { kind: 'leader' | 'field'; index: number; x: number; y: number };
+
+// DONカードのアタッチ先（リーダー or フィールドキャラ）を「最も近いカード」で解決する。
+// ハイライト(onPointerMove)とドロップ実行(onPointerUp)で共通利用し、判定の不一致を防ぐ。
+const getDonAttachTarget = (
+  pos: { x: number; y: number },
+  isTopArea: boolean,
+  W: number,
+  H: number,
+  coords: ReturnType<typeof calculateCoordinates>,
+  hasLeader: boolean,
+  fieldCount: number
+): DonTarget | null => {
+  const midY = H / 2;
+  const getX = (val: number) => isTopArea ? W - val : val;
+  const yBase = isTopArea ? 0 : midY;
+  const leaderY = isTopArea ? (coords.midY - coords.getY(2) - coords.CH / 2) : (yBase + coords.getY(2) + coords.CH / 2);
+  const fieldY = isTopArea ? (coords.midY - coords.getY(1) - coords.CH / 2) : (yBase + coords.getY(1) + coords.CH / 2);
+
+  let best: DonTarget | null = null;
+  let bestDist = Infinity;
+  const consider = (kind: 'leader' | 'field', index: number, cx: number, cy: number) => {
+    const dx = pos.x - cx, dy = pos.y - cy;
+    // 縦横ともカード幅/高さの半分以内をターゲット領域とし、その中で最も近い中心を採用
+    if (Math.abs(dx) < coords.CW / 2 && Math.abs(dy) < coords.CH / 2) {
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) { bestDist = d; best = { kind, index, x: cx, y: cy }; }
+    }
+  };
+
+  if (hasLeader) consider('leader', -1, getX(coords.getLeaderX(W)), leaderY);
+  for (let i = 0; i < fieldCount; i++) {
+    consider('field', i, getX(coords.getFieldX(i, W, coords.CW, fieldCount)), fieldY);
+  }
+  return best;
+};
+
 interface SandboxGameProps { 
   gameId?: string; 
   myPlayerId?: string; 
@@ -482,28 +519,20 @@ export const SandboxGame = ({
           const isDon = dragState.card.card_id === "DON" || dragState.card.type === "DON";
 
           if (isDon) {
-            // DONカード: フィールドキャラへのアタッチを個別カード単位で判定（バンド表示しない）
-            const midY = H / 2;
-            const THRESHOLD = coords.CH;
+            // DONカード: リーダー/フィールドキャラのうち最も近い1枚にハイライト（バンド表示しない）
             const destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
             const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             if (targetPlayer) {
-              const getX = (val: number) => isTopArea ? W - val : val;
-              const yBase = isTopArea ? 0 : midY;
-              const fieldY = isTopArea ? (midY - coords.getY(1) - coords.CH / 2) : (yBase + coords.getY(1) + coords.CH / 2);
-              const fieldCards = targetPlayer.zones.field;
-              for (let i = 0; i < fieldCards.length; i++) {
-                const cx = getX(coords.getFieldX(i, W, coords.CW, fieldCards.length));
-                if (Math.abs(e.clientX - cx) < THRESHOLD && Math.abs(e.clientY - fieldY) < THRESHOLD) {
-                  hlRect = { x: cx, y: fieldY, w: coords.CW, h: coords.CH };
-                  break;
-                }
-              }
+              const target = getDonAttachTarget(
+                { x: e.clientX, y: e.clientY }, isTopArea, W, H, coords,
+                !!targetPlayer.leader, targetPlayer.zones.field.length
+              );
+              if (target) hlRect = { x: target.x, y: target.y, w: coords.CW, h: coords.CH };
             }
-            // フィールドキャラ以外はゾーン検出（'field'バンドはDONの有効ドロップ先でないためスキップ）
+            // アタッチ対象が無い場合はDONゾーンのみ検出（'field'バンドはDONの有効ドロップ先でないためスキップ）
             if (!hlRect) {
               const zone = getDropZone({ x: e.clientX, y: e.clientY }, isTopArea, W, H, coords);
-              if (zone && zone !== 'field') hlRect = getZoneRect(zone, isTopArea, W, H, coords);
+              if (zone && zone !== 'field' && zone !== 'leader') hlRect = getZoneRect(zone, isTopArea, W, H, coords);
             }
           } else {
             const zone = getDropZone({ x: e.clientX, y: e.clientY }, isTopArea, W, H, coords);
@@ -562,19 +591,15 @@ export const SandboxGame = ({
 
             if (myPlayerId !== 'both' && destPid !== myPlayerId) { clearDropHighlight(); setDragState(null); return; }
 
-            const THRESHOLD = coords.CH;
-
             if (card.card_id === "DON" || card.type === "DON") {
                 const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
                 if (targetPlayer) {
-                    const getX = (val: number) => isTopArea ? W - val : val;
-                    const yBase = isTopArea ? 0 : midY; const leaderY = isTopArea ? (midY - coords.getY(2) - coords.CH/2) : (yBase + coords.getY(2) + coords.CH/2);
-                    if (targetPlayer.leader && Math.abs(endPos.x - getX(coords.getLeaderX(W))) < THRESHOLD && Math.abs(endPos.y - leaderY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetPlayer.leader.uuid }); clearDropHighlight(); setDragState(null); return; }
-                    const fieldY = isTopArea ? (midY - coords.getY(1) - coords.CH/2) : (yBase + coords.getY(1) + coords.CH/2);
-                    const fieldCards = targetPlayer.zones.field;
-                    for (let i = 0; i < fieldCards.length; i++) {
-                        const cx = getX(coords.getFieldX(i, W, coords.CW, fieldCards.length));
-                        if (Math.abs(endPos.x - cx) < THRESHOLD && Math.abs(endPos.y - fieldY) < THRESHOLD) { handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: fieldCards[i].uuid }); clearDropHighlight(); setDragState(null); return; }
+                    // ハイライトと同じリゾルバで「最も近いカード」を解決
+                    const target = getDonAttachTarget(endPos, isTopArea, W, H, coords, !!targetPlayer.leader, targetPlayer.zones.field.length);
+                    if (target) {
+                        const targetUuid = target.kind === 'leader' ? targetPlayer.leader!.uuid : targetPlayer.zones.field[target.index].uuid;
+                        handleAction('ATTACH_DON', { card_uuid: card.uuid, target_uuid: targetUuid });
+                        clearDropHighlight(); setDragState(null); return;
                     }
                 }
                 const dZone = getDropZone(endPos, isTopArea, W, H, coords); if (dZone && ['don_active', 'don_rested', 'don_deck'].includes(dZone)) handleAction('MOVE_CARD', { card_uuid: card.uuid, dest_player_id: destPid, dest_zone: dZone });
