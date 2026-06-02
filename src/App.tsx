@@ -114,7 +114,11 @@ export default function App() {
           <DeckBuilder onBack={() => setMode('start')} viewOnly={mode === 'cardList'} />
         )}
         {mode === 'lobby' && (
-          <RoomLobby onBack={() => setMode('start')} onJoin={(gameId) => handleStart(selectedDecks.p1, selectedDecks.p2, 'sandbox', { role: 'p2', gameId })} />
+          <RoomLobby
+            onBack={() => setMode('start')}
+            onJoin={(gameId) => handleStart(selectedDecks.p1, selectedDecks.p2, 'sandbox', { role: 'p2', gameId })}
+            onCreate={(roomName) => handleStart('', '', 'sandbox', { role: 'p1', room_name: roomName })}
+          />
         )}
       </ErrorBoundary>
     </div>
