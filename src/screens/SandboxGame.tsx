@@ -60,6 +60,7 @@ const getDropZone = (
   const THRESHOLD = coords.CH;
   const getX = (val: number) => isTopArea ? W - val : val;
   const yBase = isTopArea ? 0 : midY;
+  const r1Y = isTopArea ? coords.midY - coords.getY(1) - coords.CH / 2 : yBase + coords.getY(1) + coords.CH / 2;
   const r2Y = isTopArea ? coords.midY - coords.getY(2) - coords.CH / 2 : yBase + coords.getY(2) + coords.CH / 2;
   const r3Y = isTopArea ? coords.midY - coords.getY(3) - coords.CH / 2 : yBase + coords.getY(3) + coords.CH / 2;
   const r4Y = isTopArea ? coords.midY - coords.getY(4) - coords.CH / 2 : yBase + coords.getY(4) + coords.CH / 2;
@@ -73,6 +74,7 @@ const getDropZone = (
   if (checkDist(getX(coords.getDonDeckX(W)), r3Y) < THRESHOLD) return 'don_deck';
   if (checkDist(getX(coords.getDonActiveX(W)), r3Y) < THRESHOLD) return 'don_active';
   if (checkDist(getX(coords.getDonRestX(W)), r3Y) < THRESHOLD) return 'don_rested';
+  if (Math.abs(r1Y - pos.y) < coords.CH) return 'field';
   return null;
 };
 
