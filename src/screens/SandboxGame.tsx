@@ -477,14 +477,37 @@ export const SandboxGame = ({
           }
           const g = dropHighlightRef.current;
           g.clear();
+
+          let hlRect: { x: number; y: number; w: number; h: number } | null = null;
+
           if (zone) {
-            const rect = getZoneRect(zone, isTopArea, W, H, coords);
-            if (rect) {
-              g.lineStyle(3, 0xffd700, 1);
-              g.beginFill(0xffd700, 0.2);
-              g.drawRoundedRect(rect.x - rect.w / 2, rect.y - rect.h / 2, rect.w, rect.h, 8);
-              g.endFill();
+            hlRect = getZoneRect(zone, isTopArea, W, H, coords);
+          } else if (dragState.card.card_id === "DON" || dragState.card.type === "DON") {
+            // DONカードをフィールドキャラへアタッチする場合の個別ポジション判定
+            const midY = H / 2;
+            const THRESHOLD = coords.CH;
+            const destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
+            const targetPlayer = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
+            if (targetPlayer) {
+              const getX = (val: number) => isTopArea ? W - val : val;
+              const yBase = isTopArea ? 0 : midY;
+              const fieldY = isTopArea ? (midY - coords.getY(1) - coords.CH / 2) : (yBase + coords.getY(1) + coords.CH / 2);
+              const fieldCards = targetPlayer.zones.field;
+              for (let i = 0; i < fieldCards.length; i++) {
+                const cx = getX(coords.getFieldX(i, W, coords.CW, fieldCards.length));
+                if (Math.abs(e.clientX - cx) < THRESHOLD && Math.abs(e.clientY - fieldY) < THRESHOLD) {
+                  hlRect = { x: cx, y: fieldY, w: coords.CW, h: coords.CH };
+                  break;
+                }
+              }
             }
+          }
+
+          if (hlRect) {
+            g.lineStyle(3, 0xffd700, 1);
+            g.beginFill(0xffd700, 0.2);
+            g.drawRoundedRect(hlRect.x - hlRect.w / 2, hlRect.y - hlRect.h / 2, hlRect.w, hlRect.h, 8);
+            g.endFill();
           }
         }
     };
