@@ -15,11 +15,13 @@ interface RoomInfo {
 interface RoomLobbyProps {
   onBack: () => void;
   onJoin: (gameId: string) => void;
+  onCreate: (roomName: string) => void;
 }
 
-export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin }) => {
+export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }) => {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [newRoomName, setNewRoomName] = useState('');
 
   const fetchRooms = async () => {
     try {
@@ -57,13 +59,32 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin }) => {
         <button onClick={fetchRooms} style={{ background: 'none', border: 'none', color: '#3498db', cursor: 'pointer' }}>更新</button>
       </div>
 
+      {/* ルーム作成エリア */}
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid #333', background: 'rgba(0,0,0,0.3)', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={newRoomName}
+          onChange={(e) => setNewRoomName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && newRoomName.trim()) { onCreate(newRoomName.trim()); } }}
+          placeholder="部屋名を入力..."
+          style={{ flex: 1, padding: '8px 12px', background: '#1a1a2e', border: '1px solid #555', borderRadius: '4px', color: '#fff', fontSize: '14px', outline: 'none' }}
+        />
+        <button
+          onClick={() => { if (newRoomName.trim()) onCreate(newRoomName.trim()); }}
+          disabled={!newRoomName.trim()}
+          style={{ padding: '8px 20px', background: newRoomName.trim() ? '#9b59b6' : '#444', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: newRoomName.trim() ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}
+        >
+          ＋ ルームを作成
+        </button>
+      </div>
+
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', marginTop: '50px' }}>Loading rooms...</div>
         ) : rooms.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#888' }}>
             <p>現在、アクティブなルームはありません。</p>
-            <p style={{ fontSize: '12px' }}>タイトル画面から新しく作成してください。</p>
+            <p style={{ fontSize: '12px' }}>上のフォームから新しく作成してください。</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>

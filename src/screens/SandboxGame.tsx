@@ -174,7 +174,8 @@ export const SandboxGame = ({
   const [activeGameId, setActiveGameId] = useState<string | null>(initialGameId || null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isPending, setIsPending] = useState(false);
-  
+  const [wsConnected, setWsConnected] = useState(false);
+
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [selectingDeckFor, setSelectingDeckFor] = useState<string | null>(null);
 
@@ -199,6 +200,13 @@ export const SandboxGame = ({
   useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
   const dropHighlightRef = useRef<PIXI.Graphics | null>(null);
+
+  // WebSocket 再接続用
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const isMountedRef = useRef(true);
+  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
 
   const clearDropHighlight = () => {
     if (dropHighlightRef.current) {
@@ -342,7 +350,44 @@ export const SandboxGame = ({
       return;
     }
 
-    let ws: WebSocket | null = null;
+    const connectWs = (gameId: string) => {
+      if (!isMountedRef.current) return;
+      // 既存接続を切断（oncloseによる再接続ループを防ぐため先にハンドラを外す）
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      }
+      const baseUrl = API_CONFIG.BASE_URL;
+      const wsProtocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
+      const wsHost = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/sandbox/${gameId}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (!isMountedRef.current) return;
+        reconnectAttemptRef.current = 0;
+        setWsConnected(true);
+        logger.log({ level: 'info', action: 'ws.connected', msg: `WebSocket connected: ${gameId}` });
+      };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'STATE_UPDATE') setGameState(data.state);
+        } catch(e) { logger.error('ws.parse_error', String(e)); }
+      };
+      ws.onerror = () => { logger.error('ws.error', 'WebSocket error'); };
+      ws.onclose = () => {
+        if (!isMountedRef.current) return;
+        setWsConnected(false);
+        const attempt = reconnectAttemptRef.current;
+        // 指数バックオフ: 2s → 4s → 8s → 16s → 30s(上限)
+        const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
+        reconnectAttemptRef.current += 1;
+        logger.warn('ws.disconnected', `Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
+        reconnectTimerRef.current = setTimeout(() => connectWs(gameId), delay);
+      };
+    };
+
     const initGame = async () => {
       try {
         let currentId = activeGameId;
@@ -352,22 +397,14 @@ export const SandboxGame = ({
             setActiveGameId(currentId);
             setGameState(state);
         }
-        if (currentId) {
-            const baseUrl = API_CONFIG.BASE_URL;
-            const wsProtocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
-            const wsHost = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-            ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/sandbox/${currentId}`);
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'STATE_UPDATE') setGameState(data.state);
-                } catch(e) { logger.error('ws.parse_error', String(e)); }
-            };
-        }
+        if (currentId) connectWs(currentId);
       } catch (e) { logger.error('sandbox.init_fail', String(e)); alert("Failed to start sandbox"); onBack(); }
     };
     initGame();
-    return () => { if (ws) ws.close(); };
+    return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
+    };
   }, [isLocalMode, initialP1DeckId, initialP2DeckId]); 
 
   const hasAutoStartedRef = useRef(false);
@@ -965,6 +1002,16 @@ export const SandboxGame = ({
                 <button onClick={onBack} style={{ background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>TOPへ</button>
                 <button onClick={() => { if(window.confirm('ゲームを初期状態にリセットしますか？')) handleAction('RESET', {}); }} style={{ background: 'rgba(200, 0, 0, 0.8)', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px' }}>リセット</button>
             </div>
+            {!isLocalMode && (
+                <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.6)', border: '1px solid #555', borderRadius: '4px', padding: '5px 10px', pointerEvents: 'none' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsConnected ? '#2ecc71' : '#e74c3c', display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ color: 'white', fontSize: '11px' }}>
+                        {wsConnected
+                            ? (gameState?.status === 'WAITING' ? '相手の接続を待っています...' : '接続中')
+                            : `再接続中... (${reconnectAttemptRef.current}回目)`}
+                    </span>
+                </div>
+            )}
             {isMulliganPhase && (
                 <div style={{ position: 'absolute', top: (myPlayerId === 'both' && layoutCoords) ? `${layoutCoords.y + 22}px` : '60px', left: '50%', transform: (myPlayerId === 'both' && layoutCoords) ? 'translate(-50%, -50%)' : 'translateX(-50%)', pointerEvents: 'auto', display: 'flex', gap: '20px', background: 'rgba(0,0,0,0.6)', padding: '15px', borderRadius: '12px', border: '1px solid #555' }}>
                     {(['p1', 'p2'] as const).map(pid => {
