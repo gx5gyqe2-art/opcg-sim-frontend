@@ -76,6 +76,9 @@ export default function App() {
   const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: any) => {
     
     if (gameMode === 'sandbox') {
+        // メニューから新規にサンドボックスを開始する場合は、前回の進行中ゲーム保存を破棄する
+        // （クラッシュ/リロード復帰用の保存を、意図的な新規開始と区別するため）
+        sessionStorage.removeItem('opcg_sandbox_state');
         setSelectedDecks({ p1, p2 });
         setSandboxOptions(sbOptions || { role: 'both' });
         setMode('sandbox');

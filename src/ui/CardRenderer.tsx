@@ -85,6 +85,11 @@ export const createCardContainer = (
         };
         targetTexture.baseTexture.on('update', updateTexture);
         targetTexture.baseTexture.on('loaded', updateTexture);
+        // sprite破棄時に共有baseTextureからリスナーを解除し、蓄積（リーク）を防ぐ
+        sprite.once('destroyed', () => {
+            targetTexture.baseTexture.off('update', updateTexture);
+            targetTexture.baseTexture.off('loaded', updateTexture);
+        });
     }
     
     const mask = new PIXI.Graphics();
