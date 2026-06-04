@@ -16,6 +16,28 @@ import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
 
+const PENDING_ACTION_LABELS: Record<string, string> = {
+  SELECT_BLOCKER: 'ブロッカー選択',
+  SELECT_COUNTER: 'カウンター選択',
+  SEARCH_AND_SELECT: '対象選択',
+  CONFIRM_DECISION: '確認',
+  ORDER_CARDS: 'カード並び替え',
+  SELECT_RESOURCE: 'リソース選択',
+  CHOICE: '選択肢',
+};
+
+const resolveCardName = (uuid: string, gs: GameState): string => {
+  for (const pid of ['p1', 'p2'] as const) {
+    const p = gs.players[pid];
+    if (p.leader?.uuid === uuid) return p.leader.name;
+    const z = p.zones;
+    for (const zone of [z.field, z.hand, z.life, z.trash]) {
+      const c = zone?.find(c => c.uuid === uuid);
+      if (c) return c.name;
+    }
+  }
+  return uuid.slice(0, 8);
+};
 
 export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
   const pixiContainerRef = useRef<HTMLDivElement>(null);
@@ -500,18 +522,23 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       )}
 
       {pendingRequest && !isAttackTargeting && !showSearchModal && pendingRequest.action !== 'MAIN_ACTION' && (
-        <div style={{ 
-            position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', 
-            zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG, 
-            padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center', 
-            border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}` 
+        <div style={{
+            position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+            zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
+            padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
+            border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}`,
+            maxWidth: '320px', minWidth: '220px',
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-            [{pendingRequest.action}] {pendingRequest.message}
+          <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '4px' }}>
+            {PENDING_ACTION_LABELS[pendingRequest.action] || pendingRequest.action}
+          </div>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '13px' }}>
+            {pendingRequest.message}
           </div>
           {gameState?.active_battle && (
             <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
-              {`ATTACK: ${gameState.active_battle.attacker_uuid.slice(0,8)} → ${gameState.active_battle.target_uuid.slice(0,8)}`}
+              ⚔ 「{resolveCardName(gameState.active_battle.attacker_uuid, gameState)}」
+              →「{resolveCardName(gameState.active_battle.target_uuid, gameState)}」
             </div>
           )}
 
