@@ -233,10 +233,17 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             {'traits' in card && card.traits && card.traits.map((trait: string, idx: number) => (
               <span key={idx} style={badgeStyle(COLORS.BADGE_TRAIT)}>{trait}</span>
             ))}
+            {card.is_frozen && <span style={badgeStyle(COLORS.BADGE_FROZEN_CSS)}>凍結</span>}
+            {card.ability_disabled && <span style={badgeStyle(COLORS.BADGE_NEGATE_CSS)}>効果無効</span>}
           </div>
           <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left' }}>
             {'text' in card ? card.text : ''}
           </p>
+          {'trigger_text' in card && card.trigger_text && (
+            <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left', borderTop: '1px solid #eee', paddingTop: '8px', marginTop: '4px' }}>
+              <span style={{ fontWeight: 'bold', color: COLORS.BADGE_ATTR }}>【トリガー】</span> {card.trigger_text}
+            </p>
+          )}
           <div style={{ marginTop: '15px', fontWeight: 'bold', display: 'flex', gap: '20px', borderTop: '1px solid #eee', paddingTop: '10px', justifyContent: 'center' }}>
             {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}</span>}
             {'cost' in card && <span>COST: {(card as BoardCard).cost}</span>}

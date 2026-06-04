@@ -16,6 +16,9 @@ export interface BaseCard {
   keywords?: string[];
   traits?: string[];
   text?: string;
+  trigger_text?: string;
+  ability_disabled?: boolean;
+  is_frozen?: boolean;
 }
 
 export interface LeaderCard extends BaseCard {
