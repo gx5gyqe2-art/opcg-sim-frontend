@@ -1,15 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid'; 
+import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '../api/client';
-import type { GameActionRequest, ActionType, BattleActionRequest, PendingRequest } from '../api/types';
+import type { GameActionRequest, ActionType, BattleActionRequest, PendingRequest, ActionEvent } from '../api/types';
 import type { GameState } from './types';
 import { logger } from '../utils/logger';
 
 export const useGameAction = (
-  playerId: string, 
+  playerId: string,
   setGameState: (state: GameState) => void,
   setPendingRequest: (req: PendingRequest | null) => void,
-  pendingRequest: PendingRequest | null
+  pendingRequest: PendingRequest | null,
+  addEventLog?: (events: ActionEvent[]) => void,
 ) => {
   const [isPending, setIsPending] = useState(false);
   const [errorToast, setErrorToast] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export const useGameAction = (
       });
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
+      if (result.action_events?.length) addEventLog?.(result.action_events);
     } catch (e: any) {
       if (e.game_state || e.pending_request) {
         setGameState(e.game_state);
@@ -77,7 +79,7 @@ export const useGameAction = (
     } finally {
       setIsPending(false);
     }
-  }, [gameId, pendingRequest, playerId, setGameState, setPendingRequest]);
+  }, [gameId, pendingRequest, playerId, setGameState, setPendingRequest, addEventLog]);
 
   const sendBattleAction = useCallback(async (
     actionType: BattleActionRequest['action_type'],
@@ -106,6 +108,7 @@ export const useGameAction = (
       });
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
+      if (result.action_events?.length) addEventLog?.(result.action_events);
     } catch (e: any) {
       if (e.game_state) {
         setGameState(e.game_state);
@@ -117,7 +120,7 @@ export const useGameAction = (
     } finally {
       setIsPending(false);
     }
-  }, [gameId, pendingRequest, playerId, setGameState, setPendingRequest]);
+  }, [gameId, pendingRequest, playerId, setGameState, setPendingRequest, addEventLog]);
 
   return { sendAction, sendBattleAction, startGame, gameId, isPending, errorToast, setErrorToast };
 };

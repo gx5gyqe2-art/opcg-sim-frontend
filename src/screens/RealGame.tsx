@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -8,11 +8,13 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
 import { DebugReporter } from '../ui/DebugReporter';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
+import { ActionLog } from '../ui/ActionLog';
 import { API_CONFIG } from '../api/api.config';
 import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
+import type { ActionEvent } from '../api/types';
 
 
 export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
@@ -36,17 +38,24 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [isSetupComplete, setIsSetupComplete] = useState(!!(initialP1 && initialP2));
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
+  const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
+  const MAX_LOG = 50;
+  const addEventLog = useCallback((newEvents: ActionEvent[]) => {
+    setEventLog(prev => [...newEvents, ...prev].slice(0, MAX_LOG));
+  }, []);
+
   const { startGame, sendAction, sendBattleAction, isPending, errorToast, setErrorToast } = useGameAction(
     activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1"),
     setGameState,
     setPendingRequest,
-    pendingRequest
+    pendingRequest,
+    addEventLog,
   );
 
   useEffect(() => {
@@ -589,14 +598,16 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       />
     )}
 
-    <DebugReporter 
-      data={{ 
-        gameState, 
+    <DebugReporter
+      data={{
+        gameState,
         pendingRequest,
         activePlayerId,
         attackingCardUuid
-      }} 
+      }}
     />
+
+    <ActionLog events={eventLog} />
 
     </div>
   );

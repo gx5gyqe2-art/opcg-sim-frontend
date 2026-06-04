@@ -50,6 +50,17 @@ export interface BattleActionRequest {
   request_id: string;
 }
 
+export interface ActionEvent {
+  type: string;
+  player: string;
+  card_name?: string;
+  action?: string;
+  targets?: string[];
+  value?: number | null;
+  message?: string;
+  success?: boolean;
+}
+
 export interface GameActionResult {
   success: boolean;
   game_id: string;
@@ -59,4 +70,5 @@ export interface GameActionResult {
     code: string;
     message: string;
   };
+  action_events?: ActionEvent[];
 }
