@@ -22,6 +22,8 @@ export const LAYOUT_CONSTANTS = {
     BADGE_TEXT: 0xFFFFFF,      // 汎用バッジ文字色 (白)
     BADGE_COST_BG: 0x2c3e50,   // コスト表示バッジの背景
     BADGE_DON_BG: 0x9370DB,    // ドン!!付与数バッジの背景 (紫)
+    BADGE_FROZEN_BG: 0x2980b9,  // 凍結オーバーレイ (青)
+    BADGE_NEGATE_BG: 0x7f8c8d,  // 効果無効オーバーレイ (グレー)
 
     // 装飾・マスク用 (PIXI描画用)
     MASK_FILL: 0xffffff,       // 手札エリアのマスク用塗りつぶし色
@@ -38,6 +40,8 @@ export const LAYOUT_CONSTANTS = {
     BADGE_ATTR: '#c0392b',     // 属性(Attribute)バッジの背景 (赤系)
     BADGE_TRAIT: '#34495e',    // 特徴(Trait)バッジの背景 (紺系)
     BADGE_LOC: '#333333',      // 場所(Hand, Trash等)バッジの背景 (黒系)
+    BADGE_FROZEN_CSS: '#2980b9',  // 凍結バッジ CSS 用 (青)
+    BADGE_NEGATE_CSS: '#7f8c8d',  // 効果無効バッジ CSS 用 (グレー)
     
     // ボタン色 (CSSスタイル適用)
     BTN_PRIMARY: '#3498db',    // 主要アクション (青)

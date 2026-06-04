@@ -192,7 +192,8 @@ export const apiClient = {
       success: true,
       game_id: newGameId,
       game_state: result[CONST.API_ROOT_KEYS.GAME_STATE],
-      pending_request: result.pending_request
+      pending_request: result.pending_request,
+      action_events: result.action_events || [],
     };
   },
 
@@ -215,7 +216,8 @@ export const apiClient = {
       success: true,
       game_id: request.game_id,
       game_state: result[CONST.API_ROOT_KEYS.GAME_STATE],
-      pending_request: result.pending_request
+      pending_request: result.pending_request,
+      action_events: result.action_events || [],
     };
   }
 };

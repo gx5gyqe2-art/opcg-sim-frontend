@@ -283,6 +283,27 @@ export const createCardContainer = (
     addText(options.count.toString(), { fontSize: SIZES.FONT_COUNT, fill: COLORS.BADGE_TEXT, fontWeight: 'bold' }, bx, by, 'screen');
   }
 
+  // --- 状態オーバーレイ (FREEZE / NEGATE) ---
+  if (card?.is_frozen) {
+    const overlay = new PIXI.Graphics();
+    overlay.beginFill(COLORS.BADGE_FROZEN_BG, 0.3);
+    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    overlay.endFill();
+    container.addChild(overlay);
+    const labelY = card?.ability_disabled ? -ch * 0.12 : 0;
+    addText('凍結', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
+  }
+
+  if (card?.ability_disabled) {
+    const overlay = new PIXI.Graphics();
+    overlay.beginFill(COLORS.BADGE_NEGATE_BG, 0.3);
+    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    overlay.endFill();
+    container.addChild(overlay);
+    const labelY = card?.is_frozen ? ch * 0.12 : 0;
+    addText('効果無効', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
+  }
+
   container.eventMode = 'static';
   container.cursor = 'pointer';
 
