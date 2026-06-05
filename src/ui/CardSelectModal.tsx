@@ -11,16 +11,21 @@ interface CardSelectModalProps {
   maxSelect: number;
   onConfirm: (selectedUuids: string[]) => void;
   onCancel?: () => void;
+  selectableUuids?: string[];
 }
 
-export const CardSelectModal: React.FC<CardSelectModalProps> = ({ 
-  candidates, message, minSelect, maxSelect, onConfirm, onCancel 
+export const CardSelectModal: React.FC<CardSelectModalProps> = ({
+  candidates, message, minSelect, maxSelect, onConfirm, onCancel, selectableUuids
 }) => {
   const [selected, setSelected] = useState<string[]>([]);
   const { COLORS } = LAYOUT_CONSTANTS;
   const { SHAPE, SHADOWS } = LAYOUT_PARAMS;
 
+  const selectableSet = selectableUuids ? new Set(selectableUuids) : null;
+  const isSelectable = (uuid: string) => !selectableSet || selectableSet.has(uuid);
+
   const handleToggle = (uuid: string) => {
+    if (!isSelectable(uuid)) return;
     setSelected(prev => {
       if (prev.includes(uuid)) {
         return prev.filter(id => id !== uuid);
@@ -77,26 +82,27 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
         <div style={gridStyle}>
           {candidates.map(card => {
             const isSelected = selected.includes(card.uuid);
-            // ▼ 変更: getCardImageUrlを使用
+            const canSelect = isSelectable(card.uuid);
             const imageUrl = getCardImageUrl(card.card_id);
 
             return (
-              <div 
-                key={card.uuid} 
+              <div
+                key={card.uuid}
                 onClick={() => handleToggle(card.uuid)}
                 style={{
                   border: isSelected ? `3px solid ${COLORS.BTN_PRIMARY}` : '1px solid #ccc',
                   borderRadius: SHAPE.CORNER_RADIUS_CARD,
-                  cursor: 'pointer',
+                  cursor: canSelect ? 'pointer' : 'default',
                   backgroundColor: '#444',
                   position: 'relative',
                   aspectRatio: '0.714',
                   overflow: 'hidden',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  opacity: canSelect ? 1 : 0.4,
                 }}
               >
-                <img 
-                  src={imageUrl} 
+                <img
+                  src={imageUrl}
                   alt={card.name}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={(e) => {
@@ -104,7 +110,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                     e.currentTarget.parentElement!.innerHTML = `<span style="color:white;font-size:0.7rem;padding:2px;text-align:center;">${card.name}</span>`;
                   }}
                 />
-                
+
                 {isSelected && (
                   <div style={{
                     position: 'absolute', top: '4px', right: '4px',
@@ -113,6 +119,14 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '14px', zIndex: 10, border: '2px solid white'
                   }}>✓</div>
+                )}
+
+                {!canSelect && (
+                  <div style={{
+                    position: 'absolute', bottom: '4px', left: 0, right: 0,
+                    textAlign: 'center', fontSize: '0.6rem', color: '#ccc',
+                    background: 'rgba(0,0,0,0.5)', padding: '1px 0',
+                  }}>選択不可</div>
                 )}
               </div>
             );

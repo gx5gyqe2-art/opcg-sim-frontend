@@ -705,13 +705,14 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
     {showSearchModal && modalCandidates.length > 0 && (
       <CardSelectModal
-        key={pendingRequest?.request_id} 
+        key={pendingRequest?.request_id}
         candidates={modalCandidates}
         message={pendingRequest?.message || ""}
         minSelect={constraints.min ?? 1}
         maxSelect={constraints.max ?? 1}
         onConfirm={handleSelectionResolve}
         onCancel={pendingRequest?.can_skip ? handlePass : undefined}
+        selectableUuids={pendingRequest?.selectable_uuids ?? undefined}
       />
     )}
 
