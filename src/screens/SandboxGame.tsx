@@ -297,10 +297,9 @@ export const SandboxGame = ({
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
         if (data.success) {
-          data.decks.forEach((d: any) => { 
-            if (!d.id.endsWith('.json')) {
-              options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id }); 
-            }
+          data.decks.forEach((d: any) => {
+            const id = d.id.endsWith('.json') ? d.id : `db:${d.id}`;
+            options.push({ id, name: d.name, leaderId: d.leader_id });
           });
         }
       } catch(e) { console.error(e); }
