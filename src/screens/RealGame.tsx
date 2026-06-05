@@ -193,6 +193,16 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
   };
 
+  const handleMulligan = async () => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction('MULLIGAN' as any, {});
+  };
+
+  const handleKeepHand = async () => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction('KEEP_HAND' as any, {});
+  };
+
   const handleTurnEnd = () => {
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
@@ -544,6 +554,67 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       >
         TOPへ
       </button>
+
+      {pendingRequest?.action === 'MULLIGAN' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
+          background: 'rgba(0,0,0,0.90)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '16px', padding: '20px', boxSizing: 'border-box',
+        }}>
+          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '22px' }}>マリガン</h2>
+          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center' }}>
+            手札を確認してください。マリガンを選ぶと<br />手札5枚を全てデッキに戻し、引き直します。
+          </p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '500px' }}>
+            {(pendingRequest.candidates || []).map((card: any) => (
+              <div
+                key={card.uuid}
+                style={{
+                  width: '72px', height: '100px', borderRadius: '5px',
+                  border: '2px solid #555', overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={getCardImageUrl(card.card_id)}
+                  alt={card.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '14px' }}>
+            <button
+              onClick={handleMulligan}
+              disabled={isPending}
+              style={{
+                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#e67e22',
+                color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              マリガン（全交換）
+            </button>
+            <button
+              onClick={handleKeepHand}
+              disabled={isPending}
+              style={{
+                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#27ae60',
+                color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              キープ
+            </button>
+          </div>
+          <p style={{ color: '#7f8c8d', fontSize: '11px', margin: 0 }}>
+            ※マリガンは1回のみ・全枚交換です。新しい手札はそのまま確定します。
+          </p>
+        </div>
+      )}
 
       {errorToast && (
         <div style={{
