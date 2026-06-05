@@ -53,6 +53,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
   const [boardSelected, setBoardSelected] = useState<string[]>([]);
+  const [mulliganSelected, setMulliganSelected] = useState<Set<string>>(new Set());
 
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
@@ -193,6 +194,19 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
   };
 
+  const handleMulligan = async () => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction('MULLIGAN' as any, {
+      extra: { card_uuids: Array.from(mulliganSelected) },
+    });
+    setMulliganSelected(new Set());
+  };
+
+  const handleKeepHand = async () => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction('KEEP_HAND' as any, {});
+  };
+
   const handleTurnEnd = () => {
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
@@ -308,6 +322,9 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   
   useEffect(() => {
     setBoardSelected([]);
+    if (pendingRequest?.action !== 'MULLIGAN') {
+      setMulliganSelected(new Set());
+    }
   }, [pendingRequest?.request_id]);
 
   useEffect(() => {
@@ -544,6 +561,89 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       >
         TOPへ
       </button>
+
+      {pendingRequest?.action === 'MULLIGAN' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
+          background: 'rgba(0,0,0,0.90)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '16px', padding: '20px', boxSizing: 'border-box',
+        }}>
+          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '22px' }}>マリガン</h2>
+          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center' }}>
+            交換したいカードを選択してください<br />（選択なし＝そのままキープ）
+          </p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '500px' }}>
+            {(pendingRequest.candidates || []).map((card: any) => {
+              const selected = mulliganSelected.has(card.uuid);
+              return (
+                <div
+                  key={card.uuid}
+                  onClick={() => {
+                    setMulliganSelected(prev => {
+                      const next = new Set(prev);
+                      if (next.has(card.uuid)) next.delete(card.uuid);
+                      else next.add(card.uuid);
+                      return next;
+                    });
+                  }}
+                  style={{
+                    width: '72px', height: '100px', borderRadius: '5px', cursor: 'pointer',
+                    border: selected ? '2px solid #e74c3c' : '2px solid #555',
+                    overflow: 'hidden', position: 'relative',
+                    boxShadow: selected ? '0 0 12px rgba(231,76,60,0.9)' : 'none',
+                    transition: 'box-shadow 0.15s, border-color 0.15s',
+                  }}
+                >
+                  <img
+                    src={getCardImageUrl(card.card_id)}
+                    alt={card.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: selected ? 0.55 : 1 }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  {selected && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#e74c3c', fontWeight: 'bold', fontSize: '28px', pointerEvents: 'none',
+                    }}>✕</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: '14px' }}>
+            <button
+              onClick={handleMulligan}
+              disabled={mulliganSelected.size === 0 || isPending}
+              style={{
+                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: mulliganSelected.size > 0 && !isPending ? '#e67e22' : '#555',
+                color: 'white', border: 'none',
+                cursor: mulliganSelected.size > 0 && !isPending ? 'pointer' : 'not-allowed',
+                transition: 'background 0.15s',
+              }}
+            >
+              マリガン（{mulliganSelected.size}枚交換）
+            </button>
+            <button
+              onClick={handleKeepHand}
+              disabled={isPending}
+              style={{
+                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#27ae60',
+                color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              キープ
+            </button>
+          </div>
+          <p style={{ color: '#7f8c8d', fontSize: '11px', margin: 0 }}>
+            ※マリガンは1回のみです。新しい手札はそのまま確定します。
+          </p>
+        </div>
+      )}
 
       {errorToast && (
         <div style={{
