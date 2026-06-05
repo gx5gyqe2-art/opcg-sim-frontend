@@ -537,22 +537,24 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
       
-      <button 
+      <button
         onClick={handleBackToTitle}
         style={{
           position: 'absolute',
-          top: '10px',
+          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
           left: '10px',
+          transform: 'translateY(-50%)',
           zIndex: Z_INDEX.OVERLAY + 20,
           background: 'rgba(0, 0, 0, 0.6)',
-          color: 'white',
-          border: '1px solid #555',
+          color: '#aaa',
+          border: '1px solid #444',
           borderRadius: '4px',
-          padding: '5px 10px',
-          cursor: 'pointer'
+          padding: '4px 9px',
+          cursor: 'pointer',
+          fontSize: '11px',
         }}
       >
-        TOPへ
+        TOP
       </button>
 
       {pendingRequest?.action === 'MULLIGAN' && (
@@ -796,7 +798,14 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       }}
     />
 
-    <ActionLog events={eventLog} />
+    <div style={{
+      position: 'absolute',
+      right: '115px',
+      bottom: layoutCoords ? `${layoutCoords.y}px` : '50%',
+      zIndex: 150,
+    }}>
+      <ActionLog events={eventLog} />
+    </div>
 
     </div>
   );

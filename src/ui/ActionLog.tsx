@@ -11,6 +11,8 @@ const EVENT_COLORS: Record<string, string> = {
   COUNTER: '#f39c12',
   PASS: '#95a5a6',
   EFFECT: '#2980b9',
+  MULLIGAN: '#e67e22',
+  KEEP_HAND: '#2ecc71',
 };
 
 const EFFECT_LABELS: Record<string, string> = {
@@ -58,43 +60,22 @@ interface ActionLogProps {
 }
 
 export const ActionLog: React.FC<ActionLogProps> = ({ events }) => {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div style={{
-      position: 'fixed',
-      top: '56px',
-      right: '8px',
-      width: '210px',
-      maxHeight: isOpen ? '300px' : '30px',
-      overflow: 'hidden',
+      width: '200px',
       background: 'rgba(0,0,0,0.78)',
       borderRadius: '8px',
-      zIndex: 150,
-      transition: 'max-height 0.2s ease',
       fontFamily: 'monospace',
       fontSize: '11px',
       boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+      display: 'flex',
+      flexDirection: 'column',
     }}>
-      <div
-        onClick={() => setIsOpen(p => !p)}
-        style={{
-          padding: '5px 10px',
-          cursor: 'pointer',
-          color: '#bbb',
-          fontWeight: 'bold',
-          display: 'flex',
-          justifyContent: 'space-between',
-          borderBottom: isOpen ? '1px solid #333' : 'none',
-          userSelect: 'none',
-          fontSize: '11px',
-        }}
-      >
-        <span>ログ ({events.length})</span>
-        <span>{isOpen ? '▲' : '▼'}</span>
-      </div>
+      {/* コンテンツはヘッダーの上側に展開 */}
       {isOpen && (
-        <div style={{ overflowY: 'auto', maxHeight: '265px', padding: '2px 0' }}>
+        <div style={{ overflowY: 'auto', maxHeight: '240px', padding: '2px 0', borderBottom: '1px solid #333' }}>
           {events.length === 0 ? (
             <div style={{ color: '#666', padding: '8px 10px' }}>アクションなし</div>
           ) : (
@@ -123,6 +104,24 @@ export const ActionLog: React.FC<ActionLogProps> = ({ events }) => {
           )}
         </div>
       )}
+      {/* ヘッダーは常に底辺に固定 */}
+      <div
+        onClick={() => setIsOpen(p => !p)}
+        style={{
+          padding: '5px 10px',
+          cursor: 'pointer',
+          color: '#bbb',
+          fontWeight: 'bold',
+          display: 'flex',
+          justifyContent: 'space-between',
+          userSelect: 'none',
+          fontSize: '11px',
+          borderRadius: isOpen ? '0 0 8px 8px' : '8px',
+        }}
+      >
+        <span>ログ ({events.length})</span>
+        <span>{isOpen ? '▼' : '▲'}</span>
+      </div>
     </div>
   );
 };
