@@ -6,7 +6,6 @@ import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
-import { DebugReporter } from '../ui/DebugReporter';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { API_CONFIG } from '../api/api.config';
@@ -62,6 +61,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
   const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
+  const [showLog, setShowLog] = useState(false);
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
@@ -557,6 +557,34 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         TOP
       </button>
 
+      <button
+        onClick={() => setShowLog(p => !p)}
+        style={{
+          position: 'absolute',
+          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+          left: '55px',
+          transform: 'translateY(-50%)',
+          zIndex: Z_INDEX.OVERLAY + 20,
+          background: showLog ? 'rgba(41,128,185,0.7)' : 'rgba(0, 0, 0, 0.6)',
+          color: showLog ? '#fff' : '#aaa',
+          border: showLog ? '1px solid #2980b9' : '1px solid #444',
+          borderRadius: '4px',
+          padding: '4px 9px',
+          cursor: 'pointer',
+          fontSize: '11px',
+        }}
+      >
+        ログ
+      </button>
+
+      {showLog && layoutCoords && (
+        <ActionLog
+          events={eventLog}
+          anchorY={layoutCoords.y}
+          onClose={() => setShowLog(false)}
+        />
+      )}
+
       {pendingRequest?.action === 'MULLIGAN' && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
@@ -789,23 +817,6 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       />
     )}
 
-    <DebugReporter
-      data={{
-        gameState,
-        pendingRequest,
-        activePlayerId,
-        attackingCardUuid
-      }}
-    />
-
-    <div style={{
-      position: 'absolute',
-      right: '115px',
-      bottom: layoutCoords ? `${layoutCoords.y}px` : '50%',
-      zIndex: 150,
-    }}>
-      <ActionLog events={eventLog} />
-    </div>
 
     </div>
   );

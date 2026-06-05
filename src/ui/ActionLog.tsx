@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { ActionEvent } from '../api/types';
 
 const EVENT_COLORS: Record<string, string> = {
@@ -57,29 +57,49 @@ function formatEvent(ev: ActionEvent): string {
 
 interface ActionLogProps {
   events: ActionEvent[];
+  anchorY: number;
+  onClose: () => void;
 }
 
-export const ActionLog: React.FC<ActionLogProps> = ({ events }) => {
-  const [isOpen, setIsOpen] = useState(false);
-
+export const ActionLog: React.FC<ActionLogProps> = ({ events, anchorY, onClose }) => {
   return (
-    <div style={{
-      width: '200px',
-      background: 'rgba(0,0,0,0.78)',
-      borderRadius: '8px',
-      fontFamily: 'monospace',
-      fontSize: '11px',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
-      {/* コンテンツはヘッダーの上側に展開 */}
-      {isOpen && (
-        <div style={{ overflowY: 'auto', maxHeight: '240px', padding: '2px 0', borderBottom: '1px solid #333' }}>
+    <>
+      {/* 背景クリックで閉じる透明オーバーレイ */}
+      <div
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, zIndex: 148 }}
+      />
+      {/* ログポップアップ本体 */}
+      <div style={{
+        position: 'absolute',
+        left: '10px',
+        bottom: `${anchorY + 10}px`,
+        width: '220px',
+        maxHeight: '280px',
+        background: 'rgba(0,0,0,0.88)',
+        borderRadius: '8px',
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        zIndex: 149,
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        <div style={{
+          padding: '5px 10px',
+          borderBottom: '1px solid #333',
+          color: '#bbb',
+          fontWeight: 'bold',
+          fontSize: '11px',
+          flexShrink: 0,
+        }}>
+          ログ ({events.length})
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
           {events.length === 0 ? (
             <div style={{ color: '#666', padding: '8px 10px' }}>アクションなし</div>
           ) : (
-            events.map((ev, idx) => {
+            [...events].reverse().map((ev, idx) => {
               const color = EVENT_COLORS[ev.type] || '#aaa';
               return (
                 <div key={idx} style={{
@@ -103,25 +123,7 @@ export const ActionLog: React.FC<ActionLogProps> = ({ events }) => {
             })
           )}
         </div>
-      )}
-      {/* ヘッダーは常に底辺に固定 */}
-      <div
-        onClick={() => setIsOpen(p => !p)}
-        style={{
-          padding: '5px 10px',
-          cursor: 'pointer',
-          color: '#bbb',
-          fontWeight: 'bold',
-          display: 'flex',
-          justifyContent: 'space-between',
-          userSelect: 'none',
-          fontSize: '11px',
-          borderRadius: isOpen ? '0 0 8px 8px' : '8px',
-        }}
-      >
-        <span>ログ ({events.length})</span>
-        <span>{isOpen ? '▼' : '▲'}</span>
       </div>
-    </div>
+    </>
   );
 };
