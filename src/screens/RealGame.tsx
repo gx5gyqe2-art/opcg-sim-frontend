@@ -629,7 +629,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       )}
 
       {isAttackTargeting && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
+        <div style={{ position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
           攻撃対象を選択してください
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
@@ -637,7 +637,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
       {isBoardSelectMode && (
         <div style={{
-          position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
           zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
           padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
           border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
@@ -684,7 +684,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
       {pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
         <div style={{
-            position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+            position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
             zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
             padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
             border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}`,
