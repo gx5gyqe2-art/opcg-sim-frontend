@@ -83,10 +83,7 @@ export default function App() {
         setSandboxOptions(sbOptions || { role: 'both' });
         setMode('sandbox');
     } else {
-        setSelectedDecks({ 
-          p1: p1 || 'imu.json', 
-          p2: p2 || 'nami.json' 
-        });
+        setSelectedDecks({ p1, p2 });
         setMode('game');
     }
   };

@@ -52,7 +52,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
-  
+  const [boardSelected, setBoardSelected] = useState<string[]>([]);
+
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const [p1DeckId, setP1DeckId] = useState(initialP1 || 'imu.json');
@@ -100,18 +101,12 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
         if (data.success) {
-          data.decks.forEach((d: any) => { 
-            if (!d.id.endsWith('.json')) {
-              options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id }); 
-            }
+          data.decks.forEach((d: any) => {
+            const id = d.id.endsWith('.json') ? d.id : `db:${d.id}`;
+            options.push({ id, name: d.name, leaderId: d.leader_id });
           });
         }
       } catch(e) { console.error(e); }
-
-      options.unshift(
-        { id: 'imu.json', name: 'Imu (Default)', leaderId: 'ST01-001' },
-        { id: 'nami.json', name: 'Nami (Default)', leaderId: 'OP03-040' }
-      );
 
       const uniqueMap = new Map();
       options.forEach(o => uniqueMap.set(o.id, o));
@@ -202,16 +197,45 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
-  const onCardClick = async (card: CardInstance) => { 
+  const isBoardSelectMode =
+    !isAttackTargeting &&
+    !!pendingRequest &&
+    (pendingRequest.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
+     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER) &&
+    (pendingRequest.selectable_uuids?.length ?? 0) > 0;
+
+  const selectableUuids = isBoardSelectMode
+    ? new Set(pendingRequest!.selectable_uuids)
+    : new Set<string>();
+
+  const minSelect = pendingRequest?.constraints?.min ?? 1;
+  const maxSelect = pendingRequest?.constraints?.max ?? 1;
+
+  const onCardClick = async (card: CardInstance) => {
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
-      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, { 
-        uuid: attackingCardUuid, 
-        target_ids: [card.uuid] 
+      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, {
+        uuid: attackingCardUuid,
+        target_ids: [card.uuid]
       });
       setIsAttackTargeting(false);
       setAttackingCardUuid(null);
+      return;
+    }
+
+    if (isBoardSelectMode) {
+      if (selectableUuids.has(card.uuid)) {
+        if (maxSelect === 1) {
+          handleSelectionResolve([card.uuid]);
+        } else {
+          setBoardSelected(prev =>
+            prev.includes(card.uuid)
+              ? prev.filter(id => id !== card.uuid)
+              : [...prev, card.uuid]
+          );
+        }
+      }
       return;
     }
 
@@ -270,6 +294,10 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     setIsDetailMode(true); 
   };
   
+  useEffect(() => {
+    setBoardSelected([]);
+  }, [pendingRequest?.request_id]);
+
   useEffect(() => {
     if (!pixiContainerRef.current || !isSetupComplete) return;
 
@@ -333,17 +361,18 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
 
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
-      topSide.y = 0; 
-      
-      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
+      const selectedSet = new Set(boardSelected);
+      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet);
+      topSide.y = 0;
+
+      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, selectableUuids, selectedSet);
       bottomSide.y = midY;
 
       app.stage.addChild(topSide, bottomSide);
     };
 
     renderScene();
-  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
+  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -458,9 +487,11 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     );
   }
 
-  const showSearchModal = 
-    pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
-    pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER;
+  const showSearchModal =
+    !isBoardSelectMode && (
+      pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
+      pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
+    );
     
   const constraints = pendingRequest?.constraints || {};
 
@@ -521,7 +552,54 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         </div>
       )}
 
-      {pendingRequest && !isAttackTargeting && !showSearchModal && pendingRequest.action !== 'MAIN_ACTION' && (
+      {isBoardSelectMode && (
+        <div style={{
+          position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
+          padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
+          border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
+          minWidth: '220px', maxWidth: '320px',
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: maxSelect > 1 ? '8px' : 0 }}>
+            {pendingRequest!.message}
+          </div>
+          {maxSelect > 1 && (
+            <>
+              <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
+                {boardSelected.length} / {maxSelect}枚選択中
+              </div>
+              <button
+                onClick={() => handleSelectionResolve(boardSelected)}
+                disabled={boardSelected.length < minSelect || isPending}
+                style={{
+                  padding: '6px 20px', background: boardSelected.length >= minSelect ? COLORS.BTN_SUCCESS : COLORS.BTN_DISABLED,
+                  color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
+                  cursor: boardSelected.length >= minSelect && !isPending ? 'pointer' : 'not-allowed',
+                  marginBottom: pendingRequest!.can_skip ? '8px' : 0,
+                }}
+              >
+                確定
+              </button>
+            </>
+          )}
+          {pendingRequest!.can_skip && (
+            <button
+              onClick={handlePass}
+              disabled={isPending}
+              style={{
+                display: 'block', margin: '0 auto', marginTop: maxSelect > 1 ? '0' : '0',
+                padding: '6px 20px', background: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER,
+                color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              パス
+            </button>
+          )}
+        </div>
+      )}
+
+      {pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
         <div style={{
             position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
             zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
