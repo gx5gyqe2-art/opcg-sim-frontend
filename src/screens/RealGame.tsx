@@ -6,7 +6,6 @@ import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
-import { DebugReporter } from '../ui/DebugReporter';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { API_CONFIG } from '../api/api.config';
@@ -788,15 +787,6 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         selectableUuids={pendingRequest?.selectable_uuids ?? undefined}
       />
     )}
-
-    <DebugReporter
-      data={{
-        gameState,
-        pendingRequest,
-        activePlayerId,
-        attackingCardUuid
-      }}
-    />
 
     <div style={{
       position: 'absolute',
