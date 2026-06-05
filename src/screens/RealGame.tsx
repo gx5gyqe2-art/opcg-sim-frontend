@@ -197,12 +197,24 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
+  const boardUuids = gameState ? new Set<string>([
+    ...(gameState.players.p1.zones.field.map(c => c.uuid)),
+    ...(gameState.players.p1.zones.hand.map(c => c.uuid)),
+    ...(gameState.players.p2.zones.field.map(c => c.uuid)),
+    ...(gameState.players.p2.zones.hand.map(c => c.uuid)),
+    ...(gameState.players.p1.leader ? [gameState.players.p1.leader.uuid] : []),
+    ...(gameState.players.p2.leader ? [gameState.players.p2.leader.uuid] : []),
+    ...(gameState.players.p1.stage ? [(gameState.players.p1.stage as any).uuid] : []),
+    ...(gameState.players.p2.stage ? [(gameState.players.p2.stage as any).uuid] : []),
+  ]) : new Set<string>();
+
   const isBoardSelectMode =
     !isAttackTargeting &&
     !!pendingRequest &&
     (pendingRequest.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
      pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER) &&
-    (pendingRequest.selectable_uuids?.length ?? 0) > 0;
+    (pendingRequest.selectable_uuids?.length ?? 0) > 0 &&
+    pendingRequest.selectable_uuids!.some(uuid => boardUuids.has(uuid));
 
   const selectableUuids = isBoardSelectMode
     ? new Set(pendingRequest!.selectable_uuids)
