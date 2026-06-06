@@ -38,6 +38,7 @@ interface FilterState {
   sets: string[];
   block_icon: string[];
   sort: string;
+  ownership: string;
 }
 
 const getLocalDecks = (): DeckData[] => {
@@ -50,7 +51,15 @@ const getLocalDecks = (): DeckData[] => {
   } catch (e) { return []; }
 };
 
-const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, onClick?: () => void }) => {
+const getOwnedCards = (): Record<string, number> => {
+  try { return JSON.parse(localStorage.getItem('opcg_owned_cards') || '{}'); } catch { return {}; }
+};
+
+const saveOwnedCards = (owned: Record<string, number>) => {
+  localStorage.setItem('opcg_owned_cards', JSON.stringify(owned));
+};
+
+const CardImageStub = ({ card, count, ownedCount, onClick }: { card: CardData | { name: string, uuid?: string }, count?: number, ownedCount?: number, onClick?: () => void }) => {
   const [imgError, setImgError] = useState(false);
   const imageUrl = getCardImageUrl(card.uuid || '');
 
@@ -84,17 +93,30 @@ const CardImageStub = ({ card, count, onClick }: { card: CardData | { name: stri
           {count}
         </div>
       )}
+      {ownedCount !== undefined && (
+        <div style={{
+          position: 'absolute', top: '2px', left: '2px',
+          background: ownedCount > 0 ? '#27ae60' : 'rgba(80,80,80,0.85)',
+          color: 'white',
+          borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '1px solid white',
+          zIndex: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.5)'
+        }}>
+          {ownedCount}
+        </div>
+      )}
     </div>
   );
 };
 
-const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate, viewOnly }: {
-  card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void, viewOnly?: boolean
+const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNavigate, viewOnly, ownedCount, onOwnedCountChange }: {
+  card: CardData, currentCount: number, onCountChange: (diff: number) => void, onClose: () => void, onNavigate?: (direction: -1 | 1) => void, viewOnly?: boolean, ownedCount?: number, onOwnedCountChange?: (diff: number) => void
 }) => {
   const imageUrl = getCardImageUrl(card.uuid);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const minSwipeDistance = 50;
+  const hasOwnershipUI = onOwnedCountChange !== undefined && ownedCount !== undefined;
 
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -128,12 +150,12 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
         padding: '20px', touchAction: 'none'
       }}
     >
-      <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'center', width: '100%' }}>
+      <div style={{ marginBottom: hasOwnershipUI ? '16px' : '30px', display: 'flex', justifyContent: 'center', width: '100%' }}>
         <img 
           src={imageUrl} alt={card.name} 
           style={{ 
-            height: '55vh',
-            maxHeight: '600px',
+            height: hasOwnershipUI ? '44vh' : '55vh',
+            maxHeight: hasOwnershipUI ? '460px' : '600px',
             maxWidth: '90vw',
             objectFit: 'contain',
             borderRadius: '12px', 
@@ -146,6 +168,24 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
           }}
         />
       </div>
+
+      {hasOwnershipUI && (
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <div style={{ color: '#27ae60', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '10px' }}>所持枚数</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', justifyContent: 'center' }}>
+            <button
+              onClick={() => onOwnedCountChange(-1)}
+              disabled={ownedCount <= 0}
+              style={{ width: '60px', height: '60px', borderRadius: '50%', border: 'none', background: ownedCount > 0 ? '#27ae60' : '#444', color: 'white', fontSize: '26px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}
+            >－</button>
+            <div style={{ fontSize: '56px', fontWeight: 'bold', color: '#27ae60', width: '72px', textAlign: 'center', textShadow: '0 2px 4px black' }}>{ownedCount}</div>
+            <button
+              onClick={() => onOwnedCountChange(1)}
+              style={{ width: '60px', height: '60px', borderRadius: '50%', border: 'none', background: '#27ae60', color: 'white', fontSize: '26px', cursor: 'pointer', boxShadow: '0 4px 8px rgba(0,0,0,0.4)' }}
+            >＋</button>
+          </div>
+        </div>
+      )}
 
       {!viewOnly && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '40px' }}>
@@ -161,7 +201,7 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
   );
 };
 
-const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconList, onClose }: { initialFilters: FilterState, onApply: (f: FilterState) => void, traitList: string[], setList: string[], blockIconList: string[], onClose: () => void }) => {
+const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconList, onClose, showOwnership }: { initialFilters: FilterState, onApply: (f: FilterState) => void, traitList: string[], setList: string[], blockIconList: string[], onClose: () => void, showOwnership?: boolean }) => {
   const [localFilters, setLocalFilters] = useState<FilterState>(initialFilters);
   const [traitSearch, setTraitSearch] = useState('');
 
@@ -189,7 +229,7 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconLis
 
   const handleReset = () => {
     setLocalFilters({
-      color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST'
+      color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST', ownership: 'ALL'
     });
   };
 
@@ -248,6 +288,32 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconLis
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+          {showOwnership && (
+            <>
+              <SectionTitle>所持状況 (OWNERSHIP)</SectionTitle>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <FilterBtn
+                  label="全て"
+                  active={localFilters.ownership === 'ALL'}
+                  onClick={() => setLocalFilters({ ...localFilters, ownership: 'ALL' })}
+                  color="#555"
+                />
+                <FilterBtn
+                  label="所持あり"
+                  active={localFilters.ownership === 'OWNED'}
+                  onClick={() => setLocalFilters({ ...localFilters, ownership: 'OWNED' })}
+                  color="#27ae60"
+                />
+                <FilterBtn
+                  label="未所持"
+                  active={localFilters.ownership === 'NOT_OWNED'}
+                  onClick={() => setLocalFilters({ ...localFilters, ownership: 'NOT_OWNED' })}
+                  color="#e67e22"
+                />
+              </div>
+            </>
+          )}
+
           <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, color: ['Red', 'Green', 'Blue', 'Purple', 'Black', 'Yellow']})}>色 (COLOR)</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <ColorBtn colorKey="Red" label="赤" colorCode="#e74c3c" />
@@ -447,6 +513,8 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete }: { 
 const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCatalog }: { deck: DeckData, allCards: CardData[], onUpdateDeck: (d: DeckData) => void, onSave: () => void, onBack: () => void, onOpenCatalog: (mode: 'leader' | 'main') => void }) => {
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
   const [showStats, setShowStats] = useState(false);
+  const [ownedCards] = useState<Record<string, number>>(getOwnedCards);
+
   const groupedCards = useMemo(() => {
     const map = new Map<string, number>();
     deck.card_uuids.forEach(uuid => { map.set(uuid, (map.get(uuid) || 0) + 1); });
@@ -490,7 +558,15 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', justifyItems: 'center' }}>
           <div onClick={() => onOpenCatalog('main')} style={{ width: '80px', height: '112px', border: '2px dashed #666', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', cursor: 'pointer', fontSize: '24px' }}>＋</div>
-          {groupedCards.list.map((item) => ( <CardImageStub key={item.card.uuid} card={item.card} count={item.count} onClick={() => setViewingCard(item.card)} /> ))}
+          {groupedCards.list.map((item) => (
+            <CardImageStub
+              key={item.card.uuid}
+              card={item.card}
+              count={item.count}
+              ownedCount={ownedCards[item.card.uuid] !== undefined ? (ownedCards[item.card.uuid] || 0) : undefined}
+              onClick={() => setViewingCard(item.card)}
+            />
+          ))}
         </div>
       </div>
       {viewingCard && ( <CardDetailScreen card={viewingCard} currentCount={deck.card_uuids.filter(id => id === viewingCard.uuid).length} onCountChange={(diff) => handleCountChange(viewingCard, diff)} onClose={() => setViewingCard(null)} onNavigate={handleNavigate} /> )}
@@ -501,7 +577,7 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
 const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose, viewOnly }: { allCards: CardData[], mode: 'leader' | 'main', currentDeck: DeckData, onUpdateDeck: (d: DeckData) => void, onClose: () => void, viewOnly?: boolean }) => {
   const [filters, setFilters] = useState<FilterState>({
-    color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST'
+    color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST', ownership: 'ALL'
   });
   const [searchText, setSearchText] = useState('');
   const [inputText, setInputText] = useState('');
@@ -509,6 +585,21 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [displayLimit, setDisplayLimit] = useState(100);
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
+
+  const [ownedCards, setOwnedCards] = useState<Record<string, number>>(getOwnedCards);
+  const [ownershipMode, setOwnershipMode] = useState(false);
+
+  const updateOwnedCount = (cardUuid: string, diff: number) => {
+    setOwnedCards(prev => {
+      const current = prev[cardUuid] || 0;
+      const newCount = Math.max(0, current + diff);
+      const next = { ...prev };
+      if (newCount === 0) delete next[cardUuid];
+      else next[cardUuid] = newCount;
+      saveOwnedCards(next);
+      return next;
+    });
+  };
 
   const traitList = useMemo(() => {
     const traits = new Set<string>();
@@ -537,10 +628,18 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   const isFilterActive = useMemo(() => {
     return Object.entries(filters).some(([key, val]) => {
       if (key === 'sort') return val !== 'COST';
+      if (key === 'ownership') return val !== 'ALL';
       if (Array.isArray(val)) return val.length > 0;
       return val !== 'ALL';
     });
   }, [filters]);
+
+  const ownedSummary = useMemo(() => {
+    if (!viewOnly || !ownershipMode) return null;
+    const uniqueOwned = Object.keys(ownedCards).filter(k => ownedCards[k] > 0).length;
+    const totalOwned = Object.values(ownedCards).reduce((a, b) => a + b, 0);
+    return { uniqueOwned, totalOwned };
+  }, [viewOnly, ownershipMode, ownedCards]);
 
   const filtered = useMemo(() => {
     let res = allCards;
@@ -601,6 +700,14 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       res = res.filter(c => filters.sets.some(s => c.uuid.startsWith(s)));
     }
 
+    if (viewOnly && filters.ownership !== 'ALL') {
+      if (filters.ownership === 'OWNED') {
+        res = res.filter(c => (ownedCards[c.uuid] || 0) > 0);
+      } else if (filters.ownership === 'NOT_OWNED') {
+        res = res.filter(c => (ownedCards[c.uuid] || 0) === 0);
+      }
+    }
+
     if (searchText) {
       const lower = searchText.toLowerCase();
       res = res.filter(c => {
@@ -630,7 +737,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       if (orderA !== orderB) return orderA - orderB;
       return (a.cost || 0) - (b.cost || 0) || a.uuid.localeCompare(b.uuid);
     });
-  }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly]);
+  }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly, ownedCards]);
 
   useEffect(() => { 
     setDisplayLimit(100); 
@@ -670,14 +777,22 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#222', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '5px 15px', background: '#2a2a2a', color: '#aaa', fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
-        <span>{mode === 'leader' ? 'リーダー選択' : 'カード追加'}</span>
-        <span>Hit: {filtered.length}枚</span>
+      <div style={{ padding: '5px 15px', background: '#2a2a2a', color: '#aaa', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{mode === 'leader' ? 'リーダー選択' : viewOnly ? 'カードリスト' : 'カード追加'}</span>
+        <span style={{ textAlign: 'right' }}>
+          {ownedSummary && (
+            <span style={{ color: '#27ae60', marginRight: '8px' }}>
+              所持: {ownedSummary.uniqueOwned}種 / {ownedSummary.totalOwned}枚
+            </span>
+          )}
+          Hit: {filtered.length}枚
+        </span>
       </div>
       <div onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '10px', alignContent: 'start' }}>
         {filtered.slice(0, displayLimit).map(c => {
           const count = currentDeck.card_uuids.filter(u => u === c.uuid).length;
-          return <CardImageStub key={c.uuid} card={c} count={count > 0 ? count : undefined} onClick={() => handleSelect(c)} />;
+          const ownedCount = viewOnly && ownershipMode ? (ownedCards[c.uuid] || 0) : undefined;
+          return <CardImageStub key={c.uuid} card={c} count={count > 0 ? count : undefined} ownedCount={ownedCount} onClick={() => handleSelect(c)} />;
         })}
       </div>
       <div style={{ 
@@ -685,13 +800,28 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
         background: '#333', 
         borderTop: '1px solid #444', 
         display: 'flex', 
-        gap: '12px', 
+        gap: '10px', 
         alignItems: 'center',
         zIndex: 10
       }}>
-        <button onClick={onClose} style={{ padding: '10px 16px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', flexShrink: 0, cursor: 'pointer' }}>
+        <button onClick={onClose} style={{ padding: '10px 14px', background: '#555', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', flexShrink: 0, cursor: 'pointer' }}>
           完了
         </button>
+        {viewOnly && (
+          <button
+            onClick={() => setOwnershipMode(prev => !prev)}
+            style={{
+              padding: '10px 12px',
+              background: ownershipMode ? '#27ae60' : '#444',
+              color: 'white', border: 'none', borderRadius: '8px',
+              fontSize: '12px', flexShrink: 0, cursor: 'pointer',
+              fontWeight: ownershipMode ? 'bold' : 'normal',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {ownershipMode ? '✓ 所有管理' : '所有管理'}
+          </button>
+        )}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           <input 
             placeholder="キーワード検索 (Enterで検索)" 
@@ -743,7 +873,9 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
           onCountChange={(diff) => handleCountChange(viewingCard, diff)} 
           onClose={() => setViewingCard(null)} 
           onNavigate={handleNavigate}
-          viewOnly={viewOnly} 
+          viewOnly={viewOnly}
+          ownedCount={viewOnly && ownershipMode ? (ownedCards[viewingCard.uuid] || 0) : undefined}
+          onOwnedCountChange={viewOnly && ownershipMode ? (diff) => updateOwnedCount(viewingCard.uuid, diff) : undefined}
         />
       )}
       {showFilterModal && (
@@ -757,6 +889,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
           setList={setList}
           blockIconList={blockIconList}
           onClose={() => setShowFilterModal(false)}
+          showOwnership={viewOnly}
         />
       )}
     </div>
