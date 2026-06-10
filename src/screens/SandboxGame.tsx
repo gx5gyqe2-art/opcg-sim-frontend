@@ -816,7 +816,7 @@ export const SandboxGame = ({
               let cacheKey = `opcg_deck_${deckId}`;
               if (deckId.startsWith('db:')) cacheKey = `opcg_deck_${deckId.substring(3)}`;
               const cached = localStorage.getItem(cacheKey);
-              if (cached) { try { return JSON.parse(cached); } catch(e) {} }
+              if (cached) { try { return JSON.parse(cached); } catch { /* キャッシュ不正は無視 */ } }
               if (!deckId.startsWith('db:') && !['imu.json', 'nami.json'].includes(deckId)) return { leader: [], cards: [] };
               const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/get?id=${deckId}`);
               if (!res.ok) throw new Error();

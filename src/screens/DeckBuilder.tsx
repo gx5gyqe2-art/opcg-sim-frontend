@@ -644,14 +644,14 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   const filtered = useMemo(() => {
     let res = allCards;
     const leaderCard = allCards.find(c => c.uuid === currentDeck.leader_id);
-    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[\/／]/)).map(c => normalizeColor(c));
+    const leaderColors = (leaderCard?.color || []).flatMap(c => c.split(/[/／]/)).map(c => normalizeColor(c));
 
     if (mode === 'main') {
       if (!viewOnly) {
           res = res.filter(c => c.type !== 'LEADER');
           if (leaderColors.length > 0) {
             res = res.filter(c => {
-               const cardColors = (c.color || []).flatMap(cc => cc.split(/[\/／]/)).map(cc => normalizeColor(cc));
+               const cardColors = (c.color || []).flatMap(cc => cc.split(/[/／]/)).map(cc => normalizeColor(cc));
                return cardColors.length > 0 && cardColors.every(cc => leaderColors.includes(cc));
             });
           }
@@ -662,7 +662,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       const selected = filters.color.map(c => normalizeColor(c));
       res = res.filter(c => {
         if (!c.color) return false;
-        const cardColors = c.color.flatMap(col => col.split(/[\/／]/)).map(col => normalizeColor(col));
+        const cardColors = c.color.flatMap(col => col.split(/[/／]/)).map(col => normalizeColor(col));
         return cardColors.some(cc => selected.includes(cc));
       });
     }
