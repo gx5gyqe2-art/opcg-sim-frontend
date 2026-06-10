@@ -232,6 +232,15 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const minSelect = pendingRequest?.constraints?.min ?? 1;
   const maxSelect = pendingRequest?.constraints?.max ?? 1;
 
+  // 守備側（手番でない側）が選択を求められている時の明示プレフィックス。
+  // ブロッカー/カウンター選択は相手の攻撃に対する防御側の操作なので、
+  // 誰の操作かを明示してハイライトされたカードを選ぶよう促す。
+  const isDefendingDecision = !!pendingRequest && !!activePlayerId
+    && pendingRequest.player_id !== activePlayerId;
+  const decisionNote = isDefendingDecision
+    ? `🛡 ${pendingRequest!.player_id?.toUpperCase()} の防御選択 — `
+    : '';
+
   const onCardClick = async (card: CardInstance) => {
     if (isPending || !gameState) return;
 
@@ -691,7 +700,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
           minWidth: '220px', maxWidth: '320px',
         }}>
           <div style={{ fontWeight: 'bold', marginBottom: maxSelect > 1 ? '8px' : 0 }}>
-            {pendingRequest!.message}
+            {decisionNote}{pendingRequest!.message}
           </div>
           {maxSelect > 1 && (
             <>
@@ -741,7 +750,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
             {PENDING_ACTION_LABELS[pendingRequest.action] || pendingRequest.action}
           </div>
           <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '13px' }}>
-            {pendingRequest.message}
+            {decisionNote}{pendingRequest.message}
           </div>
           {gameState?.active_battle && (
             <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
@@ -825,7 +834,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       <CardSelectModal
         key={pendingRequest?.request_id}
         candidates={modalCandidates}
-        message={pendingRequest?.message || ""}
+        message={decisionNote + (pendingRequest?.message || "")}
         minSelect={constraints.min ?? 1}
         maxSelect={constraints.max ?? 1}
         onConfirm={handleSelectionResolve}
