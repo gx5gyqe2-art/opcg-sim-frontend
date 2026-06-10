@@ -218,7 +218,10 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     !isAttackTargeting &&
     !!pendingRequest &&
     (pendingRequest.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
-     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER) &&
+     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER ||
+     // ブロッカー選択も盤面（防御側フィールド）からの選択。これが抜けていたため
+     // 「ブロッカーを選択」要求でカードをクリックできず、パスしかできなかった（=ブロック不能）。
+     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_BLOCKER) &&
     (pendingRequest.selectable_uuids?.length ?? 0) > 0 &&
     pendingRequest.selectable_uuids!.some(uuid => boardUuids.has(uuid));
 
@@ -233,6 +236,18 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
+      // 攻撃対象は相手のリーダー／フィールドのキャラ（またはステージ）に限定する。
+      // 従来は任意のカード（自分のカードや手札）でも ATTACK_CONFIRM を送ってサーバ
+      // エラーになり、攻撃ターゲティング状態から復帰できなかった。
+      const oppId = activePlayerId === 'p1' ? 'p2' : 'p1';
+      const opp = gameState.players[oppId];
+      const isValidTarget =
+        opp.leader?.uuid === card.uuid ||
+        opp.zones.field.some(c => c.uuid === card.uuid) ||
+        (opp.stage as any)?.uuid === card.uuid;
+      if (!isValidTarget) {
+        return; // 無効な対象クリックは無視（ターゲティングは継続）
+      }
       await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, {
         uuid: attackingCardUuid,
         target_ids: [card.uuid]
@@ -314,6 +329,12 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   
   useEffect(() => {
     setBoardSelected([]);
+    // 新しい選択要求が来たら攻撃ターゲティング状態を解除する（ターゲティングと
+    // 盤面選択オーバーレイの二重表示・競合を防ぐ）。
+    if (pendingRequest && isAttackTargeting) {
+      setIsAttackTargeting(false);
+      setAttackingCardUuid(null);
+    }
   }, [pendingRequest?.request_id]);
 
   useEffect(() => {
