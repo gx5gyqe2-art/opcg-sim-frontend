@@ -77,9 +77,9 @@ export interface PendingRequest {
   message: string;
   selectable_uuids: string[];
   can_skip: boolean;
-  candidates?: any[];
-  constraints?: any;
-  options?: any;
+  candidates?: CardInstance[];
+  constraints?: { min?: number; max?: number; source_label?: string; render_mode?: string; [key: string]: unknown };
+  options?: { label: string; value: unknown; [key: string]: unknown }[];
   // ▼ 追加: 必須プロパティ
   request_id: string;
 }
@@ -104,7 +104,7 @@ export interface GameState {
     attacker_uuid: string;
     target_uuid: string;
     counter_buff: number;
-    attacker?: any;
-    target?: any;
+    attacker?: CardInstance;
+    target?: CardInstance;
   } | null;
 }

@@ -989,7 +989,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
          
          const currentIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
          
-         let newIds = currentIds.filter((id: string) => id !== oldId);
+         const newIds = currentIds.filter((id: string) => id !== oldId);
          
          if (!newIds.includes(serverId)) {
             newIds.push(serverId);

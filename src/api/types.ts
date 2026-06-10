@@ -19,9 +19,9 @@ export interface PendingRequest {
     max?: number;
     source_label?: string; // "デッキの上から" など
     render_mode?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  options?: { label: string; value: any; [key: string]: any }[];
+  options?: { label: string; value: unknown; [key: string]: unknown }[];
 }
 
 export interface GameActionRequest {
@@ -35,9 +35,9 @@ export interface GameActionRequest {
     count?: number;
     ability_idx?: number;
     // ▼ 追加: 選択結果汎用フィールド
-    selected_uuids?: string[]; 
-    option_value?: any;
-    [key: string]: any;
+    selected_uuids?: string[];
+    option_value?: unknown;
+    [key: string]: unknown;
   };
 }
 
