@@ -139,6 +139,14 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     });
   };
 
+  // C8: コスト宣言（数値入力）。宣言値を declared_value として送る。
+  const handleDeclareCost = async (value: number) => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
+      extra: { declared_value: value }
+    });
+  };
+
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
@@ -669,6 +677,40 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
           <p style={{ color: '#7f8c8d', fontSize: '11px', margin: 0 }}>
             ※マリガンは1回のみ・全枚交換です。新しい手札はそのまま確定します。
           </p>
+        </div>
+      )}
+
+      {pendingRequest?.action === 'DECLARE_COST' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
+          background: 'rgba(0,0,0,0.90)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '16px', padding: '20px', boxSizing: 'border-box',
+        }}>
+          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '22px' }}>コスト宣言</h2>
+          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center' }}>
+            {pendingRequest.message}<br />
+            コストを宣言します。相手のデッキトップが宣言コストと一致すると効果が発動します。
+          </p>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '440px' }}>
+            {Array.from(
+              { length: (pendingRequest.constraints?.max ?? 10) - (pendingRequest.constraints?.min ?? 0) + 1 },
+              (_, i) => (pendingRequest.constraints?.min ?? 0) + i
+            ).map((n) => (
+              <button
+                key={n}
+                onClick={() => handleDeclareCost(n)}
+                disabled={isPending}
+                style={{
+                  width: '48px', height: '48px', borderRadius: '8px', fontWeight: 'bold', fontSize: '18px',
+                  background: isPending ? '#555' : '#2980b9', color: 'white', border: '1px solid #fff',
+                  cursor: isPending ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
