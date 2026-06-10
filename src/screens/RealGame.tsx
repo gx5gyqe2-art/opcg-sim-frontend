@@ -15,6 +15,11 @@ import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
 
+const MOCK_DECKS: DeckOption[] = [
+  { id: 'imu.json',  name: 'イム',  leaderId: 'ST01-001' },
+  { id: 'nami.json', name: 'ナミ', leaderId: 'OP03-040' },
+];
+
 const PENDING_ACTION_LABELS: Record<string, string> = {
   SELECT_BLOCKER: 'ブロッカー選択',
   SELECT_COUNTER: 'カウンター選択',
@@ -82,20 +87,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   );
 
   useEffect(() => {
-    if (isSetupComplete) return;
-
     const fetchDecks = async () => {
       const options: DeckOption[] = [];
-      try {
-        const localIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
-        localIds.forEach((id: string) => {
-          const deckData = localStorage.getItem(`opcg_deck_${id}`);
-          if (deckData) {
-            const parsed = JSON.parse(deckData);
-            options.push({ id: id, name: parsed.name || `Local Deck ${id}`, leaderId: parsed.leader_id });
-          }
-        });
-      } catch(e) { console.error(e); }
 
       try {
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
@@ -106,14 +99,17 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
             options.push({ id, name: d.name, leaderId: d.leader_id });
           });
         }
-      } catch(e) { console.error(e); }
+      } catch(e) {
+        console.error(e);
+        MOCK_DECKS.forEach(d => options.push(d));
+      }
 
       const uniqueMap = new Map();
       options.forEach(o => uniqueMap.set(o.id, o));
       setDeckOptions(Array.from(uniqueMap.values()));
     };
     fetchDecks();
-  }, [isSetupComplete]);
+  }, []);
 
   const handleGameStart = () => {
     if (p1DeckId && p2DeckId) {
