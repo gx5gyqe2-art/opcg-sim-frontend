@@ -147,6 +147,14 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     });
   };
 
+  // 任意効果「〜してもよい」の発動可否。accepted で発動/スキップを送る。
+  const handleOptionalConfirm = async (accepted: boolean) => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
+      extra: { accepted }
+    });
+  };
+
   const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
@@ -677,6 +685,44 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
           <p style={{ color: '#7f8c8d', fontSize: '11px', margin: 0 }}>
             ※マリガンは1回のみ・全枚交換です。新しい手札はそのまま確定します。
           </p>
+        </div>
+      )}
+
+      {pendingRequest?.action === 'CONFIRM_OPTIONAL' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '18px', padding: '20px', boxSizing: 'border-box',
+        }}>
+          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '20px' }}>任意効果</h2>
+          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '14px', textAlign: 'center' }}>
+            {pendingRequest.message}
+          </p>
+          <div style={{ display: 'flex', gap: '14px' }}>
+            <button
+              onClick={() => handleOptionalConfirm(true)}
+              disabled={isPending}
+              style={{
+                padding: '11px 34px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#27ae60', color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              発動する
+            </button>
+            <button
+              onClick={() => handleOptionalConfirm(false)}
+              disabled={isPending}
+              style={{
+                padding: '11px 34px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#7f8c8d', color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              発動しない
+            </button>
+          </div>
         </div>
       )}
 
