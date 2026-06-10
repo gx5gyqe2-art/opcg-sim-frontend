@@ -24,6 +24,8 @@ export const LAYOUT_CONSTANTS = {
     BADGE_DON_BG: 0x9370DB,    // ドン!!付与数バッジの背景 (紫)
     BADGE_FROZEN_BG: 0x2980b9,  // 凍結オーバーレイ (青)
     BADGE_NEGATE_BG: 0x7f8c8d,  // 効果無効オーバーレイ (グレー)
+    HIGHLIGHT_SELECTABLE: 0xF1C40F,      // 選択可能カードの枠 (ゴールド)
+    HIGHLIGHT_SELECTED: 0x2ECC71,        // 選択済みカードのオーバーレイ (緑)
 
     // 装飾・マスク用 (PIXI描画用)
     MASK_FILL: 0xffffff,       // 手札エリアのマスク用塗りつぶし色
@@ -35,6 +37,8 @@ export const LAYOUT_CONSTANTS = {
     OVERLAY_INFO_BG: 'rgba(0,0,0,0.8)',             // 情報通知の黒背景
     OVERLAY_MODAL_BG: 'rgba(0,0,0,0.5)',            // モーダル表示時の全画面黒透過背景
     OVERLAY_BORDER_HIGHLIGHT: '#f1c40f',            // 強調表示用の枠線色 (黄色)
+    HIGHLIGHT_SELECTABLE_CSS: '#f1c40f',
+    HIGHLIGHT_SELECTED_CSS: '#2ecc71',
 
     // 詳細画面のバッジ背景
     BADGE_ATTR: '#c0392b',     // 属性(Attribute)バッジの背景 (赤系)

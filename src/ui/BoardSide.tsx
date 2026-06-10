@@ -6,11 +6,13 @@ import { logger } from '../utils/logger';
 // 未使用のインポートを削除しました
 
 export const createBoardSide = (
-  p: PlayerState, 
-  isOpponent: boolean, 
-  W: number, 
-  coords: LayoutCoords, 
-  onCardClick: (card: CardInstance) => void
+  p: PlayerState,
+  isOpponent: boolean,
+  W: number,
+  coords: LayoutCoords,
+  onCardClick: (card: CardInstance) => void,
+  selectableUuids?: Set<string>,
+  selectedUuids?: Set<string>,
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -33,9 +35,11 @@ export const createBoardSide = (
     }
   };
 
-  const getCardOpts = (c: Partial<CardInstance>) => ({ 
+  const getCardOpts = (c: Partial<CardInstance>) => ({
     onClick: () => onCardClick(c as CardInstance),
-    isOpponent: isOpponent 
+    isOpponent: isOpponent,
+    isSelectable: selectableUuids?.has(c.uuid || '') ?? false,
+    isSelected: selectedUuids?.has(c.uuid || '') ?? false,
   });
 
   if (z.field && z.field.length > 0 && !isOpponent) {

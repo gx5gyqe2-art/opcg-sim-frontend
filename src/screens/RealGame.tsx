@@ -6,7 +6,6 @@ import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
-import { DebugReporter } from '../ui/DebugReporter';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { API_CONFIG } from '../api/api.config';
@@ -15,6 +14,11 @@ import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
+
+const MOCK_DECKS: DeckOption[] = [
+  { id: 'imu.json',  name: 'イム',  leaderId: 'ST01-001' },
+  { id: 'nami.json', name: 'ナミ', leaderId: 'OP03-040' },
+];
 
 const PENDING_ACTION_LABELS: Record<string, string> = {
   SELECT_BLOCKER: 'ブロッカー選択',
@@ -52,7 +56,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
-  
+  const [boardSelected, setBoardSelected] = useState<string[]>([]);
+
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const [p1DeckId, setP1DeckId] = useState(initialP1 || 'imu.json');
@@ -61,6 +66,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
   const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
+  const [showLog, setShowLog] = useState(false);
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
@@ -81,44 +87,29 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   );
 
   useEffect(() => {
-    if (isSetupComplete) return;
-
     const fetchDecks = async () => {
       const options: DeckOption[] = [];
-      try {
-        const localIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
-        localIds.forEach((id: string) => {
-          const deckData = localStorage.getItem(`opcg_deck_${id}`);
-          if (deckData) {
-            const parsed = JSON.parse(deckData);
-            options.push({ id: id, name: parsed.name || `Local Deck ${id}`, leaderId: parsed.leader_id });
-          }
-        });
-      } catch(e) { console.error(e); }
 
       try {
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
         if (data.success) {
-          data.decks.forEach((d: any) => { 
-            if (!d.id.endsWith('.json')) {
-              options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id }); 
-            }
+          data.decks.forEach((d: any) => {
+            const id = d.id.endsWith('.json') ? d.id : `db:${d.id}`;
+            options.push({ id, name: d.name, leaderId: d.leader_id });
           });
         }
-      } catch(e) { console.error(e); }
-
-      options.unshift(
-        { id: 'imu.json', name: 'Imu (Default)', leaderId: 'ST01-001' },
-        { id: 'nami.json', name: 'Nami (Default)', leaderId: 'OP03-040' }
-      );
+      } catch(e) {
+        console.error(e);
+        MOCK_DECKS.forEach(d => options.push(d));
+      }
 
       const uniqueMap = new Map();
       options.forEach(o => uniqueMap.set(o.id, o));
       setDeckOptions(Array.from(uniqueMap.values()));
     };
     fetchDecks();
-  }, [isSetupComplete]);
+  }, []);
 
   const handleGameStart = () => {
     if (p1DeckId && p2DeckId) {
@@ -198,20 +189,86 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     await sendBattleAction(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.PASS, undefined, currentRequestId);
   };
 
+  const handleMulligan = async () => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction('MULLIGAN' as any, {});
+  };
+
+  const handleKeepHand = async () => {
+    if (!gameState?.game_id || isPending) return;
+    await sendAction('KEEP_HAND' as any, {});
+  };
+
   const handleTurnEnd = () => {
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
-  const onCardClick = async (card: CardInstance) => { 
+  const boardUuids = gameState ? new Set<string>([
+    ...(gameState.players.p1.zones.field.map(c => c.uuid)),
+    ...(gameState.players.p1.zones.hand.map(c => c.uuid)),
+    ...(gameState.players.p2.zones.field.map(c => c.uuid)),
+    ...(gameState.players.p2.zones.hand.map(c => c.uuid)),
+    ...(gameState.players.p1.leader ? [gameState.players.p1.leader.uuid] : []),
+    ...(gameState.players.p2.leader ? [gameState.players.p2.leader.uuid] : []),
+    ...(gameState.players.p1.stage ? [(gameState.players.p1.stage as any).uuid] : []),
+    ...(gameState.players.p2.stage ? [(gameState.players.p2.stage as any).uuid] : []),
+  ]) : new Set<string>();
+
+  const isBoardSelectMode =
+    !isAttackTargeting &&
+    !!pendingRequest &&
+    (pendingRequest.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
+     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER ||
+     // ブロッカー選択も盤面（防御側フィールド）からの選択。これが抜けていたため
+     // 「ブロッカーを選択」要求でカードをクリックできず、パスしかできなかった（=ブロック不能）。
+     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_BLOCKER) &&
+    (pendingRequest.selectable_uuids?.length ?? 0) > 0 &&
+    pendingRequest.selectable_uuids!.some(uuid => boardUuids.has(uuid));
+
+  const selectableUuids = isBoardSelectMode
+    ? new Set(pendingRequest!.selectable_uuids)
+    : new Set<string>();
+
+  const minSelect = pendingRequest?.constraints?.min ?? 1;
+  const maxSelect = pendingRequest?.constraints?.max ?? 1;
+
+  const onCardClick = async (card: CardInstance) => {
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
-      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, { 
-        uuid: attackingCardUuid, 
-        target_ids: [card.uuid] 
+      // 攻撃対象は相手のリーダー／フィールドのキャラ（またはステージ）に限定する。
+      // 従来は任意のカード（自分のカードや手札）でも ATTACK_CONFIRM を送ってサーバ
+      // エラーになり、攻撃ターゲティング状態から復帰できなかった。
+      const oppId = activePlayerId === 'p1' ? 'p2' : 'p1';
+      const opp = gameState.players[oppId];
+      const isValidTarget =
+        opp.leader?.uuid === card.uuid ||
+        opp.zones.field.some(c => c.uuid === card.uuid) ||
+        (opp.stage as any)?.uuid === card.uuid;
+      if (!isValidTarget) {
+        return; // 無効な対象クリックは無視（ターゲティングは継続）
+      }
+      await handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM, {
+        uuid: attackingCardUuid,
+        target_ids: [card.uuid]
       });
       setIsAttackTargeting(false);
       setAttackingCardUuid(null);
+      return;
+    }
+
+    if (isBoardSelectMode) {
+      if (selectableUuids.has(card.uuid)) {
+        if (maxSelect === 1) {
+          handleSelectionResolve([card.uuid]);
+        } else {
+          setBoardSelected(prev =>
+            prev.includes(card.uuid)
+              ? prev.filter(id => id !== card.uuid)
+              : [...prev, card.uuid]
+          );
+        }
+      }
       return;
     }
 
@@ -270,6 +327,16 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     setIsDetailMode(true); 
   };
   
+  useEffect(() => {
+    setBoardSelected([]);
+    // 新しい選択要求が来たら攻撃ターゲティング状態を解除する（ターゲティングと
+    // 盤面選択オーバーレイの二重表示・競合を防ぐ）。
+    if (pendingRequest && isAttackTargeting) {
+      setIsAttackTargeting(false);
+      setAttackingCardUuid(null);
+    }
+  }, [pendingRequest?.request_id]);
+
   useEffect(() => {
     if (!pixiContainerRef.current || !isSetupComplete) return;
 
@@ -333,17 +400,18 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
 
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick);
-      topSide.y = 0; 
-      
-      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick);
+      const selectedSet = new Set(boardSelected);
+      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet);
+      topSide.y = 0;
+
+      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, selectableUuids, selectedSet);
       bottomSide.y = midY;
 
       app.stage.addChild(topSide, bottomSide);
     };
 
     renderScene();
-  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid]);  
+  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -458,9 +526,11 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     );
   }
 
-  const showSearchModal = 
-    pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
-    pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER;
+  const showSearchModal =
+    !isBoardSelectMode && (
+      pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
+      pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
+    );
     
   const constraints = pendingRequest?.constraints || {};
 
@@ -484,23 +554,114 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
       
-      <button 
+      <button
         onClick={handleBackToTitle}
         style={{
           position: 'absolute',
-          top: '10px',
+          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
           left: '10px',
+          transform: 'translateY(-50%)',
           zIndex: Z_INDEX.OVERLAY + 20,
           background: 'rgba(0, 0, 0, 0.6)',
-          color: 'white',
-          border: '1px solid #555',
+          color: '#aaa',
+          border: '1px solid #444',
           borderRadius: '4px',
-          padding: '5px 10px',
-          cursor: 'pointer'
+          padding: '4px 9px',
+          cursor: 'pointer',
+          fontSize: '11px',
         }}
       >
-        TOPへ
+        TOP
       </button>
+
+      <button
+        onClick={() => setShowLog(p => !p)}
+        style={{
+          position: 'absolute',
+          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+          left: '55px',
+          transform: 'translateY(-50%)',
+          zIndex: Z_INDEX.OVERLAY + 20,
+          background: showLog ? 'rgba(41,128,185,0.7)' : 'rgba(0, 0, 0, 0.6)',
+          color: showLog ? '#fff' : '#aaa',
+          border: showLog ? '1px solid #2980b9' : '1px solid #444',
+          borderRadius: '4px',
+          padding: '4px 9px',
+          cursor: 'pointer',
+          fontSize: '11px',
+        }}
+      >
+        ログ
+      </button>
+
+      {showLog && layoutCoords && (
+        <ActionLog
+          events={eventLog}
+          anchorY={layoutCoords.y}
+          onClose={() => setShowLog(false)}
+        />
+      )}
+
+      {pendingRequest?.action === 'MULLIGAN' && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
+          background: 'rgba(0,0,0,0.90)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: '16px', padding: '20px', boxSizing: 'border-box',
+        }}>
+          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '22px' }}>マリガン</h2>
+          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center' }}>
+            手札を確認してください。マリガンを選ぶと<br />手札5枚を全てデッキに戻し、引き直します。
+          </p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '500px' }}>
+            {(pendingRequest.candidates || []).map((card: any) => (
+              <div
+                key={card.uuid}
+                style={{
+                  width: '72px', height: '100px', borderRadius: '5px',
+                  border: '2px solid #555', overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={getCardImageUrl(card.card_id)}
+                  alt={card.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '14px' }}>
+            <button
+              onClick={handleMulligan}
+              disabled={isPending}
+              style={{
+                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#e67e22',
+                color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              マリガン（全交換）
+            </button>
+            <button
+              onClick={handleKeepHand}
+              disabled={isPending}
+              style={{
+                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
+                background: isPending ? '#555' : '#27ae60',
+                color: 'white', border: 'none',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              キープ
+            </button>
+          </div>
+          <p style={{ color: '#7f8c8d', fontSize: '11px', margin: 0 }}>
+            ※マリガンは1回のみ・全枚交換です。新しい手札はそのまま確定します。
+          </p>
+        </div>
+      )}
 
       {errorToast && (
         <div style={{
@@ -515,15 +676,62 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       )}
 
       {isAttackTargeting && (
-        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
+        <div style={{ position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
           攻撃対象を選択してください
           <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
         </div>
       )}
 
-      {pendingRequest && !isAttackTargeting && !showSearchModal && pendingRequest.action !== 'MAIN_ACTION' && (
+      {isBoardSelectMode && (
         <div style={{
-            position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
+          padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
+          border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
+          minWidth: '220px', maxWidth: '320px',
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: maxSelect > 1 ? '8px' : 0 }}>
+            {pendingRequest!.message}
+          </div>
+          {maxSelect > 1 && (
+            <>
+              <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
+                {boardSelected.length} / {maxSelect}枚選択中
+              </div>
+              <button
+                onClick={() => handleSelectionResolve(boardSelected)}
+                disabled={boardSelected.length < minSelect || isPending}
+                style={{
+                  padding: '6px 20px', background: boardSelected.length >= minSelect ? COLORS.BTN_SUCCESS : COLORS.BTN_DISABLED,
+                  color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
+                  cursor: boardSelected.length >= minSelect && !isPending ? 'pointer' : 'not-allowed',
+                  marginBottom: pendingRequest!.can_skip ? '8px' : 0,
+                }}
+              >
+                確定
+              </button>
+            </>
+          )}
+          {pendingRequest!.can_skip && (
+            <button
+              onClick={handlePass}
+              disabled={isPending}
+              style={{
+                display: 'block', margin: '0 auto', marginTop: maxSelect > 1 ? '0' : '0',
+                padding: '6px 20px', background: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER,
+                color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
+                cursor: isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              パス
+            </button>
+          )}
+        </div>
+      )}
+
+      {pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
+        <div style={{
+            position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
             zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
             padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
             border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}`,
@@ -615,26 +823,17 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
     {showSearchModal && modalCandidates.length > 0 && (
       <CardSelectModal
-        key={pendingRequest?.request_id} 
+        key={pendingRequest?.request_id}
         candidates={modalCandidates}
         message={pendingRequest?.message || ""}
         minSelect={constraints.min ?? 1}
         maxSelect={constraints.max ?? 1}
         onConfirm={handleSelectionResolve}
         onCancel={pendingRequest?.can_skip ? handlePass : undefined}
+        selectableUuids={pendingRequest?.selectable_uuids ?? undefined}
       />
     )}
 
-    <DebugReporter
-      data={{
-        gameState,
-        pendingRequest,
-        activePlayerId,
-        attackingCardUuid
-      }}
-    />
-
-    <ActionLog events={eventLog} />
 
     </div>
   );

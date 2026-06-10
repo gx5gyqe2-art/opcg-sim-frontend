@@ -11,7 +11,7 @@ export const createCardContainer = (
   card: any,
   cw: number,
   ch: number,
-  options: { count?: number; onClick: () => void; isOpponent?: boolean }
+  options: { count?: number; onClick: () => void; isOpponent?: boolean; isSelectable?: boolean; isSelected?: boolean }
 ) => {
   const container = new PIXI.Container();
   if (card?.uuid) {
@@ -302,6 +302,24 @@ export const createCardContainer = (
     container.addChild(overlay);
     const labelY = card?.is_frozen ? ch * 0.12 : 0;
     addText('効果無効', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
+  }
+
+  // 選択可能ハイライト: ゴールド枠線
+  if (options.isSelectable) {
+    const border = new PIXI.Graphics();
+    border.lineStyle(3, COLORS.HIGHLIGHT_SELECTABLE, 1.0);
+    border.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    container.addChild(border);
+  }
+
+  // 選択済みオーバーレイ: 緑半透明 + チェックマーク
+  if (options.isSelected) {
+    const overlay = new PIXI.Graphics();
+    overlay.beginFill(COLORS.HIGHLIGHT_SELECTED, 0.45);
+    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    overlay.endFill();
+    container.addChild(overlay);
+    addText('✓', { fontSize: 22, fill: 0xFFFFFF, fontWeight: 'bold' }, 0, 0, 'screen');
   }
 
   container.eventMode = 'static';
