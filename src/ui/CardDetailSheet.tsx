@@ -11,7 +11,7 @@ interface CardDetailSheetProps {
   location: string;
   isMyTurn: boolean;
   activeDonCount?: number;
-  onAction: (type: string, payload: any) => Promise<void>;
+  onAction: (type: string, payload: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }
 
@@ -34,7 +34,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
-  const handleExecute = async (type: string, extra: any = {}) => {
+  const handleExecute = async (type: string, extra: Record<string, unknown> = {}) => {
     logger.log({
       level: 'info',
       action: "trace.handleExecute_called",
@@ -155,7 +155,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   });
 
   // ▼ 変更: getCardImageUrlを使用
-  const mainImageUrl = ('card_id' in card) ? getCardImageUrl((card as any).card_id) : null;
+  const mainImageUrl = ('card_id' in card) ? getCardImageUrl((card as { card_id: string }).card_id) : null;
 
   if (card.cards && card.cards.length > 0) {
     return (

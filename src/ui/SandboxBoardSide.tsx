@@ -41,7 +41,7 @@ export const createSandboxBoardSide = (
     container.eventMode = 'static';
     container.cursor = 'grab';
     
-    let pressTimer: any = null;
+    let pressTimer: ReturnType<typeof setTimeout> | null = null;
     let startPos = { x: 0, y: 0 };
 
     const startPress = (e: PIXI.FederatedPointerEvent) => {

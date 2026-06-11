@@ -47,7 +47,7 @@ const getLocalDecks = (): DeckData[] => {
     return ids.map((id: string) => {
       const data = localStorage.getItem(`opcg_deck_${id}`);
       return data ? JSON.parse(data) : null;
-    }).filter((d: any) => d !== null);
+    }).filter((d: DeckData | null) => d !== null);
   } catch { return []; }
 };
 
