@@ -325,7 +325,7 @@ export const SandboxGame = ({
             return;
           }
         }
-      } catch (e) { /* 復元失敗時は通常の初期化にフォールバック */ }
+      } catch { /* 復元失敗時は通常の初期化にフォールバック */ }
 
       const hasInitialDecks = !!(initialP1DeckId && initialP2DeckId);
 
@@ -441,7 +441,7 @@ export const SandboxGame = ({
       } else {
         sessionStorage.setItem(SANDBOX_STATE_KEY, JSON.stringify(gameState));
       }
-    } catch (e) { /* 保存失敗(容量超過等)は致命的でないため握りつぶす */ }
+    } catch { /* 保存失敗(容量超過等)は致命的でないため握りつぶす */ }
   }, [isLocalMode, gameState]);
 
   useEffect(() => {
@@ -496,7 +496,7 @@ export const SandboxGame = ({
     for (const child of removedChildren) {
       if (child === liveGhost) continue;
       if (child === dropHighlightRef.current) dropHighlightRef.current = null;
-      try { child.destroy({ children: true, texture: false, baseTexture: false }); } catch (e) { /* already destroyed */ }
+      try { child.destroy({ children: true, texture: false, baseTexture: false }); } catch { /* already destroyed */ }
     }
 
     const { width: W, height: H } = app.screen;

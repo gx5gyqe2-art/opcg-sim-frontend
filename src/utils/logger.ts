@@ -14,10 +14,10 @@ interface LogOptions {
   msg: string;
   sessionId?: string;
   player?: PlayerType;
-  payload?: any;
+  payload?: unknown;
 }
 
-const logBuffer: any[] = [];
+const logBuffer: unknown[] = [];
 
 // ▼▼▼ 追加: ローカル時間をISO形式(YYYY-MM-DDTHH:mm:ss.SSS)にするヘルパー ▼▼▼
 const getLocalISOString = () => {
@@ -108,11 +108,11 @@ export const logger = {
     }
   },
 
-  warn: (action: string, msg: string, payload?: any) => {
+  warn: (action: string, msg: string, payload?: unknown) => {
     logger.log({ level: 'warn', action, msg, payload });
   },
 
-  error: (action: string, msg: string, payload?: any) => {
+  error: (action: string, msg: string, payload?: unknown) => {
     logger.log({ level: 'error', action, msg, payload });
   }
 };

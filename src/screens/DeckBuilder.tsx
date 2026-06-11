@@ -48,7 +48,7 @@ const getLocalDecks = (): DeckData[] => {
       const data = localStorage.getItem(`opcg_deck_${id}`);
       return data ? JSON.parse(data) : null;
     }).filter((d: any) => d !== null);
-  } catch (e) { return []; }
+  } catch { return []; }
 };
 
 const getOwnedCards = (): Record<string, number> => {
@@ -925,7 +925,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
            setAllCards(cData.cards);
            localStorage.setItem('opcg_card_db', JSON.stringify(cData.cards));
         }
-      } catch (e) {
+      } catch {
          if (!loadedFromCache) {
            logger.error('deck_builder.init', 'Failed to load cards');
          }
@@ -939,7 +939,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
           if (dData.success && Array.isArray(dData.decks)) {
              serverDecks = dData.decks.filter((d: DeckData) => !d.id || !d.id.endsWith('.json'));
           }
-        } catch(e) { console.log('Offline'); }
+        } catch { console.log('Offline'); }
 
         const localDecks = getLocalDecks();
         const merged = [...serverDecks];
