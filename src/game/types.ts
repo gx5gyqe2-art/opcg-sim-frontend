@@ -72,6 +72,13 @@ export type CardInstance = LeaderCard | CharacterCard | EventCard | StageCard | 
 // BoardSideでの互換性のため
 export type BoardCard = CardInstance;
 
+// 盤面の仮想ゾーン（ライフ束/デッキ/トラッシュ/ドン置き場）を1枚のカードとして描画する際の型。
+// 実カード(CardInstance)も渡せるよう全フィールドを optional にしている。
+export interface VirtualZoneCard extends Partial<BaseCard> {
+  id?: string;                 // デッキ/生データ由来の別ID表記
+  cards?: CardInstance[];      // トラッシュ等、内包カード一覧（ビューワー用）
+}
+
 export interface ZoneState {
   field: CardInstance[];
   hand: CardInstance[];

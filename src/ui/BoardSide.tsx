@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
 import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
-import type { PlayerState, CardInstance, BoardCard } from '../game/types';
+import type { PlayerState, CardInstance, BoardCard, VirtualZoneCard } from '../game/types';
 import { logger } from '../utils/logger';
 // 未使用のインポートを削除しました
 
@@ -35,7 +35,7 @@ export const createBoardSide = (
     }
   };
 
-  const getCardOpts = (c: Partial<CardInstance>) => ({
+  const getCardOpts = (c: VirtualZoneCard) => ({
     onClick: () => onCardClick(c as CardInstance),
     isOpponent: isOpponent,
     isSelectable: selectableUuids?.has(c.uuid || '') ?? false,
@@ -99,20 +99,20 @@ export const createBoardSide = (
   // ライフ (getX適用)
   const lifeCount = z.life?.length || 0;
   const life = createCardContainer(
-    { uuid: `life-${p.player_id}`, name: 'Life' } as any, 
+    { uuid: `life-${p.player_id}`, name: 'Life' } as VirtualZoneCard, 
     coords.CW, 
     coords.CH, 
-    { ...getCardOpts({ uuid: `life-${p.player_id}`, name: 'Life' } as any), count: lifeCount }
+    { ...getCardOpts({ uuid: `life-${p.player_id}`, name: 'Life' } as VirtualZoneCard), count: lifeCount }
   );
   life.x = getX(coords.getLifeX(W)); life.y = r2Y;
   side.addChild(life);
 
   // デッキ (getX適用)
   const deck = createCardContainer(
-    { uuid: `deck-${p.player_id}`, name: 'Deck' } as any, 
+    { uuid: `deck-${p.player_id}`, name: 'Deck' } as VirtualZoneCard, 
     coords.CW, 
     coords.CH, 
-    { ...getCardOpts({ uuid: `deck-${p.player_id}`, name: 'Deck' } as any) }
+    { ...getCardOpts({ uuid: `deck-${p.player_id}`, name: 'Deck' } as VirtualZoneCard) }
   );
   deck.x = getX(coords.getDeckX(W)); deck.y = r2Y;
   side.addChild(deck);
@@ -127,43 +127,43 @@ export const createBoardSide = (
       name: 'Trash', 
       cards: z.trash,
       card_id: topTrashCard ? topTrashCard.card_id : undefined
-    } as any, 
+    } as VirtualZoneCard, 
     smallCW, // 変更
     smallCH, // 変更
-    { ...getCardOpts({ uuid: `trash-${p.player_id}`, name: 'Trash', cards: z.trash } as any), count: trashCount }
+    { ...getCardOpts({ uuid: `trash-${p.player_id}`, name: 'Trash', cards: z.trash } as VirtualZoneCard), count: trashCount }
   );
   trash.x = getX(coords.getTrashX(W)); trash.y = r3Y;
   side.addChild(trash);
 
   // ドン!!デッキ (Sandbox仕様: サイズ縮小 + getX適用)
-  const donDeckCount = (p as any).don_deck_count ?? 0;
+  const donDeckCount = p.don_deck_count ?? 0;
   const donDeck = createCardContainer(
-    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, 
+    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as VirtualZoneCard, 
     smallCW, // 変更
     smallCH, // 変更
-    { ...getCardOpts({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any), count: donDeckCount }
+    { ...getCardOpts({ uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as VirtualZoneCard), count: donDeckCount }
   );
   donDeck.x = getX(coords.getDonDeckX(W)); donDeck.y = r3Y;
   side.addChild(donDeck);
 
   // アクティブドン (Sandbox仕様: サイズ縮小 + getX適用)
-  const donActiveList = (p as any).don_active || [];
+  const donActiveList = p.don_active || [];
   const donActiveCount = donActiveList.length;
   const donActive = createCardContainer(
     { 
       uuid: `donactive-${p.player_id}`, 
       name: 'Don!! Active',
       card_id: 'DON' 
-    } as any, 
+    } as VirtualZoneCard, 
     smallCW, // 変更
     smallCH, // 変更
-    { ...getCardOpts({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as any), count: donActiveCount }
+    { ...getCardOpts({ uuid: `donactive-${p.player_id}`, name: 'Don!! Active' } as VirtualZoneCard), count: donActiveCount }
   );
   donActive.x = getX(coords.getDonActiveX(W)); donActive.y = r3Y;
   side.addChild(donActive);
 
   // レストドン (Sandbox仕様: サイズ縮小 + getX適用)
-  const donRestList = (p as any).don_rested || [];
+  const donRestList = p.don_rested || [];
   const donRestCount = donRestList.length;
   const donRest = createCardContainer(
     { 
@@ -171,10 +171,10 @@ export const createBoardSide = (
       name: 'Don!! Rest', 
       is_rest: true,
       card_id: 'DON'
-    } as any, 
+    } as VirtualZoneCard, 
     smallCW, // 変更
     smallCH, // 変更
-    { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as any), count: donRestCount }
+    { ...getCardOpts({ uuid: `donrest-${p.player_id}`, name: 'Don!! Rest' } as VirtualZoneCard), count: donRestCount }
   );
   donRest.x = getX(coords.getDonRestX(W)); donRest.y = r3Y;
   side.addChild(donRest);
