@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { GameState, CardInstance, PlayerState, LeaderCard, BoardCard } from './types';
+import type { GameState, CardInstance, PlayerState, LeaderCard, BoardCard, DeckInput, DeckCardData, ZoneState } from './types';
 import { logger } from '../utils/logger';
 
 const cloneState = (state: GameState): GameState => JSON.parse(JSON.stringify(state));
@@ -10,11 +10,12 @@ const updatePlayerCounts = (player: PlayerState) => {
   player.active_don = player.don_active.length;
 };
 
-export const createInitialGameState = (p1Deck: any, p2Deck: any, roomName: string): GameState => {
-  const setupPlayer = (deck: any, playerId: string, name: string): PlayerState => {
-    const leaderRaw = (deck?.leader && Array.isArray(deck.leader) ? deck.leader[0] : deck?.leader) || 
-                      (deck?.cards && deck.cards.find((c: any) => (c.type || '').toUpperCase() === 'LEADER')) ||
-                      null;
+export const createInitialGameState = (p1Deck: DeckInput, p2Deck: DeckInput, roomName: string): GameState => {
+  const setupPlayer = (deck: DeckInput, playerId: string, name: string): PlayerState => {
+    const leaderRaw: DeckCardData | null =
+      (deck?.leader && Array.isArray(deck.leader) ? deck.leader[0] : (deck?.leader as DeckCardData | undefined)) ||
+      (deck?.cards && deck.cards.find((c: DeckCardData) => (c.type || '').toUpperCase() === 'LEADER')) ||
+      null;
     
     let leader: LeaderCard | null = null;
     if (leaderRaw) {
@@ -31,12 +32,12 @@ export const createInitialGameState = (p1Deck: any, p2Deck: any, roomName: strin
         is_rest: false,
         attached_don: 0,
         type: "LEADER"
-      };
+      } as LeaderCard;
     }
 
     const mainCards = (deck?.cards || [])
-      .filter((c: any) => (c.type || '').toUpperCase() !== 'LEADER')
-      .map((c: any) => ({
+      .filter((c: DeckCardData) => (c.type || '').toUpperCase() !== 'LEADER')
+      .map((c: DeckCardData) => ({
         ...c,
         // ▼ 修正: メインカードも同様にIDを確保
         card_id: c.card_id || c.uuid || c.number || c.id,
@@ -45,7 +46,7 @@ export const createInitialGameState = (p1Deck: any, p2Deck: any, roomName: strin
         is_rest: false,
         attached_don: 0,
         is_face_up: false
-      }));
+      } as CardInstance));
 
     const shuffled = [...mainCards].sort(() => Math.random() - 0.5);
 
@@ -92,7 +93,7 @@ export const createInitialGameState = (p1Deck: any, p2Deck: any, roomName: strin
     turn_info: { turn_count: 1, active_player_id: 'p1', current_phase: 'MAIN', winner: null }
   };
 
-  (state as any).mulligan_finished = { p1: false, p2: false };
+  state.mulligan_finished = { p1: false, p2: false };
 
   const p1 = state.players.p1;
   const p1DonDeck = p1.zones.don_deck;
@@ -135,9 +136,9 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
 
     const donKeys = ['don_active', 'don_rested', 'don_attached'] as const;
     for (const key of donKeys) {
-      const idx = (p as any)[key].findIndex((c: any) => c.uuid === cardUuid);
+      const idx = p[key].findIndex((c: CardInstance) => c.uuid === cardUuid);
       if (idx !== -1) { 
-        targetCard = (p as any)[key].splice(idx, 1)[0]; 
+        targetCard = p[key].splice(idx, 1)[0]; 
         sourcePid = pid;
         sourceZone = key;
         break; 
@@ -169,13 +170,13 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
 
   if (sourceZone === 'field') {
     const srcPlayer = newState.players[sourcePid];
-    const attachedDons = srcPlayer.don_attached.filter((d: any) => d.attached_to === cardUuid);
+    const attachedDons = srcPlayer.don_attached.filter((d) => d.attached_to === cardUuid);
     
     for (const don of attachedDons) {
       const donIdx = srcPlayer.don_attached.indexOf(don);
       if (donIdx !== -1) srcPlayer.don_attached.splice(donIdx, 1);
       don.is_rest = true;
-      (don as any).attached_to = null;
+      don.attached_to = null;
       srcPlayer.don_rested.push(don);
     }
   }
@@ -192,7 +193,7 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
   const destPlayer = newState.players[destPid];
 
   if (sourceZone === 'hand' && destZone === 'field' && sourcePid === destPid) {
-    const cost = (targetCard as any).cost || 0;
+    const cost = targetCard.cost || 0;
     const activeDons = destPlayer.don_active;
     if (cost > 0 && activeDons.length >= cost) {
       for (let i = 0; i < cost; i++) {
@@ -213,9 +214,9 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
     }
     destPlayer.stage = targetCard as BoardCard;
   }
-  else if (['don_active', 'don_rested'].includes(destZone)) { (destPlayer as any)[destZone].push(targetCard); }
+  else if (destZone === 'don_active' || destZone === 'don_rested') { destPlayer[destZone].push(targetCard); }
   else {
-    const zone = (destPlayer.zones as any)[destZone];
+    const zone = destPlayer.zones[destZone as keyof ZoneState];
     if (Array.isArray(zone)) {
       if (index === -1) zone.push(targetCard);
       else zone.splice(index, 0, targetCard);
@@ -247,7 +248,7 @@ export const attachDonLocal = (state: GameState, donUuid: string, targetUuid: st
       donCard = p.don_attached.splice(attachedIdx, 1)[0]; 
       ownerPid = pid;
       
-      const oldTargetUuid = (donCard as any).attached_to;
+      const oldTargetUuid = donCard.attached_to;
       if (oldTargetUuid) {
         if (p.leader && p.leader.uuid === oldTargetUuid) { 
           p.leader.attached_don = Math.max(0, (p.leader.attached_don || 0) - 1); 
@@ -280,7 +281,7 @@ export const attachDonLocal = (state: GameState, donUuid: string, targetUuid: st
   
   if (targetFound) { 
     donCard.is_rest = false; 
-    (donCard as any).attached_to = targetUuid; 
+    donCard.attached_to = targetUuid; 
     player.don_attached.push(donCard); 
   } else { 
     player.don_active.push(donCard); 
@@ -331,7 +332,7 @@ export const resolveTurnEndLocal = (state: GameState): GameState => {
   nextPlayer.don_rested = [];
   nextPlayer.don_active.push(...nextPlayer.don_attached);
   nextPlayer.don_attached = [];
-  nextPlayer.don_active.forEach(d => { d.is_rest = false; (d as any).attached_to = null; });
+  nextPlayer.don_active.forEach(d => { d.is_rest = false; d.attached_to = null; });
 
   if (currentTurn > 1) {
     const deck = nextPlayer.zones.deck || [];
@@ -388,9 +389,9 @@ export const mulliganLocal = (state: GameState, playerId: string): GameState => 
 
 export const finishMulliganLocal = (state: GameState, playerId: string): GameState => {
   const newState = cloneState(state);
-  const flags = (newState as any).mulligan_finished || { p1: false, p2: false };
-  flags[playerId] = true;
-  (newState as any).mulligan_finished = flags;
+  const flags = newState.mulligan_finished || { p1: false, p2: false };
+  flags[playerId as 'p1' | 'p2'] = true;
+  newState.mulligan_finished = flags;
   return newState;
 };
 
@@ -421,7 +422,7 @@ export const resetGameLocal = (state: GameState): GameState => {
   const newState = cloneState(state);
   newState.turn_info.turn_count = 1;
   newState.turn_info.active_player_id = 'p1';
-  (newState as any).mulligan_finished = { p1: false, p2: false };
+  newState.mulligan_finished = { p1: false, p2: false };
 
   for (const pid of ['p1', 'p2'] as const) {
     const p = newState.players[pid];
@@ -449,7 +450,7 @@ export const resetGameLocal = (state: GameState): GameState => {
     allDons.forEach(d => {
       d.is_rest = false;
       d.is_face_up = false;
-      (d as any).attached_to = null;
+      d.attached_to = null;
     });
     p.zones.don_deck = allDons;
 

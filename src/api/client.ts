@@ -1,4 +1,4 @@
-import type { GameActionRequest, BattleActionRequest, GameActionResult } from './types';
+import type { GameActionRequest, BattleActionRequest, GameActionResult, PendingRequest } from './types';
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
@@ -42,7 +42,7 @@ export const apiClient = {
   async createGame(
     p1Deck: string = DEFAULT_GAME_SETTINGS.P1_DECK,
     p2Deck: string = DEFAULT_GAME_SETTINGS.P2_DECK
-  ): Promise<{ game_id: string; state: GameState; pending_request?: any }> {
+  ): Promise<{ game_id: string; state: GameState; pending_request?: PendingRequest }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
       body: JSON.stringify({
@@ -64,7 +64,7 @@ export const apiClient = {
 
     const oldSid = sessionManager.getSessionId();
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
-    const gameId = data[GAME_ID_KEY] || (data[CONST.API_ROOT_KEYS.GAME_STATE] as any)?.[GAME_ID_KEY];
+    const gameId = data[GAME_ID_KEY] || data[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
     
     if (gameId) {
       sessionManager.setSessionId(gameId);

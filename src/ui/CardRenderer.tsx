@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import type { VirtualZoneCard } from '../game/types';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
 import { logger } from '../utils/logger';
@@ -7,8 +8,20 @@ import { getCardImageUrl, getBackImageUrl } from '../utils/imageAssets';
 const { COLORS, SIZES } = LAYOUT_CONSTANTS;
 const { SHAPE, UI_DETAILS, PHYSICS } = LAYOUT_PARAMS;
 
+// カード描画で使うテキストスタイル（config 由来の string fontWeight 等を許容する緩めの型）。
+// PIXI.Text へ渡す際は ITextStyle としてキャストする。
+type CardTextStyle = {
+  fontSize?: number;
+  fill?: string | number;
+  fontWeight?: string;
+  stroke?: string | number;
+  strokeThickness?: number;
+  align?: string;
+  [key: string]: unknown;
+};
+
 export const createCardContainer = (
-  card: any,
+  card: VirtualZoneCard,
   cw: number,
   ch: number,
   options: { count?: number; onClick: () => void; isOpponent?: boolean; isSelectable?: boolean; isSelected?: boolean }
@@ -117,12 +130,12 @@ export const createCardContainer = (
 
   if (isEmpty) return container;
 
-  const addText = (content: string, style: any, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
-    const txt = new PIXI.Text(content, style);
+  const addText = (content: string, style: CardTextStyle, x: number, y: number, rotationMode: 'screen' | 'card' | number = 'screen') => {
+    const txt = new PIXI.Text(content, style as Partial<PIXI.ITextStyle>);
     if (!isBack && imageUrl && style.fill !== '#ffffff') {
       style.stroke = '#000000';
       style.strokeThickness = 3;
-      txt.style = style;
+      txt.style = style as Partial<PIXI.ITextStyle>;
     }
 
     const maxWidth = isRest ? ch * UI_DETAILS.CARD_TEXT_MAX_WIDTH_RATIO : cw * UI_DETAILS.CARD_TEXT_MAX_WIDTH_RATIO;
@@ -231,7 +244,7 @@ export const createCardContainer = (
     }
 
     // 4. ドン!!付与数 (右下)
-    if (card?.attached_don > 0) {
+    if ((card?.attached_don ?? 0) > 0) {
       const bx = isOpponent ? (-cw / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET) : (cw / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET);
       const by = isOpponent ? (-ch / 2 + UI_DETAILS.CARD_BADGE_DON_OFFSET) : (ch / 2 - UI_DETAILS.CARD_BADGE_DON_OFFSET);
       const donBadge = new PIXI.Graphics()

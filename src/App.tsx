@@ -44,10 +44,13 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
+type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby';
+type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
+
 export default function App() {
   // 対策①：初期値をsessionStorageから復元するように変更
-  const [mode, setMode] = useState<'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby'>(() => {
-    return (sessionStorage.getItem('opcg_app_mode') as any) || 'start';
+  const [mode, setMode] = useState<AppMode>(() => {
+    return (sessionStorage.getItem('opcg_app_mode') as AppMode | null) || 'start';
   });
 
   const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>(() => {
@@ -55,7 +58,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : { p1: 'imu.json', p2: 'nami.json' };
   });
 
-  const [sandboxOptions, setSandboxOptions] = useState<{ role: 'both' | 'p1' | 'p2', gameId?: string, room_name?: string }>(() => {
+  const [sandboxOptions, setSandboxOptions] = useState<SandboxOptions>(() => {
     const saved = sessionStorage.getItem('opcg_sandbox_options');
     return saved ? JSON.parse(saved) : { role: 'both' };
   });
@@ -73,7 +76,7 @@ export default function App() {
     sessionStorage.setItem('opcg_sandbox_options', JSON.stringify(sandboxOptions));
   }, [sandboxOptions]);
 
-  const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: any) => {
+  const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: SandboxOptions) => {
     
     if (gameMode === 'sandbox') {
         // メニューから新規にサンドボックスを開始する場合は、前回の進行中ゲーム保存を破棄する

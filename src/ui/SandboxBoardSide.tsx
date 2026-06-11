@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
 import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
-import type { PlayerState, CardInstance, BoardCard } from '../game/types';
+import type { PlayerState, CardInstance, BoardCard, VirtualZoneCard } from '../game/types';
 
 export const createSandboxBoardSide = (
   p: PlayerState, 
@@ -32,7 +32,7 @@ export const createSandboxBoardSide = (
     }
   };
 
-  const getCardOpts = (_c: Partial<CardInstance>) => ({ 
+  const getCardOpts = (_c: VirtualZoneCard) => ({ 
     onClick: () => {}, 
     isOpponent: false 
   });
@@ -41,7 +41,7 @@ export const createSandboxBoardSide = (
     container.eventMode = 'static';
     container.cursor = 'grab';
     
-    let pressTimer: any = null;
+    let pressTimer: ReturnType<typeof setTimeout> | null = null;
     let startPos = { x: 0, y: 0 };
 
     const startPress = (e: PIXI.FederatedPointerEvent) => {
@@ -108,7 +108,7 @@ export const createSandboxBoardSide = (
   // リーダー
   let leaderCard = p.leader;
   if (Array.isArray(leaderCard)) {
-    leaderCard = (leaderCard as any)[0];
+    leaderCard = (leaderCard as unknown as (typeof leaderCard)[])[0];
   }
 
   if (leaderCard) {
@@ -130,7 +130,7 @@ export const createSandboxBoardSide = (
 
   // ライフ
   const lifeList = z.life || [];
-  const lifeCard = { uuid: `life-${p.player_id}`, name: 'Life' } as any;
+  const lifeCard = { uuid: `life-${p.player_id}`, name: 'Life' } as VirtualZoneCard;
   const life = createCardContainer(lifeCard, coords.CW, coords.CH, { 
       ...getCardOpts(lifeCard), 
       count: lifeList.length
@@ -142,7 +142,7 @@ export const createSandboxBoardSide = (
 
   // デッキ
   const deckList = z.deck || [];
-  const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as any;
+  const deckCard = { uuid: `deck-${p.player_id}`, name: 'Deck' } as VirtualZoneCard;
   const deck = createCardContainer(deckCard, coords.CW, coords.CH, {
       ...getCardOpts(deckCard)
   });
@@ -154,9 +154,9 @@ export const createSandboxBoardSide = (
   // トラッシュ (70%サイズ)
   const topTrash = z.trash && z.trash.length > 0 ? z.trash[z.trash.length - 1] : null;
   const trash = createCardContainer(
-    { uuid: `trash-${p.player_id}`, name: 'Trash', card_id: topTrash?.card_id } as any, 
+    { uuid: `trash-${p.player_id}`, name: 'Trash', card_id: topTrash?.card_id } as VirtualZoneCard, 
     smallCW, smallCH, 
-    { ...getCardOpts({} as any), count: z.trash?.length || 0 }
+    { ...getCardOpts({} as VirtualZoneCard), count: z.trash?.length || 0 }
   );
   trash.x = getX(coords.getTrashX(W)); trash.y = r3Y;
   if (topTrash) setupInteractive(trash, topTrash);
@@ -164,11 +164,11 @@ export const createSandboxBoardSide = (
 
   // ドン!!デッキ (70%サイズ)
   const donDeckList = z.don_deck || []; 
-  const donDeckCount = (p as any).don_deck_count ?? donDeckList.length;
+  const donDeckCount = p.don_deck_count ?? donDeckList.length;
   const donDeck = createCardContainer(
-    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as any, 
+    { uuid: `dondeck-${p.player_id}`, name: 'Don!! Deck' } as VirtualZoneCard, 
     smallCW, smallCH, 
-    { ...getCardOpts({} as any), count: donDeckCount }
+    { ...getCardOpts({} as VirtualZoneCard), count: donDeckCount }
   );
   donDeck.x = getX(coords.getDonDeckX(W)); donDeck.y = r3Y;
   const topDon = donDeckList.length > 0 ? donDeckList[0] : null;
@@ -176,11 +176,11 @@ export const createSandboxBoardSide = (
   side.addChild(donDeck);
 
   // アクティブドン (70%サイズ)
-  const donActiveList = (p as any).don_active || [];
+  const donActiveList = p.don_active || [];
   const donActive = createCardContainer(
-    { uuid: `donactive-${p.player_id}`, name: 'Don!! Active', card_id: 'DON' } as any, 
+    { uuid: `donactive-${p.player_id}`, name: 'Don!! Active', card_id: 'DON' } as VirtualZoneCard, 
     smallCW, smallCH, 
-    { ...getCardOpts({} as any), count: donActiveList.length }
+    { ...getCardOpts({} as VirtualZoneCard), count: donActiveList.length }
   );
   donActive.x = getX(coords.getDonActiveX(W)); donActive.y = r3Y;
   const topActiveDon = donActiveList.length > 0 ? donActiveList[donActiveList.length - 1] : null;
@@ -188,11 +188,11 @@ export const createSandboxBoardSide = (
   side.addChild(donActive);
 
   // レストドン (70%サイズ)
-  const donRestList = (p as any).don_rested || [];
+  const donRestList = p.don_rested || [];
   const donRest = createCardContainer(
-    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true, card_id: 'DON' } as any, 
+    { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true, card_id: 'DON' } as VirtualZoneCard, 
     smallCW, smallCH, 
-    { ...getCardOpts({} as any), count: donRestList.length }
+    { ...getCardOpts({} as VirtualZoneCard), count: donRestList.length }
   );
   donRest.x = getX(coords.getDonRestX(W)); donRest.y = r3Y;
   const topRestDon = donRestList.length > 0 ? donRestList[donRestList.length - 1] : null;

@@ -5,6 +5,9 @@ import type { GameActionRequest, ActionType, BattleActionRequest, PendingRequest
 import type { GameState } from './types';
 import { logger } from '../utils/logger';
 
+// API クライアントが throw するエラー（部分的に game_state/pending_request を含み得る）。
+type ApiActionError = { message?: string; game_state?: GameState; pending_request?: PendingRequest | null };
+
 export const useGameAction = (
   playerId: string,
   setGameState: (state: GameState) => void,
@@ -31,8 +34,8 @@ export const useGameAction = (
       if (pending_request) {
         setPendingRequest(pending_request);
       }
-    } catch (e: any) {
-      setErrorToast(`ゲーム開始エラー: ${e.message}`);
+    } catch (e) {
+      setErrorToast(`ゲーム開始エラー: ${(e as ApiActionError).message}`);
     } finally {
       setIsPending(false);
     }
@@ -70,12 +73,11 @@ export const useGameAction = (
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
       if (result.action_events?.length) addEventLog?.(result.action_events);
-    } catch (e: any) {
-      if (e.game_state || e.pending_request) {
-        setGameState(e.game_state);
-        setPendingRequest(e.pending_request || null);
-      }
-      setErrorToast(`アクション失敗: ${e.message}`);
+    } catch (e) {
+      const err = e as ApiActionError;
+      if (err.game_state) setGameState(err.game_state);
+      if (err.pending_request !== undefined) setPendingRequest(err.pending_request || null);
+      setErrorToast(`アクション失敗: ${err.message}`);
     } finally {
       setIsPending(false);
     }
@@ -109,14 +111,15 @@ export const useGameAction = (
       setGameState(result.game_state);
       setPendingRequest(result.pending_request || null);
       if (result.action_events?.length) addEventLog?.(result.action_events);
-    } catch (e: any) {
-      if (e.game_state) {
-        setGameState(e.game_state);
+    } catch (e) {
+      const err = e as ApiActionError;
+      if (err.game_state) {
+        setGameState(err.game_state);
       }
-      if (e.pending_request !== undefined) {
-        setPendingRequest(e.pending_request || null);
+      if (err.pending_request !== undefined) {
+        setPendingRequest(err.pending_request || null);
       }
-      setErrorToast(`バトルアクション失敗: ${e.message}`);
+      setErrorToast(`バトルアクション失敗: ${err.message}`);
     } finally {
       setIsPending(false);
     }

@@ -10,13 +10,13 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { apiClient } from '../api/client';
-import type { GameState, CardInstance } from '../game/types';
+import type { GameState, CardInstance, PlayerState, DeckInput } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
 import { logger } from '../utils/logger';
 import { handleLocalAction } from '../game/localActionHandler';
 import { getCardImageUrl } from '../utils/imageAssets';
 
-const MOCK_DECKS: Record<string, any> = {
+const MOCK_DECKS: Record<string, DeckInput> = {
   'imu.json': {
     leader: { name: "イム", card_id: "ST01-001", power: 5000, type: "LEADER", life: 5 },
     cards: Array.from({ length: 50 }, (_, i) => ({
@@ -192,7 +192,7 @@ export const SandboxGame = ({
   const inspectScrollXRef = useRef(20);
   const { COLORS } = LAYOUT_CONSTANTS;
 
-  const longPressTimerRef = useRef<any>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressStartPosRef = useRef<{x: number, y: number} | null>(null);
   
   const pendingDragRef = useRef<{ card: CardInstance, x: number, y: number } | null>(null);
@@ -241,7 +241,7 @@ export const SandboxGame = ({
 
   const mulliganStatus = useMemo(() => {
     if (!gameState) return { p1: false, p2: false };
-    return (gameState as any).mulligan_finished || { p1: false, p2: false };
+    return gameState.mulligan_finished || { p1: false, p2: false };
   }, [gameState]);
 
   const isMulliganPhase = useMemo(() => {
@@ -297,7 +297,7 @@ export const SandboxGame = ({
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
         if (data.success) {
-          data.decks.forEach((d: any) => {
+          data.decks.forEach((d: { id: string; name: string; leader_id?: string }) => {
             const id = d.id.endsWith('.json') ? d.id : `db:${d.id}`;
             options.push({ id, name: d.name, leaderId: d.leader_id });
           });
@@ -339,12 +339,12 @@ export const SandboxGame = ({
             name: initialP1DeckId || '',
             player_id: 'p1',
             zones: { hand: [], field: [], life: [], trash: [] }
-          } as any,
+          } as unknown as PlayerState,
           p2: {
             name: initialP2DeckId || '',
             player_id: 'p2',
             zones: { hand: [], field: [], life: [], trash: [] }
-          } as any
+          } as unknown as PlayerState
         },
         turn_info: { turn_count: 0, active_player_id: 'p1', current_phase: 'SETUP', winner: null }
       });
@@ -412,6 +412,7 @@ export const SandboxGame = ({
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- WebSocket接続/初期化はマウント時に1回のみ。onBack/onForceBack等は最新を本体で参照
   }, [isLocalMode, initialP1DeckId, initialP2DeckId]); 
 
   const hasAutoStartedRef = useRef(false);
@@ -429,6 +430,7 @@ export const SandboxGame = ({
         handleAction('START', {});
       }, 100);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 自動開始は gameState 等の変化時のみ。handleAction は最新を本体で参照
   }, [gameState, isLocalMode, initialP1DeckId, initialP2DeckId]);
 
   // 進行中ゲームの永続化: ローカルモードでPLAYING中はgameStateをsessionStorageへ保存し、
@@ -483,6 +485,7 @@ export const SandboxGame = ({
         } catch(e) { console.warn(e); }
         appRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は status 変化時のみ再実行する意図（COLORS は定数）
   }, [gameState?.status]);
 
   useEffect(() => {
@@ -530,7 +533,7 @@ export const SandboxGame = ({
         const overlay = createInspectOverlay(
           inspecting.type, inspectingCards, revealedCardIds, W, H, inspectScrollXRef.current, 
           () => setInspecting(null), 
-          (card, startPos) => onCardDown({ global: startPos } as any, card),
+          (card, startPos) => onCardDown({ global: startPos } as unknown as PIXI.FederatedPointerEvent, card),
           (uuid) => { 
               if (longPressTriggeredRef.current) return;
               const newSet = new Set(revealedCardIds); 
@@ -557,6 +560,7 @@ export const SandboxGame = ({
     }
 
     if (dragState) app.stage.addChild(dragState.sprite);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した状態の変化時のみ。handleAction/COLORS は最新/定数を本体で参照
   }, [gameState, isPending, dragState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan, startDrag]);
 
   useEffect(() => {
@@ -745,12 +749,12 @@ export const SandboxGame = ({
 
             const destP = destPid === 'p1' ? gameState?.players.p1 : gameState?.players.p2;
             
-            const findInStack = (p: any) => { if (p.zones.deck?.some((c: any) => c.uuid === card.uuid)) return { type: 'deck' }; if (p.zones.life?.some((c: any) => c.uuid === card.uuid)) return { type: 'life' }; if (p.zones.trash?.some((c: any) => c.uuid === card.uuid)) return { type: 'trash' }; return null; };
+            const findInStack = (p: PlayerState) => { if (p.zones.deck?.some((c: CardInstance) => c.uuid === card.uuid)) return { type: 'deck' as const }; if (p.zones.life?.some((c: CardInstance) => c.uuid === card.uuid)) return { type: 'life' as const }; if (p.zones.trash?.some((c: CardInstance) => c.uuid === card.uuid)) return { type: 'trash' as const }; return null; };
             if (destP) { 
                 const stackInfo = findInStack(destP); 
                 if (stackInfo) { 
                     inspectScrollXRef.current = 20; 
-                    setInspecting({ type: stackInfo.type as any, pid: destPid }); 
+                    setInspecting({ type: stackInfo.type, pid: destPid }); 
                     setRevealedCardIds(new Set()); 
                     return; 
                 } 
@@ -763,6 +767,7 @@ export const SandboxGame = ({
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ドラッグ系ハンドラ登録は列挙状態の変化時のみ。handleAction は最新を本体で参照
   }, [dragState, gameState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan, startDrag]);
 
   const handleReplacement = async (trashCardUuids: string[]) => {
@@ -802,13 +807,13 @@ export const SandboxGame = ({
     }
   };
 
-  const handleAction = async (type: string, params: any) => {
+  const handleAction = async (type: string, params: Record<string, unknown>) => {
       if (isPending || !gameState) return;
       if (!isLocalMode && !activeGameId) return;
       setIsPending(true);
       try { 
           const localParams = { ...params };
-          const pid = myPlayerId === 'both' ? (params.player_id || 'p1') : myPlayerId;
+          const pid = myPlayerId === 'both' ? ((params.player_id as string) || 'p1') : myPlayerId;
 
           const getDeckData = async (deckId: string) => {
               if (!deckId) return { leader: [], cards: [] };
@@ -826,7 +831,7 @@ export const SandboxGame = ({
               return finalData;
           };
 
-          const normalizeDeckData = (data: any) => {
+          const normalizeDeckData = (data: DeckInput & { deck?: DeckInput }) => {
             if (!data) return { leader: null, cards: [] };
             let leader = data.leader;
             if (Array.isArray(leader)) {
@@ -847,7 +852,7 @@ export const SandboxGame = ({
           };
 
           if (isLocalMode && type === 'SET_DECK') {
-              const rawData = await getDeckData(params.deck_id);
+              const rawData = await getDeckData(params.deck_id as string);
               localParams.deckData = normalizeDeckData(rawData);
           }
 
@@ -859,7 +864,7 @@ export const SandboxGame = ({
               localParams.p2Deck = normalizeDeckData(d2);
           }
 
-          const newState = handleLocalAction(gameState, type, { ...localParams, player_id: pid });
+          const newState = handleLocalAction(gameState, type, { ...localParams, player_id: pid } as Parameters<typeof handleLocalAction>[2]);
           setGameState(newState);
 
           if (!isLocalMode) {

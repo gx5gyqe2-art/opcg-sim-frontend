@@ -47,7 +47,7 @@ const getLocalDecks = (): DeckData[] => {
     return ids.map((id: string) => {
       const data = localStorage.getItem(`opcg_deck_${id}`);
       return data ? JSON.parse(data) : null;
-    }).filter((d: any) => d !== null);
+    }).filter((d: DeckData | null) => d !== null);
   } catch { return []; }
 };
 
@@ -201,23 +201,62 @@ const CardDetailScreen = ({ card, currentCount, onCountChange, onClose, onNaviga
   );
 };
 
+// フィルタ用の小コンポーネント群（再レンダリング毎の再生成による state 喪失を避けるため
+// モジュールスコープに定義する / react-hooks/static-components）。
+const SectionTitle = ({ children, onSelectAll }: { children: string, onSelectAll?: () => void }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', marginBottom: '8px' }}>
+    <div style={{ color: '#aaa', fontSize: '12px', fontWeight: 'bold' }}>{children}</div>
+    {onSelectAll && (
+      <button
+        onClick={onSelectAll}
+        style={{ background: '#444', border: 'none', color: '#fff', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}
+      >
+        全て選択
+      </button>
+    )}
+  </div>
+);
+
+const FilterBtn = ({ label, active, onClick, color }: { label: string, active: boolean, onClick: () => void, color?: string }) => (
+  <button
+    onClick={onClick}
+    style={{
+      padding: '8px 12px',
+      borderRadius: '20px',
+      border: active ? `2px solid ${color || '#3498db'}` : '1px solid #555',
+      background: active ? (color || '#3498db') : '#333',
+      color: 'white',
+      fontSize: '12px',
+      fontWeight: active ? 'bold' : 'normal',
+      cursor: 'pointer',
+      minWidth: '40px'
+    }}
+  >
+    {label}
+  </button>
+);
+
+const ColorBtn = ({ label, colorCode, isActive, anySelected, onToggle }: { label: string, colorCode: string, isActive: boolean, anySelected: boolean, onToggle: () => void }) => (
+  <div
+    title={label}
+    onClick={onToggle}
+    style={{
+      width: '40px', height: '40px', borderRadius: '50%',
+      background: colorCode,
+      border: isActive ? '3px solid white' : '2px solid transparent',
+      boxShadow: isActive ? '0 0 10px white' : 'none',
+      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: 'black', fontWeight: 'bold', fontSize: '10px',
+      opacity: (!anySelected || isActive) ? 1 : 0.4
+    }}
+  >
+    {isActive && "✓"}
+  </div>
+);
+
 const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconList, onClose, showOwnership }: { initialFilters: FilterState, onApply: (f: FilterState) => void, traitList: string[], setList: string[], blockIconList: string[], onClose: () => void, showOwnership?: boolean }) => {
   const [localFilters, setLocalFilters] = useState<FilterState>(initialFilters);
   const [traitSearch, setTraitSearch] = useState('');
-
-  const SectionTitle = ({ children, onSelectAll }: { children: string, onSelectAll?: () => void }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', marginBottom: '8px' }}>
-      <div style={{ color: '#aaa', fontSize: '12px', fontWeight: 'bold' }}>{children}</div>
-      {onSelectAll && (
-        <button 
-          onClick={onSelectAll}
-          style={{ background: '#444', border: 'none', color: '#fff', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          全て選択
-        </button>
-      )}
-    </div>
-  );
 
   const toggle = (key: keyof FilterState, value: string) => {
     const current = localFilters[key];
@@ -231,46 +270,6 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconLis
     setLocalFilters({
       color: [], type: [], attribute: [], traits: [], counter: [], cost: [], power: [], trigger: [], sets: [], block_icon: [], sort: 'COST', ownership: 'ALL'
     });
-  };
-
-  const FilterBtn = ({ label, active, onClick, color }: { label: string, active: boolean, onClick: () => void, color?: string }) => (
-    <button 
-      onClick={onClick}
-      style={{
-        padding: '8px 12px',
-        borderRadius: '20px',
-        border: active ? `2px solid ${color || '#3498db'}` : '1px solid #555',
-        background: active ? (color || '#3498db') : '#333',
-        color: 'white',
-        fontSize: '12px',
-        fontWeight: active ? 'bold' : 'normal',
-        cursor: 'pointer',
-        minWidth: '40px'
-      }}
-    >
-      {label}
-    </button>
-  );
-
-  const ColorBtn = ({ colorKey, label, colorCode }: { colorKey: string, label: string, colorCode: string }) => {
-    const isActive = localFilters.color.includes(colorKey);
-    return (
-      <div 
-        title={label}
-        onClick={() => toggle('color', colorKey)}
-        style={{
-          width: '40px', height: '40px', borderRadius: '50%',
-          background: colorCode,
-          border: isActive ? '3px solid white' : '2px solid transparent',
-          boxShadow: isActive ? '0 0 10px white' : 'none',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'black', fontWeight: 'bold', fontSize: '10px',
-          opacity: (localFilters.color.length === 0 || isActive) ? 1 : 0.4
-        }}
-      >
-        {isActive && "✓"}
-      </div>
-    );
   };
 
   const filteredTraits = useMemo(() => {
@@ -316,12 +315,16 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconLis
 
           <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, color: ['Red', 'Green', 'Blue', 'Purple', 'Black', 'Yellow']})}>色 (COLOR)</SectionTitle>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <ColorBtn colorKey="Red" label="赤" colorCode="#e74c3c" />
-            <ColorBtn colorKey="Green" label="緑" colorCode="#27ae60" />
-            <ColorBtn colorKey="Blue" label="青" colorCode="#3498db" />
-            <ColorBtn colorKey="Purple" label="紫" colorCode="#9b59b6" />
-            <ColorBtn colorKey="Black" label="黒" colorCode="#34495e" />
-            <ColorBtn colorKey="Yellow" label="黄" colorCode="#f1c40f" />
+            {([['Red', '赤', '#e74c3c'], ['Green', '緑', '#27ae60'], ['Blue', '青', '#3498db'], ['Purple', '紫', '#9b59b6'], ['Black', '黒', '#34495e'], ['Yellow', '黄', '#f1c40f']] as const).map(([colorKey, label, colorCode]) => (
+              <ColorBtn
+                key={colorKey}
+                label={label}
+                colorCode={colorCode}
+                isActive={localFilters.color.includes(colorKey)}
+                anySelected={localFilters.color.length > 0}
+                onToggle={() => toggle('color', colorKey)}
+              />
+            ))}
           </div>
 
           <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, cost: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']})}>コスト (COST)</SectionTitle>
@@ -411,6 +414,23 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconLis
   );
 };
 
+const StatSection = ({ title, data }: { title: string, data: [string, number][] }) => (
+  <div style={{ marginBottom: '20px' }}>
+    <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '3px solid #e74c3c', paddingLeft: '8px', marginBottom: '10px' }}>{title}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      {data.map(([key, count]) => (
+        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '60px', fontSize: '12px' }}>{key}</div>
+          <div style={{ flex: 1, height: '12px', background: '#444', borderRadius: '6px', overflow: 'hidden' }}>
+            <div style={{ width: `${(count / 50) * 100}%`, height: '100%', background: '#3498db' }} />
+          </div>
+          <div style={{ width: '30px', fontSize: '12px', textAlign: 'right' }}>{count}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, allCards: CardData[], onClose: () => void }) => {
   const stats = useMemo(() => {
     const cards = deck.card_uuids.map(uuid => allCards.find(c => c.uuid === uuid)).filter(Boolean) as CardData[];
@@ -432,23 +452,6 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
       traits: Object.entries(traits).sort((a, b) => b[1] - a[1]).slice(0, 10)
     };
   }, [deck.card_uuids, allCards]);
-
-  const StatSection = ({ title, data }: { title: string, data: [string, number][] }) => (
-    <div style={{ marginBottom: '20px' }}>
-      <div style={{ fontSize: '14px', fontWeight: 'bold', borderLeft: '3px solid #e74c3c', paddingLeft: '8px', marginBottom: '10px' }}>{title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-        {data.map(([key, count]) => (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '60px', fontSize: '12px' }}>{key}</div>
-            <div style={{ flex: 1, height: '12px', background: '#444', borderRadius: '6px', overflow: 'hidden' }}>
-              <div style={{ width: `${(count / 50) * 100}%`, height: '100%', background: '#3498db' }} />
-            </div>
-            <div style={{ width: '30px', fontSize: '12px', textAlign: 'right' }}>{count}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -740,6 +743,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly, ownedCards]);
 
   useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- フィルタ/検索変更時に表示件数をリセットする意図的な同期
     setDisplayLimit(100); 
   }, [filters, mode, searchText]);
 
