@@ -19,6 +19,31 @@ export interface BaseCard {
   trigger_text?: string;
   ability_disabled?: boolean;
   is_frozen?: boolean;
+  // ▼ ドン!!カードが付与されている対象キャラの uuid（未付与/解除時は null/undefined）
+  attached_to?: string | null;
+}
+
+// デッキ JSON / localStorage 由来の生カードデータ（スキーマ揺れを許容する permissive 型）。
+// card_id / uuid / id / number のいずれかで識別され得るため全て optional。
+export interface DeckCardData {
+  card_id?: string;
+  uuid?: string;
+  id?: string;
+  number?: string;
+  name?: string;
+  type?: string;
+  power?: number;
+  cost?: number;
+  counter?: number;
+  life?: number;
+  [key: string]: unknown;
+}
+
+// createInitialGameState 等が受け取るデッキ入力（leader は単体/配列の両形式を許容）。
+export interface DeckInput {
+  leader?: DeckCardData | DeckCardData[] | null;
+  cards?: DeckCardData[];
+  [key: string]: unknown;
 }
 
 export interface LeaderCard extends BaseCard {
@@ -99,6 +124,8 @@ export interface GameState {
     winner: string | null;
   };
   ready_states?: { p1: boolean; p2: boolean };
+  // マリガン完了フラグ（ローカル対戦用）
+  mulligan_finished?: { p1: boolean; p2: boolean };
   // RealGame.tsx 用
   active_battle?: {
     attacker_uuid: string;
