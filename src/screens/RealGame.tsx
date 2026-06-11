@@ -94,7 +94,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
         const data = await res.json();
         if (data.success) {
-          data.decks.forEach((d: any) => {
+          data.decks.forEach((d: { id: string; name: string; leader_id?: string }) => {
             const id = d.id.endsWith('.json') ? d.id : `db:${d.id}`;
             options.push({ id, name: d.name, leaderId: d.leader_id });
           });
@@ -123,7 +123,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     const battleActionTypes = Object.values(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES);
     
     if (battleActionTypes.includes(pendingRequest.action)) {
-      await sendBattleAction(pendingRequest.action as any, selectedUuids[0], pendingRequest.request_id);
+      await sendBattleAction(pendingRequest.action, selectedUuids[0], pendingRequest.request_id);
     } else {
       await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
         extra: { selected_uuids: selectedUuids }
@@ -155,7 +155,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     });
   };
 
-  const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: any } = {}) => {
+  const handleAction = async (type: string, payload: { uuid?: string; target_ids?: string[]; extra?: Record<string, unknown> } = {}) => {
     if (!gameState?.game_id || isPending) return;
 
     if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK) {
@@ -180,7 +180,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     }
     
     if (type === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ATTACK_CONFIRM) {
-      await sendAction(type as any, {
+      await sendAction(type, {
         card_id: payload.uuid,
         target_ids: payload.target_ids,
       }); 
@@ -189,7 +189,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       return;
     }
 
-    await sendAction(type as any, {
+    await sendAction(type, {
       card_id: payload.uuid,
       target_ids: payload.target_ids,
       extra: payload.extra
@@ -207,12 +207,12 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
   const handleMulligan = async () => {
     if (!gameState?.game_id || isPending) return;
-    await sendAction('MULLIGAN' as any, {});
+    await sendAction('MULLIGAN', {});
   };
 
   const handleKeepHand = async () => {
     if (!gameState?.game_id || isPending) return;
-    await sendAction('KEEP_HAND' as any, {});
+    await sendAction('KEEP_HAND', {});
   };
 
   const handleTurnEnd = () => {
@@ -226,8 +226,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     ...(gameState.players.p2.zones.hand.map(c => c.uuid)),
     ...(gameState.players.p1.leader ? [gameState.players.p1.leader.uuid] : []),
     ...(gameState.players.p2.leader ? [gameState.players.p2.leader.uuid] : []),
-    ...(gameState.players.p1.stage ? [(gameState.players.p1.stage as any).uuid] : []),
-    ...(gameState.players.p2.stage ? [(gameState.players.p2.stage as any).uuid] : []),
+    ...(gameState.players.p1.stage ? [gameState.players.p1.stage.uuid] : []),
+    ...(gameState.players.p2.stage ? [gameState.players.p2.stage.uuid] : []),
   ]) : new Set<string>();
 
   const isBoardSelectMode =
@@ -269,7 +269,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       const isValidTarget =
         opp.leader?.uuid === card.uuid ||
         opp.zones.field.some(c => c.uuid === card.uuid) ||
-        (opp.stage as any)?.uuid === card.uuid;
+        opp.stage?.uuid === card.uuid;
       if (!isValidTarget) {
         return; // 無効な対象クリックは無視（ターゲティングは継続）
       }
@@ -573,7 +573,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   );
 
   const activeDonCount = gameState && activePlayerId 
-    ? (gameState.players[activePlayerId] as any).don_active.length 
+    ? gameState.players[activePlayerId].don_active.length 
     : 0;
 
   return (
@@ -639,7 +639,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
             手札を確認してください。マリガンを選ぶと<br />手札5枚を全てデッキに戻し、引き直します。
           </p>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '500px' }}>
-            {(pendingRequest.candidates || []).map((card: any) => (
+            {(pendingRequest.candidates || []).map((card: CardInstance) => (
               <div
                 key={card.uuid}
                 style={{
@@ -847,9 +847,9 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
             </div>
           )}
 
-          {(pendingRequest as any).options && (
+          {pendingRequest.options && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
-              {(pendingRequest as any).options.map((label: string, idx: number) => (
+              {(pendingRequest.options as unknown as string[]).map((label: string, idx: number) => (
                 <button
                   key={idx}
                   onClick={() => handleOptionSelect(idx)}
