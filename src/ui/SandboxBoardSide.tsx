@@ -79,7 +79,7 @@ export const createSandboxBoardSide = (
   };
 
   let stageCard = p.stage;
-  let fieldCards = [...(z.field || [])]; 
+  const fieldCards = [...(z.field || [])]; 
 
   if (!stageCard) {
     const sIdx = fieldCards.findIndex(c => {

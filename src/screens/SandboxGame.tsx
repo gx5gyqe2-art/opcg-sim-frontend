@@ -670,7 +670,7 @@ export const SandboxGame = ({
             }
 
             const { width: W, height: H } = app.screen; const coords = calculateCoordinates(W, H); const midY = H / 2;
-            const isTopArea = endPos.y < midY; let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
+            const isTopArea = endPos.y < midY; const destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
 
             if (myPlayerId !== 'both' && destPid !== myPlayerId) { clearDropHighlight(); setDragState(null); return; }
 
@@ -739,7 +739,7 @@ export const SandboxGame = ({
 
             const { height: H } = app.screen; const midY = H / 2;
             const isTopArea = e.clientY < midY; 
-            let destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
+            const destPid = isTopArea ? (isRotated ? 'p1' : 'p2') : (isRotated ? 'p2' : 'p1');
             
             if (myPlayerId !== 'both' && destPid !== myPlayerId) return;
 
@@ -807,7 +807,7 @@ export const SandboxGame = ({
       if (!isLocalMode && !activeGameId) return;
       setIsPending(true);
       try { 
-          let localParams = { ...params };
+          const localParams = { ...params };
           const pid = myPlayerId === 'both' ? (params.player_id || 'p1') : myPlayerId;
 
           const getDeckData = async (deckId: string) => {
@@ -816,7 +816,7 @@ export const SandboxGame = ({
               let cacheKey = `opcg_deck_${deckId}`;
               if (deckId.startsWith('db:')) cacheKey = `opcg_deck_${deckId.substring(3)}`;
               const cached = localStorage.getItem(cacheKey);
-              if (cached) { try { return JSON.parse(cached); } catch(e) {} }
+              if (cached) { try { return JSON.parse(cached); } catch { /* キャッシュ不正は無視 */ } }
               if (!deckId.startsWith('db:') && !['imu.json', 'nami.json'].includes(deckId)) return { leader: [], cards: [] };
               const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/get?id=${deckId}`);
               if (!res.ok) throw new Error();

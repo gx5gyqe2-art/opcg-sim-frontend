@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
 // ▼ 変更: imageAssetsから関数をインポート
@@ -17,30 +17,58 @@ interface CardSelectModalProps {
 export const CardSelectModal: React.FC<CardSelectModalProps> = ({
   candidates, message, minSelect, maxSelect, onConfirm, onCancel, selectableUuids
 }) => {
-  const [selected, setSelected] = useState<string[]>([]);
   const { COLORS } = LAYOUT_CONSTANTS;
   const { SHAPE, SHADOWS } = LAYOUT_PARAMS;
 
   const selectableSet = selectableUuids ? new Set(selectableUuids) : null;
   const isSelectable = (uuid: string) => !selectableSet || selectableSet.has(uuid);
+  const selectableCards = candidates.filter(c => isSelectable(c.uuid));
+
+  // 並び替えモード: maxSelect < 0（REMAINING＝「残りを好きな順番で置く」）。全カードを
+  // 配置順に並べて確定する。従来は max=-1 で1枚も選べず確定もできない致命的バグだった。
+  const isOrderMode = maxSelect < 0;
+  const effMax = isOrderMode ? selectableCards.length : maxSelect;
+
+  const [selected, setSelected] = useState<string[]>([]);
+
+  // 並び替えモードでは全選択可能カードを初期順序で確定対象にする。
+  useEffect(() => {
+    if (isOrderMode) {
+      setSelected(selectableCards.map(c => c.uuid));
+    }
+  }, [isOrderMode, candidates]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggle = (uuid: string) => {
-    if (!isSelectable(uuid)) return;
+    if (!isSelectable(uuid) || isOrderMode) return;  // 並び替えモードはトグル不可（全配置）
     setSelected(prev => {
       if (prev.includes(uuid)) {
         return prev.filter(id => id !== uuid);
       }
-      if (maxSelect === 1) {
+      if (effMax === 1) {
         return [uuid];
       }
-      if (prev.length >= maxSelect) {
+      if (prev.length >= effMax) {
         return prev;
       }
       return [...prev, uuid];
     });
   };
 
-  const isValid = selected.length >= minSelect && selected.length <= maxSelect;
+  // 並び替え: 配置順を入れ替える（↑↓）。
+  const moveOrder = (uuid: string, dir: -1 | 1) => {
+    setSelected(prev => {
+      const i = prev.indexOf(uuid);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+
+  const isValid = isOrderMode
+    ? selected.length === selectableCards.length
+    : selected.length >= minSelect && selected.length <= effMax;
 
   const overlayStyle: React.CSSProperties = {
     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -75,15 +103,22 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
         <div style={{ marginBottom: '16px', textAlign: 'center' }}>
           <h3 style={{ margin: '0 0 8px 0' }}>{message}</h3>
           <div style={{ fontSize: '0.9rem', color: '#666' }}>
-            選択中: {selected.length} / {maxSelect}枚 (最小 {minSelect}枚)
+            {isOrderMode
+              ? `配置順を ↑↓ で並び替えてください（${selected.length}枚を上から順に配置）`
+              : `選択中: ${selected.length} / ${effMax}枚 (最小 ${minSelect}枚)`}
           </div>
         </div>
 
         <div style={gridStyle}>
-          {candidates.map(card => {
+          {/* 並び替えモードは selected（配置順）で描画し、それ以外は候補順で描画する */}
+          {(isOrderMode
+              ? selected.map(uid => candidates.find(c => c.uuid === uid)!).filter(Boolean)
+              : candidates
+          ).map((card, idx) => {
             const isSelected = selected.includes(card.uuid);
             const canSelect = isSelectable(card.uuid);
             const imageUrl = getCardImageUrl(card.card_id);
+            const orderPos = isOrderMode ? selected.indexOf(card.uuid) : -1;
 
             return (
               <div
@@ -121,12 +156,41 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                   }}>✓</div>
                 )}
 
-                {!canSelect && (
+                {!canSelect && !isOrderMode && (
                   <div style={{
                     position: 'absolute', bottom: '4px', left: 0, right: 0,
                     textAlign: 'center', fontSize: '0.6rem', color: '#ccc',
                     background: 'rgba(0,0,0,0.5)', padding: '1px 0',
                   }}>選択不可</div>
+                )}
+
+                {isOrderMode && (
+                  <>
+                    <div style={{
+                      position: 'absolute', top: '4px', left: '4px',
+                      backgroundColor: COLORS.BTN_PRIMARY, color: 'white',
+                      borderRadius: '50%', width: '22px', height: '22px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '12px', fontWeight: 'bold', zIndex: 10, border: '2px solid white'
+                    }}>{orderPos + 1}</div>
+                    <div style={{
+                      position: 'absolute', bottom: '2px', left: 0, right: 0,
+                      display: 'flex', justifyContent: 'center', gap: '4px', zIndex: 10,
+                    }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveOrder(card.uuid, -1); }}
+                        disabled={idx === 0}
+                        style={{ fontSize: '11px', padding: '0 6px', cursor: idx === 0 ? 'default' : 'pointer',
+                                 opacity: idx === 0 ? 0.4 : 1, border: 'none', borderRadius: '3px' }}
+                      >↑</button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); moveOrder(card.uuid, 1); }}
+                        disabled={idx === selected.length - 1}
+                        style={{ fontSize: '11px', padding: '0 6px', cursor: idx === selected.length - 1 ? 'default' : 'pointer',
+                                 opacity: idx === selected.length - 1 ? 0.4 : 1, border: 'none', borderRadius: '3px' }}
+                      >↓</button>
+                    </div>
+                  </>
                 )}
               </div>
             );
