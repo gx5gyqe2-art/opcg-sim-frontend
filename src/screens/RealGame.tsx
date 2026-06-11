@@ -8,6 +8,7 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardSelectModal } from '../ui/CardSelectModal';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
+import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { API_CONFIG } from '../api/api.config';
 import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
@@ -19,6 +20,31 @@ const MOCK_DECKS: DeckOption[] = [
   { id: 'imu.json',  name: 'イム',  leaderId: 'ST01-001' },
   { id: 'nami.json', name: 'ナミ', leaderId: 'OP03-040' },
 ];
+
+// 効果トースト（一時的な視覚フィードバック）対象アクションと表示ラベル。
+// 盤面が動く主要効果のみを対象にし、no-op 系（RULE_PROCESSING 等）は出さない。
+const TOAST_ACTION_LABELS: Record<string, string> = {
+  KO: 'KO',
+  DRAW: 'ドロー',
+  DISCARD: '手札を捨てる',
+  TRASH: 'トラッシュ',
+  BOUNCE: '手札に戻す',
+  MOVE_TO_HAND: '手札に加える',
+  DECK_BOTTOM: 'デッキの下へ',
+  HEAL: 'ライフ回復',
+  PLAY_CARD: '登場',
+  REST: 'レスト',
+};
+// 除去・喪失系は強調表示（赤）にする。
+const TOAST_EMPHASIS_ACTIONS = new Set(['KO', 'TRASH', 'DISCARD', 'BOUNCE', 'MOVE_TO_HAND', 'DECK_BOTTOM']);
+const TOAST_DURATION_MS = 1800;
+
+function effectToastText(ev: ActionEvent): string {
+  const label = TOAST_ACTION_LABELS[ev.action ?? ''] ?? ev.action ?? '';
+  const card = ev.card_name ? `${ev.card_name}: ` : '';
+  const tgt = ev.targets?.length ? ` → ${ev.targets.join(' / ')}` : '';
+  return `${card}${label}${tgt}`;
+}
 
 const PENDING_ACTION_LABELS: Record<string, string> = {
   SELECT_BLOCKER: 'ブロッカー選択',
@@ -67,6 +93,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
   const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
   const [showLog, setShowLog] = useState(false);
+  const [effectToasts, setEffectToasts] = useState<EffectToastItem[]>([]);
+  const toastIdRef = useRef(0);
 
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
@@ -76,6 +104,24 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const MAX_LOG = 50;
   const addEventLog = useCallback((newEvents: ActionEvent[]) => {
     setEventLog(prev => [...newEvents, ...prev].slice(0, MAX_LOG));
+
+    // 主要効果は一時トーストで視覚フィードバックする（失敗/対象なし/no-op は除外）。
+    const fresh = newEvents.filter(
+      e => e.success !== false && e.action != null && TOAST_ACTION_LABELS[e.action] != null,
+    );
+    if (fresh.length === 0) return;
+    const items: EffectToastItem[] = fresh.slice(0, 4).map(e => ({
+      id: (toastIdRef.current += 1),
+      text: effectToastText(e),
+      emphasis: TOAST_EMPHASIS_ACTIONS.has(e.action ?? ''),
+    }));
+    setEffectToasts(prev => [...prev, ...items].slice(-6));
+    items.forEach(it => {
+      window.setTimeout(
+        () => setEffectToasts(prev => prev.filter(t => t.id !== it.id)),
+        TOAST_DURATION_MS,
+      );
+    });
   }, []);
 
   const { startGame, sendAction, sendBattleAction, isPending, errorToast, setErrorToast } = useGameAction(
@@ -629,6 +675,9 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
           onClose={() => setShowLog(false)}
         />
       )}
+
+      {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
+      <EffectToast toasts={effectToasts} />
 
       {pendingRequest?.action === 'MULLIGAN' && (
         <div style={{
