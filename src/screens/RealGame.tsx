@@ -360,6 +360,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       setIsAttackTargeting(false);
       setAttackingCardUuid(null);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- request_id 変化時のみ実行する意図（pendingRequest/isAttackTargeting は最新値を本体で参照）
   }, [pendingRequest?.request_id]);
 
   useEffect(() => {
@@ -393,6 +394,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化はマウント時(=isSetupComplete)に1回のみ。startGame等の再実行は不要
   }, [isSetupComplete]);
 
   useEffect(() => {
@@ -436,6 +438,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     };
 
     renderScene();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した盤面状態の変化時のみ再実行する意図。定数/コールバックは最新を本体で参照
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected]);
 
   useEffect(() => {

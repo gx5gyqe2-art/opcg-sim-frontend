@@ -743,6 +743,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   }, [allCards, filters, mode, searchText, currentDeck.leader_id, viewOnly, ownedCards]);
 
   useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- フィルタ/検索変更時に表示件数をリセットする意図的な同期
     setDisplayLimit(100); 
   }, [filters, mode, searchText]);
 

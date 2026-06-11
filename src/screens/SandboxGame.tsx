@@ -412,6 +412,7 @@ export const SandboxGame = ({
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- WebSocket接続/初期化はマウント時に1回のみ。onBack/onForceBack等は最新を本体で参照
   }, [isLocalMode, initialP1DeckId, initialP2DeckId]); 
 
   const hasAutoStartedRef = useRef(false);
@@ -429,6 +430,7 @@ export const SandboxGame = ({
         handleAction('START', {});
       }, 100);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 自動開始は gameState 等の変化時のみ。handleAction は最新を本体で参照
   }, [gameState, isLocalMode, initialP1DeckId, initialP2DeckId]);
 
   // 進行中ゲームの永続化: ローカルモードでPLAYING中はgameStateをsessionStorageへ保存し、
@@ -483,6 +485,7 @@ export const SandboxGame = ({
         } catch(e) { console.warn(e); }
         appRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は status 変化時のみ再実行する意図（COLORS は定数）
   }, [gameState?.status]);
 
   useEffect(() => {
@@ -557,6 +560,7 @@ export const SandboxGame = ({
     }
 
     if (dragState) app.stage.addChild(dragState.sprite);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した状態の変化時のみ。handleAction/COLORS は最新/定数を本体で参照
   }, [gameState, isPending, dragState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan, startDrag]);
 
   useEffect(() => {
@@ -763,6 +767,7 @@ export const SandboxGame = ({
     };
     window.addEventListener('pointermove', onPointerMove); window.addEventListener('pointerup', onPointerUp);
     return () => { window.removeEventListener('pointermove', onPointerMove); window.removeEventListener('pointerup', onPointerUp); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ドラッグ系ハンドラ登録は列挙状態の変化時のみ。handleAction は最新を本体で参照
   }, [dragState, gameState, inspecting, isRotated, myPlayerId, inspectingCards, revealedCardIds, isActionBlockedByMulligan, startDrag]);
 
   const handleReplacement = async (trashCardUuids: string[]) => {

@@ -34,6 +34,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
   // 並び替えモードでは全選択可能カードを初期順序で確定対象にする。
   useEffect(() => {
     if (isOrderMode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 並び替えモード移行時に確定対象を初期化する意図的な同期
       setSelected(selectableCards.map(c => c.uuid));
     }
   }, [isOrderMode, candidates]);  // eslint-disable-line react-hooks/exhaustive-deps
