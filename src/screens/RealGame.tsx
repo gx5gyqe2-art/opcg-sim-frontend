@@ -625,6 +625,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     !isBoardSelectMode && (
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.ARRANGE_DECK ||
+      // ドン!!返却(RETURN_DON)の対象選択。場のドン!!（候補）からモーダルで選ばせる。
+      pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SELECT_RESOURCE ||
       pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
     );
     
