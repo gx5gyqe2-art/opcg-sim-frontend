@@ -5,6 +5,7 @@ import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 // ▼ 変更: imageAssetsから関数をインポート
 import { getCardImageUrl } from '../utils/imageAssets';
 import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
+import { getAvailableActions, type CardActionKey } from '../game/cardActions';
 
 interface CardDetailSheetProps {
   card: CardInstance & { cards?: CardInstance[] };
@@ -79,38 +80,26 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
       );
     }
 
-    const btns: React.ReactElement[] = [];
-    if (isMyTurn && location === 'hand') {
-      btns.push(
-        <button key="play" onClick={() => handleExecute(ACTIONS.PLAY)} style={btnStyle(COLORS.BTN_SUCCESS, COLORS.TEXT_LIGHT)}>
-          登場させる
-        </button>
-      );
-    }
-    if (isMyTurn && (location === 'field' || location === 'leader')) {
-      btns.push(
-        <button key="attack" onClick={() => handleExecute(ACTIONS.ATTACK)} style={btnStyle(COLORS.BTN_DANGER, COLORS.TEXT_LIGHT)}>
-          攻撃する
-        </button>
-      );
-      
-      if (activeDonCount > 0) {
-        btns.push(
-          <button key="don" onClick={() => { setDonAmount(1); setDonMode(true); }} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>
-            ドン!!付与
-          </button>
-        );
-      }
+    // ボタンの表示可否はカード種別・ロケーションに基づき getAvailableActions に一元化。
+    // ステージカードに攻撃/ドン付与が出るバグはこのヘルパー側で防いでいる。
+    const actionStyles: Record<CardActionKey, React.CSSProperties> = {
+      play: btnStyle(COLORS.BTN_SUCCESS, COLORS.TEXT_LIGHT),
+      attack: btnStyle(COLORS.BTN_DANGER, COLORS.TEXT_LIGHT),
+      don: btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT),
+      activate: btnStyle(COLORS.BTN_PRIMARY, COLORS.TEXT_LIGHT),
+    };
+    const actionHandlers: Record<CardActionKey, () => void> = {
+      play: () => handleExecute(ACTIONS.PLAY),
+      attack: () => handleExecute(ACTIONS.ATTACK),
+      don: () => { setDonAmount(1); setDonMode(true); },
+      activate: () => handleExecute(ACTIONS.ACTIVATE_MAIN),
+    };
 
-      if ('text' in card && card.text?.includes('起動メイン')) {
-        btns.push(
-          <button key="activate" onClick={() => handleExecute(ACTIONS.ACTIVATE_MAIN)} style={btnStyle(COLORS.BTN_PRIMARY, COLORS.TEXT_LIGHT)}>
-            効果起動
-          </button>
-        );
-      }
-    }
-    return btns;
+    return getAvailableActions(card, location, isMyTurn, activeDonCount).map(a => (
+      <button key={a.key} onClick={actionHandlers[a.key]} style={actionStyles[a.key]}>
+        {a.label}
+      </button>
+    ));
   };
 
   const overlayStyle: React.CSSProperties = {
