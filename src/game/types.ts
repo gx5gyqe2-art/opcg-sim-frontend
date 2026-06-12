@@ -115,6 +115,8 @@ export interface PendingRequest {
   // ▼ ARRANGE_DECK(並び替え/上下選択, 課題2a/2b)用のUI制御フラグ
   allow_position?: boolean;
   allow_reorder?: boolean;
+  // ▼ 効果の発生源カード(任意効果/トリガー確認で盤面と紐付けて表示するため)
+  source_card_uuid?: string;
   // ▼ 追加: 必須プロパティ
   request_id: string;
 }

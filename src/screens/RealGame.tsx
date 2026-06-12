@@ -53,17 +53,22 @@ const PENDING_ACTION_LABELS: Record<string, string> = {
   CHOICE: '選択肢',
 };
 
-const resolveCardName = (uuid: string, gs: GameState): string => {
+const resolveCard = (uuid: string | undefined | null, gs: GameState): CardInstance | null => {
+  if (!uuid) return null;
   for (const pid of ['p1', 'p2'] as const) {
     const p = gs.players[pid];
-    if (p.leader?.uuid === uuid) return p.leader.name;
+    if (p.leader?.uuid === uuid) return p.leader as unknown as CardInstance;
     const z = p.zones;
     for (const zone of [z.field, z.hand, z.life, z.trash]) {
       const c = zone?.find(c => c.uuid === uuid);
-      if (c) return c.name;
+      if (c) return c;
     }
   }
-  return uuid.slice(0, 8);
+  return null;
+};
+
+const resolveCardName = (uuid: string, gs: GameState): string => {
+  return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
 
 export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
@@ -757,45 +762,65 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         </div>
       )}
 
-      {(pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
-          background: 'rgba(0,0,0,0.85)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: '18px', padding: '20px', boxSizing: 'border-box',
-        }}>
-          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '20px' }}>
-            {pendingRequest?.action === 'CONFIRM_TRIGGER' ? '【トリガー】' : '任意効果'}
-          </h2>
-          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '14px', textAlign: 'center' }}>
-            {pendingRequest.message}
-          </p>
-          <div style={{ display: 'flex', gap: '14px' }}>
-            <button
-              onClick={() => handleOptionalConfirm(true)}
-              disabled={isPending}
-              style={{
-                padding: '11px 34px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
-                background: isPending ? '#555' : '#27ae60', color: 'white', border: 'none',
-                cursor: isPending ? 'not-allowed' : 'pointer',
-              }}
-            >
-              発動する
-            </button>
-            <button
-              onClick={() => handleOptionalConfirm(false)}
-              disabled={isPending}
-              style={{
-                padding: '11px 34px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
-                background: isPending ? '#555' : '#7f8c8d', color: 'white', border: 'none',
-                cursor: isPending ? 'not-allowed' : 'pointer',
-              }}
-            >
-              発動しない
-            </button>
+      {(pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (() => {
+        // 盤面とどのカードの効果かを確認できるよう、背景は透過しコンパクトなパネルで表示する。
+        const sourceCard = gameState ? resolveCard(pendingRequest.source_card_uuid, gameState) : null;
+        const sourceImg = sourceCard?.card_id ? getCardImageUrl(sourceCard.card_id) : null;
+        return (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            pointerEvents: 'none',
+          }}>
+            <div style={{
+              pointerEvents: 'auto',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+              padding: '16px 20px', borderRadius: '12px',
+              background: 'rgba(20,24,33,0.78)', border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}`,
+              boxShadow: '0 6px 24px rgba(0,0,0,0.5)', maxWidth: '90%',
+            }}>
+              <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '17px' }}>
+                {pendingRequest?.action === 'CONFIRM_TRIGGER' ? '【トリガー】' : '任意効果'}
+              </h2>
+              {sourceImg && (
+                <img
+                  src={sourceImg}
+                  alt={sourceCard?.name ?? ''}
+                  style={{ width: '110px', borderRadius: '6px', boxShadow: '0 2px 10px rgba(0,0,0,0.6)' }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+              <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center', maxWidth: '260px' }}>
+                {pendingRequest.message}
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => handleOptionalConfirm(true)}
+                  disabled={isPending}
+                  style={{
+                    padding: '9px 26px', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px',
+                    background: isPending ? '#555' : '#27ae60', color: 'white', border: 'none',
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  発動する
+                </button>
+                <button
+                  onClick={() => handleOptionalConfirm(false)}
+                  disabled={isPending}
+                  style={{
+                    padding: '9px 26px', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px',
+                    background: isPending ? '#555' : '#7f8c8d', color: 'white', border: 'none',
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  発動しない
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {pendingRequest?.action === 'DECLARE_COST' && (
         <div style={{
@@ -861,6 +886,39 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
           <div style={{ fontWeight: 'bold', marginBottom: maxSelect > 1 ? '8px' : 0 }}>
             {decisionNote}{pendingRequest!.message}
           </div>
+          {gameState?.active_battle && (() => {
+            const ab = gameState.active_battle;
+            const attacker = resolveCard(ab.attacker_uuid, gameState);
+            const target = resolveCard(ab.target_uuid, gameState);
+            const counterBuff = ab.counter_buff ?? 0;
+            const attackerPwr = attacker?.power ?? 0;
+            const targetBase = target?.power ?? 0;
+            const targetEff = targetBase + counterBuff;
+            const survives = attackerPwr < targetEff;
+            return (
+              <div style={{
+                margin: '4px 0 10px', padding: '8px 10px', borderRadius: '6px',
+                background: 'rgba(0,0,0,0.35)', fontSize: '12px', lineHeight: 1.6,
+              }}>
+                <div style={{ color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '4px' }}>
+                  ⚔ {attacker?.name ?? '攻撃'}（{attackerPwr}） → {target?.name ?? '対象'}
+                </div>
+                <div>
+                  対象パワー：{targetBase}
+                  {counterBuff > 0 && (
+                    <span style={{ color: '#ffff00', fontWeight: 'bold' }}> +{counterBuff}</span>
+                  )}
+                  {' '}= <span style={{ fontWeight: 'bold' }}>{targetEff}</span>
+                </div>
+                {counterBuff > 0 && (
+                  <div style={{ color: '#f1c40f' }}>カウンター累計：+{counterBuff}</div>
+                )}
+                <div style={{ fontWeight: 'bold', color: survives ? '#2ecc71' : '#e74c3c' }}>
+                  {survives ? '✔ このパワーで耐えられます' : '✖ あと ' + (attackerPwr - targetEff + 1) + ' 必要'}
+                </div>
+              </div>
+            );
+          })()}
           {maxSelect > 1 && (
             <>
               <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
