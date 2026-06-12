@@ -24,7 +24,7 @@ export const createCardContainer = (
   card: VirtualZoneCard,
   cw: number,
   ch: number,
-  options: { count?: number; onClick: () => void; isOpponent?: boolean; isSelectable?: boolean; isSelected?: boolean }
+  options: { count?: number; onClick: (pos: { x: number; y: number }) => void; isOpponent?: boolean; isSelectable?: boolean; isSelected?: boolean }
 ) => {
   const container = new PIXI.Container();
   if (card?.uuid) {
@@ -353,7 +353,9 @@ export const createCardContainer = (
         msg: `Card tapped: ${card?.name || 'unknown'}`,
         payload: { uuid: card?.uuid, isOpponent }
       });
-      if (options.onClick) options.onClick();
+      // autoDensity + 全画面キャンバスのため e.global は CSS ピクセル座標と一致。
+      // DOM オーバーレイ(ミニメニュー)の配置にそのまま渡せる。
+      if (options.onClick) options.onClick({ x: e.global.x, y: e.global.y });
     }
   });
 

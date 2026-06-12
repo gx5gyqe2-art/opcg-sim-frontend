@@ -120,6 +120,7 @@ export const LAYOUT_PARAMS = {
   Z_INDEX: {
     NOTIFICATION: 100,  // 通知メッセージ、ターン終了ボタン
     OVERLAY: 110,       // 攻撃対象選択オーバーレイ
+    MINI_MENU: 1500,    // カードタップ時のミニアクションメニュー
     SHEET: 2000,        // カード詳細シート (最前面)
   },
 

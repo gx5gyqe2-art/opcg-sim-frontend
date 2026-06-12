@@ -11,7 +11,7 @@ export const createBoardSide = (
   isOpponent: boolean,
   W: number,
   coords: LayoutCoords,
-  onCardClick: (card: CardInstance) => void,
+  onCardClick: (card: CardInstance, pos: { x: number; y: number }) => void,
   selectableUuids?: Set<string>,
   selectedUuids?: Set<string>,
 ) => {
@@ -37,7 +37,7 @@ export const createBoardSide = (
   };
 
   const getCardOpts = (c: VirtualZoneCard) => ({
-    onClick: () => onCardClick(c as CardInstance),
+    onClick: (pos: { x: number; y: number }) => onCardClick(c as CardInstance, pos),
     isOpponent: isOpponent,
     isSelectable: selectableUuids?.has(c.uuid || '') ?? false,
     isSelected: selectedUuids?.has(c.uuid || '') ?? false,
