@@ -9,13 +9,15 @@ interface CardSelectModalProps {
   message: string;
   minSelect: number;
   maxSelect: number;
-  onConfirm: (selectedUuids: string[]) => void;
+  onConfirm: (selectedUuids: string[], position?: 'TOP' | 'BOTTOM') => void;
   onCancel?: () => void;
   selectableUuids?: string[];
+  // ARRANGE_DECK(課題2a): true でデッキの上/下を選ぶ確定ボタンを出す。
+  allowPosition?: boolean;
 }
 
 export const CardSelectModal: React.FC<CardSelectModalProps> = ({
-  candidates, message, minSelect, maxSelect, onConfirm, onCancel, selectableUuids
+  candidates, message, minSelect, maxSelect, onConfirm, onCancel, selectableUuids, allowPosition
 }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
   const { SHAPE, SHADOWS } = LAYOUT_PARAMS;
@@ -249,18 +251,46 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
               キャンセル
             </button>
           )}
-          <button 
-            onClick={() => isValid && onConfirm(selected)}
-            disabled={!isValid}
-            style={{
-              padding: '10px 20px', borderRadius: '4px', border: 'none',
-              backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
-              color: 'white', cursor: isValid ? 'pointer' : 'not-allowed',
-              fontWeight: 'bold'
-            }}
-          >
-            決定する
-          </button>
+          {allowPosition ? (
+            // ARRANGE_DECK: デッキの上/下を選んで確定する。
+            <>
+              <button
+                onClick={() => isValid && onConfirm(selected, 'TOP')}
+                disabled={!isValid}
+                style={{
+                  padding: '10px 20px', borderRadius: '4px', border: 'none',
+                  backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
+                  color: 'white', cursor: isValid ? 'pointer' : 'not-allowed', fontWeight: 'bold'
+                }}
+              >
+                デッキの上へ
+              </button>
+              <button
+                onClick={() => isValid && onConfirm(selected, 'BOTTOM')}
+                disabled={!isValid}
+                style={{
+                  padding: '10px 20px', borderRadius: '4px', border: 'none',
+                  backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
+                  color: 'white', cursor: isValid ? 'pointer' : 'not-allowed', fontWeight: 'bold'
+                }}
+              >
+                デッキの下へ
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => isValid && onConfirm(selected)}
+              disabled={!isValid}
+              style={{
+                padding: '10px 20px', borderRadius: '4px', border: 'none',
+                backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
+                color: 'white', cursor: isValid ? 'pointer' : 'not-allowed',
+                fontWeight: 'bold'
+              }}
+            >
+              決定する
+            </button>
+          )}
         </div>
       </div>
     </div>

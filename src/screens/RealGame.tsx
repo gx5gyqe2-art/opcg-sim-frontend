@@ -170,16 +170,17 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     }
   };
 
-  const handleSelectionResolve = async (selectedUuids: string[]) => {
+  const handleSelectionResolve = async (selectedUuids: string[], position?: 'TOP' | 'BOTTOM') => {
     if (!gameState?.game_id || !pendingRequest) return;
-    
+
     const battleActionTypes = Object.values(CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES);
-    
+
     if (battleActionTypes.includes(pendingRequest.action)) {
       await sendBattleAction(pendingRequest.action, selectedUuids[0], pendingRequest.request_id);
     } else {
+      // ARRANGE_DECK(課題2a/2b): selected_uuids が配置順、position が上/下。
       await sendAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.RESOLVE_EFFECT_SELECTION, {
-        extra: { selected_uuids: selectedUuids }
+        extra: position ? { selected_uuids: selectedUuids, position } : { selected_uuids: selectedUuids }
       });
     }
   };
@@ -625,6 +626,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   const showSearchModal =
     !isBoardSelectMode && (
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
+      pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.ARRANGE_DECK ||
       pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
     );
     
@@ -1018,6 +1020,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         onConfirm={handleSelectionResolve}
         onCancel={pendingRequest?.can_skip ? handlePass : undefined}
         selectableUuids={pendingRequest?.selectable_uuids ?? undefined}
+        allowPosition={pendingRequest?.allow_position ?? false}
       />
     )}
 

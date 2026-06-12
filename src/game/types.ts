@@ -112,6 +112,9 @@ export interface PendingRequest {
   candidates?: CardInstance[];
   constraints?: { min?: number; max?: number; source_label?: string; render_mode?: string; [key: string]: unknown };
   options?: { label: string; value: unknown; [key: string]: unknown }[];
+  // ▼ ARRANGE_DECK(並び替え/上下選択, 課題2a/2b)用のUI制御フラグ
+  allow_position?: boolean;
+  allow_reorder?: boolean;
   // ▼ 追加: 必須プロパティ
   request_id: string;
 }

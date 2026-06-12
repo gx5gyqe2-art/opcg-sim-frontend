@@ -22,6 +22,10 @@ export interface PendingRequest {
     [key: string]: unknown;
   };
   options?: { label: string; value: unknown; [key: string]: unknown }[];
+
+  // ▼ ARRANGE_DECK(並び替え/上下選択, 課題2a/2b)用のUI制御フラグ
+  allow_position?: boolean; // デッキの上/下をプレイヤーに選ばせる
+  allow_reorder?: boolean;  // DnD で配置順を並び替えさせる
 }
 
 export interface GameActionRequest {
@@ -37,6 +41,7 @@ export interface GameActionRequest {
     // ▼ 追加: 選択結果汎用フィールド
     selected_uuids?: string[];
     option_value?: unknown;
+    position?: 'TOP' | 'BOTTOM'; // ARRANGE_DECK: デッキの上/下
     [key: string]: unknown;
   };
 }
