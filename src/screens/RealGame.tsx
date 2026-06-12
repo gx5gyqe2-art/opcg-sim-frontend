@@ -764,14 +764,16 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         </div>
       )}
 
-      {pendingRequest?.action === 'CONFIRM_OPTIONAL' && (
+      {(pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
           background: 'rgba(0,0,0,0.85)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           gap: '18px', padding: '20px', boxSizing: 'border-box',
         }}>
-          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '20px' }}>任意効果</h2>
+          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '20px' }}>
+            {pendingRequest?.action === 'CONFIRM_TRIGGER' ? '【トリガー】' : '任意効果'}
+          </h2>
           <p style={{ color: '#ecf0f1', margin: 0, fontSize: '14px', textAlign: 'center' }}>
             {pendingRequest.message}
           </p>
