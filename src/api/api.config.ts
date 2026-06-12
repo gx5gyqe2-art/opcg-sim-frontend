@@ -15,10 +15,5 @@ export const API_CONFIG = {
     HEALTH: '/health',
     CREATE_GAME: '/api/game/create',
     ACTION: '/api/game/action'
-  },
-
-  DEFAULT_GAME_SETTINGS: {
-    P1_DECK: "imu.json",
-    P2_DECK: "nami.json"
   }
 } as const;

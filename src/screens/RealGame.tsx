@@ -18,11 +18,6 @@ import { logger } from '../utils/logger';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
 
-const MOCK_DECKS: DeckOption[] = [
-  { id: 'imu.json',  name: 'イム',  leaderId: 'ST01-001' },
-  { id: 'nami.json', name: 'ナミ', leaderId: 'OP03-040' },
-];
-
 // 効果トースト（一時的な視覚フィードバック）対象アクションと表示ラベル。
 // 盤面が動く主要効果のみを対象にし、no-op 系（RULE_PROCESSING 等）は出さない。
 const TOAST_ACTION_LABELS: Record<string, string> = {
@@ -93,8 +88,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
-  const [p1DeckId, setP1DeckId] = useState(initialP1 || 'imu.json');
-  const [p2DeckId, setP2DeckId] = useState(initialP2 || 'nami.json');
+  const [p1DeckId, setP1DeckId] = useState(initialP1);
+  const [p2DeckId, setP2DeckId] = useState(initialP2);
   const [isSetupComplete, setIsSetupComplete] = useState(!!(initialP1 && initialP2));
   const [deckOptions, setDeckOptions] = useState<DeckOption[]>([]);
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
@@ -148,13 +143,11 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         const data = await res.json();
         if (data.success) {
           data.decks.forEach((d: { id: string; name: string; leader_id?: string }) => {
-            const id = d.id.endsWith('.json') ? d.id : `db:${d.id}`;
-            options.push({ id, name: d.name, leaderId: d.leader_id });
+            options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id });
           });
         }
       } catch(e) {
         console.error(e);
-        MOCK_DECKS.forEach(d => options.push(d));
       }
 
       const uniqueMap = new Map();
