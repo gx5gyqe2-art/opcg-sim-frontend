@@ -5,7 +5,9 @@ import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide } from '../ui/BoardSide';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
+import { CardActionMenu } from '../ui/CardActionMenu';
 import { CardSelectModal } from '../ui/CardSelectModal';
+import { getAvailableActions } from '../game/cardActions';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
@@ -79,6 +81,11 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     isMyTurn: boolean;
   } | null>(null);
   const [isDetailMode, setIsDetailMode] = useState(false);
+  const [actionMenu, setActionMenu] = useState<{
+    card: CardInstance;
+    location: string;
+    anchor: { x: number; y: number };
+  } | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
@@ -208,6 +215,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       setAttackingCardUuid(payload.uuid || null);
       setIsAttackTargeting(true);
       setIsDetailMode(false);
+      setActionMenu(null);
       return;
     }
 
@@ -303,7 +311,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     ? `🛡 ${pendingRequest!.player_id?.toUpperCase()} の防御選択 — `
     : '';
 
-  const onCardClick = async (card: CardInstance) => {
+  const onCardClick = async (card: CardInstance, pos: { x: number; y: number }) => {
     if (isPending || !gameState) return;
 
     if (isAttackTargeting && attackingCardUuid) {
@@ -390,12 +398,20 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       payload: { uuid: card.uuid, activePlayerId, currentLoc }
     });
 
-    setSelectedCard({ 
-      card, 
-      location: currentLoc, 
-      isMyTurn: isOperatable 
-    }); 
-    setIsDetailMode(true); 
+    // 操作可能カードで実行可能アクションが1つ以上あれば、詳細シートではなく
+    // カード近傍のミニメニューを開く（タップ→即操作の導線）。
+    const donCount = activePlayerId ? gameState.players[activePlayerId].don_active.length : 0;
+    if (isOperatable && getAvailableActions(card, currentLoc, true, donCount).length > 0) {
+      setActionMenu({ card, location: currentLoc, anchor: pos });
+      return;
+    }
+
+    setSelectedCard({
+      card,
+      location: currentLoc,
+      isMyTurn: isOperatable
+    });
+    setIsDetailMode(true);
   };
   
   useEffect(() => {
@@ -408,6 +424,12 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- request_id 変化時のみ実行する意図（pendingRequest/isAttackTargeting は最新値を本体で参照）
   }, [pendingRequest?.request_id]);
+
+  // 盤面(PIXI)は gameState 変化のたびに全再構築されカード位置が変わり得るため、
+  // 状態変化・新しい選択要求が来たらミニメニューを閉じてアンカーのズレを防ぐ。
+  useEffect(() => {
+    setActionMenu(null);
+  }, [gameState, pendingRequest?.request_id]);
 
   useEffect(() => {
     if (!pixiContainerRef.current || !isSetupComplete) return;
@@ -955,6 +977,22 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
           {isPending ? '送信中...' : 'ターン終了'}
         </button>
       )}
+
+    {actionMenu && (
+      <CardActionMenu
+        card={actionMenu.card}
+        location={actionMenu.location}
+        activeDonCount={activeDonCount}
+        anchor={actionMenu.anchor}
+        onAction={handleAction}
+        onShowDetail={() => {
+          setSelectedCard({ card: actionMenu.card, location: actionMenu.location, isMyTurn: true });
+          setIsDetailMode(true);
+          setActionMenu(null);
+        }}
+        onClose={() => setActionMenu(null)}
+      />
+    )}
 
     {isDetailMode && selectedCard && (
       <CardDetailSheet

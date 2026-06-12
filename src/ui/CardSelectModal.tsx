@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
 // ▼ 変更: imageAssetsから関数をインポート
@@ -55,17 +55,59 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
     });
   };
 
-  // 並び替え: 配置順を入れ替える（↑↓）。
-  const moveOrder = (uuid: string, dir: -1 | 1) => {
-    setSelected(prev => {
-      const i = prev.indexOf(uuid);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
+  // --- 並び替えモード: ドラッグ&ドロップで配置順を入れ替える ---
+  // 旧来の小さな↑↓ボタンは操作性が悪かったため、Pointer Events による
+  // ドラッグに置き換える（追加ライブラリなし・タッチ対応）。
+  const [dragUuid, setDragUuid] = useState<string | null>(null);
+  const itemRefs = useRef(new Map<string, HTMLDivElement>());
+  const dragMovedRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+
+  const arrayMove = (arr: string[], from: number, to: number): string[] => {
+    const next = [...arr];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    return next;
   };
+
+  // ポインタ座標直下のカード(ドラッグ中カードを除く)を矩形判定で探す。
+  const findItemAt = (x: number, y: number, exclude: string): string | null => {
+    for (const [uuid, node] of itemRefs.current) {
+      if (uuid === exclude) continue;
+      const r = node.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return uuid;
+    }
+    return null;
+  };
+
+  const handleDragPointerDown = (e: React.PointerEvent<HTMLDivElement>, uuid: string) => {
+    if (!isOrderMode) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragMovedRef.current = false;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    setDragUuid(uuid);
+  };
+
+  const handleDragPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isOrderMode || dragUuid === null) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    // 6px 動くまではドラッグ開始とみなさない（誤操作・タップ判定の余地）。
+    if (!dragMovedRef.current && Math.hypot(dx, dy) < 6) return;
+    dragMovedRef.current = true;
+
+    const overUuid = findItemAt(e.clientX, e.clientY, dragUuid);
+    if (overUuid) {
+      setSelected(prev => {
+        const from = prev.indexOf(dragUuid);
+        const to = prev.indexOf(overUuid);
+        if (from < 0 || to < 0 || from === to) return prev;
+        return arrayMove(prev, from, to);
+      });
+    }
+  };
+
+  const endDrag = () => setDragUuid(null);
 
   const isValid = isOrderMode
     ? selected.length === selectableCards.length
@@ -105,7 +147,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
           <h3 style={{ margin: '0 0 8px 0' }}>{message}</h3>
           <div style={{ fontSize: '0.9rem', color: '#666' }}>
             {isOrderMode
-              ? `配置順を ↑↓ で並び替えてください（${selected.length}枚を上から順に配置）`
+              ? `配置順をドラッグで並び替えてください（${selected.length}枚を①から順に配置）`
               : `選択中: ${selected.length} / ${effMax}枚 (最小 ${minSelect}枚)`}
           </div>
         </div>
@@ -115,26 +157,41 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
           {(isOrderMode
               ? selected.map(uid => candidates.find(c => c.uuid === uid)!).filter(Boolean)
               : candidates
-          ).map((card, idx) => {
+          ).map((card) => {
             const isSelected = selected.includes(card.uuid);
             const canSelect = isSelectable(card.uuid);
             const imageUrl = getCardImageUrl(card.card_id);
             const orderPos = isOrderMode ? selected.indexOf(card.uuid) : -1;
 
+            const isDragging = isOrderMode && dragUuid === card.uuid;
             return (
               <div
                 key={card.uuid}
+                ref={(node) => {
+                  if (node) itemRefs.current.set(card.uuid, node);
+                  else itemRefs.current.delete(card.uuid);
+                }}
                 onClick={() => handleToggle(card.uuid)}
+                onPointerDown={isOrderMode ? (e) => handleDragPointerDown(e, card.uuid) : undefined}
+                onPointerMove={isOrderMode ? handleDragPointerMove : undefined}
+                onPointerUp={isOrderMode ? endDrag : undefined}
+                onPointerCancel={isOrderMode ? endDrag : undefined}
+                onLostPointerCapture={isOrderMode ? endDrag : undefined}
                 style={{
                   border: isSelected ? `3px solid ${COLORS.BTN_PRIMARY}` : '1px solid #ccc',
                   borderRadius: SHAPE.CORNER_RADIUS_CARD,
-                  cursor: canSelect ? 'pointer' : 'default',
+                  cursor: isOrderMode ? (isDragging ? 'grabbing' : 'grab') : (canSelect ? 'pointer' : 'default'),
                   backgroundColor: '#444',
                   position: 'relative',
                   aspectRatio: '0.714',
                   overflow: 'hidden',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   opacity: canSelect ? 1 : 0.4,
+                  touchAction: isOrderMode ? 'none' : undefined,
+                  transform: isDragging ? 'scale(1.08)' : undefined,
+                  boxShadow: isDragging ? '0 8px 20px rgba(0,0,0,0.45)' : undefined,
+                  zIndex: isDragging ? 100 : undefined,
+                  transition: isDragging ? 'none' : 'transform 120ms ease',
                 }}
               >
                 <img
@@ -166,32 +223,14 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                 )}
 
                 {isOrderMode && (
-                  <>
-                    <div style={{
-                      position: 'absolute', top: '4px', left: '4px',
-                      backgroundColor: COLORS.BTN_PRIMARY, color: 'white',
-                      borderRadius: '50%', width: '22px', height: '22px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '12px', fontWeight: 'bold', zIndex: 10, border: '2px solid white'
-                    }}>{orderPos + 1}</div>
-                    <div style={{
-                      position: 'absolute', bottom: '2px', left: 0, right: 0,
-                      display: 'flex', justifyContent: 'center', gap: '4px', zIndex: 10,
-                    }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveOrder(card.uuid, -1); }}
-                        disabled={idx === 0}
-                        style={{ fontSize: '11px', padding: '0 6px', cursor: idx === 0 ? 'default' : 'pointer',
-                                 opacity: idx === 0 ? 0.4 : 1, border: 'none', borderRadius: '3px' }}
-                      >↑</button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveOrder(card.uuid, 1); }}
-                        disabled={idx === selected.length - 1}
-                        style={{ fontSize: '11px', padding: '0 6px', cursor: idx === selected.length - 1 ? 'default' : 'pointer',
-                                 opacity: idx === selected.length - 1 ? 0.4 : 1, border: 'none', borderRadius: '3px' }}
-                      >↓</button>
-                    </div>
-                  </>
+                  <div style={{
+                    position: 'absolute', top: '4px', left: '4px',
+                    backgroundColor: COLORS.BTN_PRIMARY, color: 'white',
+                    borderRadius: '50%', width: '24px', height: '24px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 'bold', zIndex: 10, border: '2px solid white',
+                    pointerEvents: 'none',
+                  }}>{orderPos + 1}</div>
                 )}
               </div>
             );

@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
 import type { PlayerState, CardInstance, BoardCard, VirtualZoneCard } from '../game/types';
+import { normalizeCardType } from '../game/cardTypes';
 import { logger } from '../utils/logger';
 // 未使用のインポートを削除しました
 
@@ -10,7 +11,7 @@ export const createBoardSide = (
   isOpponent: boolean,
   W: number,
   coords: LayoutCoords,
-  onCardClick: (card: CardInstance) => void,
+  onCardClick: (card: CardInstance, pos: { x: number; y: number }) => void,
   selectableUuids?: Set<string>,
   selectedUuids?: Set<string>,
 ) => {
@@ -36,7 +37,7 @@ export const createBoardSide = (
   };
 
   const getCardOpts = (c: VirtualZoneCard) => ({
-    onClick: () => onCardClick(c as CardInstance),
+    onClick: (pos: { x: number; y: number }) => onCardClick(c as CardInstance, pos),
     isOpponent: isOpponent,
     isSelectable: selectableUuids?.has(c.uuid || '') ?? false,
     isSelected: selectedUuids?.has(c.uuid || '') ?? false,
@@ -57,10 +58,7 @@ export const createBoardSide = (
   const fieldCards = [...(z.field || [])]; 
 
   if (!stageCard) {
-    const sIdx = fieldCards.findIndex(c => {
-        const t = c.type?.toUpperCase();
-        return t === 'STAGE' || t === 'ステージ';
-    });
+    const sIdx = fieldCards.findIndex(c => normalizeCardType(c.type) === 'STAGE');
 
     if (sIdx >= 0) {
       stageCard = fieldCards[sIdx];
@@ -96,16 +94,68 @@ export const createBoardSide = (
     side.addChild(stg);
   }
 
-  // ライフ (getX適用)
-  const lifeCount = z.life?.length || 0;
-  const life = createCardContainer(
-    { uuid: `life-${p.player_id}`, name: 'Life' } as VirtualZoneCard, 
-    coords.CW, 
-    coords.CH, 
-    { ...getCardOpts({ uuid: `life-${p.player_id}`, name: 'Life' } as VirtualZoneCard), count: lifeCount }
-  );
-  life.x = getX(coords.getLifeX(W)); life.y = r2Y;
-  side.addChild(life);
+  // ライフ: 横向き(90°回転)のカードを少しずつ縦にずらして重ね、
+  // 各カードの表/裏が判別できるように描画する（自分・相手の両側に適用）。
+  const lifeCards = z.life || [];
+  const lifeX = getX(coords.getLifeX(W));
+
+  if (lifeCards.length === 0) {
+    // 0枚は従来どおり EMPTY プレースホルダー（count:0 経路）を表示。
+    const emptyLife = { uuid: `life-${p.player_id}`, name: 'Life' } as VirtualZoneCard;
+    const life = createCardContainer(emptyLife, coords.CW, coords.CH, {
+      ...getCardOpts(emptyLife),
+      count: 0,
+    });
+    life.x = lifeX; life.y = r2Y;
+    side.addChild(life);
+  } else {
+    const lifeScale = 0.85;                 // 6枚程度まで帯に収まるよう少し縮小
+    const lcw = coords.CW * lifeScale;
+    const lch = coords.CH * lifeScale;
+    const n = lifeCards.length;
+    // 横向きカードの縦方向の見かけ高さは lcw。重ね段差は枚数に応じて自動調整し、
+    // スタック全体がカード1枚分(coords.CH)の帯に収まるようにする。
+    const step = n > 1 ? Math.min(lcw * 0.5, (coords.CH - lcw) / (n - 1)) : 0;
+    const stackH = lcw + step * (n - 1);
+
+    // life[0] が山の一番上(ダメージで最初に取られる)。最前面かつ最上段に
+    // 描画するため、z順が後勝ちになるよう逆順で addChild する。
+    for (let i = n - 1; i >= 0; i--) {
+      const c = lifeCards[i];
+      const isFaceUp = c.is_face_up === true;
+      // is_rest 経路の90°回転を流用して横向き描画。onClick には元カード c を渡す。
+      const renderCard = { ...c, is_rest: true } as CardInstance;
+      const lifeCard = createCardContainer(renderCard, lcw, lch, getCardOpts(c));
+      lifeCard.x = lifeX;
+      lifeCard.y = r2Y - stackH / 2 + lcw / 2 + i * step;
+      if (!isFaceUp) {
+        // 裏向きライフは内容を確認できないためタップ無効。
+        lifeCard.eventMode = 'none';
+        lifeCard.cursor = 'default';
+      }
+      side.addChild(lifeCard);
+    }
+
+    // ライフ枚数バッジ(重なりで枚数が読み取りづらい場合の補助)。
+    // 盤面端側(中央のリーダーと逆方向)に小さく表示する。
+    const badgeR = lcw * 0.26;
+    const edgeSign = isOpponent ? 1 : -1; // 自陣ライフは左寄せ→左端、相手は右寄せ→右端
+    const badgeX = lifeX + edgeSign * (lch / 2 + badgeR + 3);
+    const badge = new PIXI.Graphics()
+      .beginFill(0x000000, 0.85)
+      .lineStyle(1, 0xffffff)
+      .drawCircle(badgeX, r2Y, badgeR)
+      .endFill();
+    side.addChild(badge);
+    const badgeText = new PIXI.Text(`${n}`, {
+      fontSize: badgeR * 1.2,
+      fill: 0xffffff,
+      fontWeight: 'bold',
+    });
+    badgeText.anchor.set(0.5);
+    badgeText.position.set(badgeX, r2Y);
+    side.addChild(badgeText);
+  }
 
   // デッキ (getX適用)
   const deck = createCardContainer(
