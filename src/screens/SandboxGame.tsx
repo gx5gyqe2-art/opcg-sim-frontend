@@ -16,35 +16,6 @@ import { logger } from '../utils/logger';
 import { handleLocalAction } from '../game/localActionHandler';
 import { getCardImageUrl } from '../utils/imageAssets';
 
-const MOCK_DECKS: Record<string, DeckInput> = {
-  'imu.json': {
-    leader: { name: "イム", card_id: "ST01-001", power: 5000, type: "LEADER", life: 5 },
-    cards: Array.from({ length: 50 }, (_, i) => ({
-      name: `聖地マリージョア兵 ${i + 1}`,
-      card_id: `OP01-${String(i + 1).padStart(3, '0')}`,
-      power: 3000 + (i % 5) * 1000,
-      cost: 1 + (i % 5),
-      counter: 1000,
-      type: "CHARACTER",
-      trigger_text: i % 3 === 0 ? "トリガーあり" : "",
-      effect_text: "登場時: カードを1枚引く。"
-    }))
-  },
-  'nami.json': {
-    leader: { name: "ナミ", card_id: "OP03-040", power: 5000, type: "LEADER", life: 5 },
-    cards: Array.from({ length: 50 }, (_, i) => ({
-      name: `クリマ・タクト ${i + 1}`,
-      card_id: `OP03-${String(i + 1).padStart(3, '0')}`,
-      power: 2000 + (i % 4) * 1000,
-      cost: 1 + (i % 4),
-      counter: 2000,
-      type: "EVENT",
-      trigger_text: i % 2 === 0 ? "トリガー: 手札に加える" : "",
-      effect_text: "メイン: 相手のキャラ1枚をレストにする。"
-    }))
-  }
-};
-
 type DragState = { card: CardInstance; sprite: PIXI.Container; startPos: { x: number, y: number }; } | null;
 
 // 進行中のローカルサンドボックス状態を保存するsessionStorageキー（クラッシュ/リロード復帰用）
@@ -816,13 +787,10 @@ export const SandboxGame = ({
           const pid = myPlayerId === 'both' ? ((params.player_id as string) || 'p1') : myPlayerId;
 
           const getDeckData = async (deckId: string) => {
-              if (!deckId) return { leader: [], cards: [] };
-              if (MOCK_DECKS[deckId]) return MOCK_DECKS[deckId];
-              let cacheKey = `opcg_deck_${deckId}`;
-              if (deckId.startsWith('db:')) cacheKey = `opcg_deck_${deckId.substring(3)}`;
+              if (!deckId || !deckId.startsWith('db:')) return { leader: [], cards: [] };
+              const cacheKey = `opcg_deck_${deckId.substring(3)}`;
               const cached = localStorage.getItem(cacheKey);
               if (cached) { try { return JSON.parse(cached); } catch { /* キャッシュ不正は無視 */ } }
-              if (!deckId.startsWith('db:') && !['imu.json', 'nami.json'].includes(deckId)) return { leader: [], cards: [] };
               const res = await fetch(`${API_CONFIG.BASE_URL}/api/deck/get?id=${deckId}`);
               if (!res.ok) throw new Error();
               const data = await res.json();

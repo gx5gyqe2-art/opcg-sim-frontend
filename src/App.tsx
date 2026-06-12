@@ -55,7 +55,13 @@ export default function App() {
 
   const [selectedDecks, setSelectedDecks] = useState<{ p1: string; p2: string }>(() => {
     const saved = sessionStorage.getItem('opcg_selected_decks');
-    return saved ? JSON.parse(saved) : { p1: 'imu.json', p2: 'nami.json' };
+    if (saved) {
+      const parsed = JSON.parse(saved) as { p1?: string; p2?: string };
+      // db: 形式以外（旧サンプルデッキ 'imu.json' 等の残骸）は無効化して選択し直させる
+      const sanitize = (id?: string) => (id && id.startsWith('db:') ? id : '');
+      return { p1: sanitize(parsed.p1), p2: sanitize(parsed.p2) };
+    }
+    return { p1: '', p2: '' };
   });
 
   const [sandboxOptions, setSandboxOptions] = useState<SandboxOptions>(() => {

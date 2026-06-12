@@ -5,7 +5,7 @@ import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
 import { sessionManager } from '../utils/session';
 
-const { BASE_URL, ENDPOINTS, DEFAULT_GAME_SETTINGS } = API_CONFIG;
+const { BASE_URL, ENDPOINTS } = API_CONFIG;
 
 const fetchWithLog = async (url: string, options: RequestInit = {}) => {
   const sid = sessionManager.getSessionId();
@@ -40,8 +40,8 @@ export const apiClient = {
   },
 
   async createGame(
-    p1Deck: string = DEFAULT_GAME_SETTINGS.P1_DECK,
-    p2Deck: string = DEFAULT_GAME_SETTINGS.P2_DECK
+    p1Deck: string,
+    p2Deck: string
   ): Promise<{ game_id: string; state: GameState; pending_request?: PendingRequest }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
