@@ -1257,19 +1257,36 @@ export const RealGame = ({
 
       {isBoardSelectMode && (
         <div style={{
-          position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
-          padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
-          border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
-          minWidth: '220px', maxWidth: '320px',
-          // バナーが盤面中央に重なって背後のカードのタップを吸うと、相手キャラ等の
-          // 選択候補(EB01-061の【アタック時】等)が選べなくなる。バナー自体はクリックを
-          // 透過させ、内部のボタン(確定/パス)だけ操作可能にする。
+          // 盤面はフィールド(中央寄り)と手札(下端)が密なため、最も干渉の少ない最上部中央へ
+          // スリムに配置する。背後のカードのタップは透過(pointerEvents:none)させ、ボタンだけ
+          // 有効化する。盤面に覆い被さらず、選択候補はカードのハイライトで示す。
+          position: 'absolute',
+          top: 'max(12px, env(safe-area-inset-top, 0px))',
+          left: '50%', transform: 'translateX(-50%)',
+          zIndex: Z_INDEX.NOTIFICATION,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px',
+          padding: '9px 16px 11px', borderRadius: '14px',
+          background: 'rgba(18,22,31,0.82)',
+          backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+          border: `1px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}66`,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+          color: '#fff', textAlign: 'center', maxWidth: 'min(92vw, 360px)',
           pointerEvents: 'none',
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: maxSelect > 1 ? '8px' : 0 }}>
-            {decisionNote}{pendingRequest!.message}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '13px', lineHeight: 1.35 }}>
+            <span style={{
+              flex: '0 0 auto', width: '7px', height: '7px', borderRadius: '50%',
+              background: COLORS.HIGHLIGHT_SELECTABLE_CSS, boxShadow: `0 0 8px ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
+            }} />
+            <span>{decisionNote}{pendingRequest!.message}</span>
           </div>
+
+          <div style={{ fontSize: '11px', color: '#9aa4b2' }}>
+            {maxSelect > 1
+              ? `${boardSelected.length} / ${maxSelect} 枚選択中（最小 ${minSelect}）`
+              : (minSelect === 0 ? 'カードをタップ、または「選ばない」' : 'カードをタップして選択')}
+          </div>
+
           {gameState?.active_battle && (() => {
             const ab = gameState.active_battle;
             const attacker = resolveCard(ab.attacker_uuid, gameState);
@@ -1281,8 +1298,8 @@ export const RealGame = ({
             const survives = attackerPwr < targetEff;
             return (
               <div style={{
-                margin: '4px 0 10px', padding: '8px 10px', borderRadius: '6px',
-                background: 'rgba(0,0,0,0.35)', fontSize: '12px', lineHeight: 1.6,
+                margin: '1px 0 2px', padding: '7px 10px', borderRadius: '8px',
+                background: 'rgba(0,0,0,0.3)', fontSize: '12px', lineHeight: 1.6,
               }}>
                 <div style={{ color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '4px' }}>
                   ⚔ {attacker?.name ?? '攻撃'}（{attackerPwr}） → {target?.name ?? '対象'}
@@ -1303,40 +1320,50 @@ export const RealGame = ({
               </div>
             );
           })()}
-          {maxSelect > 1 && (
-            <>
-              <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
-                {boardSelected.length} / {maxSelect}枚選択中
-              </div>
-              <button
-                onClick={() => handleSelectionResolve(boardSelected)}
-                disabled={boardSelected.length < minSelect || isPending}
-                style={{
-                  padding: '6px 20px', background: boardSelected.length >= minSelect ? COLORS.BTN_SUCCESS : COLORS.BTN_DISABLED,
-                  color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
-                  cursor: boardSelected.length >= minSelect && !isPending ? 'pointer' : 'not-allowed',
-                  marginBottom: pendingRequest!.can_skip ? '8px' : 0,
-                  pointerEvents: 'auto',
-                }}
-              >
-                確定
-              </button>
-            </>
-          )}
-          {pendingRequest!.can_skip && (
-            <button
-              onClick={handlePass}
-              disabled={isPending}
-              style={{
-                display: 'block', margin: '0 auto', marginTop: maxSelect > 1 ? '0' : '0',
-                padding: '6px 20px', background: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER,
-                color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
-                cursor: isPending ? 'not-allowed' : 'pointer',
-                pointerEvents: 'auto',
-              }}
-            >
-              パス
-            </button>
+
+          {(maxSelect > 1 || (maxSelect === 1 && minSelect === 0) || pendingRequest!.can_skip) && (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '1px', pointerEvents: 'auto' }}>
+              {maxSelect > 1 && (
+                <button
+                  onClick={() => handleSelectionResolve(boardSelected)}
+                  disabled={boardSelected.length < minSelect || isPending}
+                  style={{
+                    padding: '7px 18px', borderRadius: '999px', border: 'none', fontWeight: 700, fontSize: '13px', color: 'white',
+                    background: boardSelected.length >= minSelect ? COLORS.BTN_SUCCESS : COLORS.BTN_DISABLED,
+                    cursor: boardSelected.length >= minSelect && !isPending ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  確定
+                </button>
+              )}
+              {/* 「〜1枚まで」等の任意対象(min=0,max=1)で0枚を選ぶ導線。空選択で確定する。 */}
+              {maxSelect === 1 && minSelect === 0 && (
+                <button
+                  onClick={() => handleSelectionResolve([])}
+                  disabled={isPending}
+                  style={{
+                    padding: '7px 18px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '13px', color: 'white',
+                    background: isPending ? COLORS.BTN_DISABLED : 'rgba(127,140,141,0.55)',
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  選ばない
+                </button>
+              )}
+              {pendingRequest!.can_skip && (
+                <button
+                  onClick={handlePass}
+                  disabled={isPending}
+                  style={{
+                    padding: '7px 18px', borderRadius: '999px', border: 'none', fontWeight: 700, fontSize: '13px', color: 'white',
+                    background: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER,
+                    cursor: isPending ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  パス
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
