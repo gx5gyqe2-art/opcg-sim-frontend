@@ -226,35 +226,35 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Play</div>
 
-            {/* Sandbox: ルール強制なしの自由操作 */}
-            <div style={styles.subGroupTitle}>サンドボックス（自由に操作）</div>
+            {/* フリーモード: ルール強制なしの自由操作 */}
+            <div style={styles.subGroupTitle}>フリーモード（自由に操作）</div>
             <div style={styles.grid}>
               <MenuCard
-                label="ひとりで回す"
-                desc="Sandbox · Solo"
+                label="ソロプレイ"
+                desc="Free · Solo"
                 onClick={() => handleStartWithLog('sandbox', { role: 'both' })}
                 color="#2ecc71"
               />
               <MenuCard
                 label="オンライン対戦"
-                desc="Sandbox · Online"
+                desc="Free · Online"
                 onClick={() => { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }}
                 color="#16a085"
               />
             </div>
 
-            {/* Realgame: ルール強制エンジン */}
-            <div style={styles.subGroupTitle}>リアルゲーム（公式ルール）</div>
+            {/* ルールモード: ルール強制エンジン */}
+            <div style={styles.subGroupTitle}>ルールモード（自動進行）</div>
             <div style={styles.grid}>
               <MenuCard
-                label="ひとりで回す"
-                desc="Realgame · Solo"
+                label="ソロプレイ"
+                desc="Rule · Solo"
                 onClick={() => handleStartWithLog('normal')}
                 color="#e74c3c"
               />
               <MenuCard
                 label="オンライン対戦"
-                desc="Realgame · Online"
+                desc="Rule · Online"
                 onClick={() => {}}
                 disabled
                 badge="今後実装予定"
