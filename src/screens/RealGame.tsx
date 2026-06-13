@@ -12,6 +12,7 @@ import { normalizeCardType } from '../game/cardTypes';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
+import { CoinFlip } from '../ui/CoinFlip';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
@@ -138,6 +139,12 @@ export const RealGame = ({
   const [isDonTargeting, setIsDonTargeting] = useState(false);
   const [boardSelected, setBoardSelected] = useState<string[]>([]);
 
+  // 先行プレイヤー選択（ソロ専用。CPU/対戦はランダム）。既定は P1 先攻。
+  const [firstChoice, setFirstChoice] = useState<'p1' | 'p2'>('p1');
+  // コイントス演出（CPU/対戦）。coinResult=先行プレイヤー。表示中は coinResult!==null。
+  const [coinResult, setCoinResult] = useState<'p1' | 'p2' | null>(null);
+  const coinShownRef = useRef(false);
+
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
   
   const [p1DeckId, setP1DeckId] = useState(initialP1);
@@ -206,6 +213,18 @@ export const RealGame = ({
     addEventLog,
     isOnline ? onlineGameId : undefined,
   );
+
+  // コイントス演出のトリガー（CPU/対戦のみ）。ゲーム開始直後、turn_info が示す先行
+  // プレイヤー(=active_player_id)を結果として一度だけ表示する。ソロは選択制のため出さない。
+  useEffect(() => {
+    if (coinShownRef.current) return;
+    if (!(vsCpu || isOnline)) return;
+    if (!gameState || !activePlayerId) return;
+    // 開始時(マリガン中)のみ。リロードで途中復帰した際に再演出しないようガードする。
+    if (gameState.turn_info?.current_phase !== 'MULLIGAN') return;
+    coinShownRef.current = true;
+    setCoinResult(activePlayerId);
+  }, [gameState, activePlayerId, vsCpu, isOnline]);
 
   useEffect(() => {
     const fetchDecks = async () => {
@@ -679,7 +698,12 @@ export const RealGame = ({
     // ここで createGame は呼ばない（ソロ/CPU のみ自前でゲーム生成）。
     // CPU 対戦は p2 を CPU として生成（p2DeckId を CPU のデッキに使う）。
     if (!isOnline) {
-      startGame(p1DeckId, p2DeckId, vsCpu ? { vsCpu: true, cpuDifficulty, cpuDeck: p2DeckId } : undefined);
+      // 先行: CPU はランダム(コイントス)、ソロは選択した firstChoice。
+      startGame(
+        p1DeckId, p2DeckId,
+        vsCpu ? { vsCpu: true, cpuDifficulty, cpuDeck: p2DeckId } : undefined,
+        vsCpu ? 'random' : firstChoice,
+      );
     }
 
     const handleResize = () => {
@@ -921,12 +945,45 @@ export const RealGame = ({
             </div>
           </div>
 
+          {/* 先行プレイヤー: ソロは選択、CPU はランダム(コイントス) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ color: '#bdc3c7', fontSize: '12px', fontWeight: 'bold' }}>先行プレイヤー</label>
+            {vsCpu ? (
+              <div style={{
+                padding: '10px', borderRadius: '4px', textAlign: 'center',
+                background: '#1f2a36', border: '1px dashed #5d6d7e', color: '#f1c40f', fontWeight: 'bold', fontSize: '13px',
+              }}>
+                🪙 ランダム（コイントス）
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {(['p1', 'p2'] as const).map((pid) => {
+                  const active = firstChoice === pid;
+                  return (
+                    <button
+                      key={pid}
+                      onClick={() => setFirstChoice(pid)}
+                      style={{
+                        flex: 1, padding: '10px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer',
+                        border: active ? '2px solid #f1c40f' : '1px solid #5d6d7e',
+                        background: active ? 'rgba(241,196,15,0.18)' : '#1f2a36',
+                        color: active ? '#f1c40f' : '#bdc3c7',
+                      }}
+                    >
+                      {pid.toUpperCase()} が先攻
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button onClick={onBack} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #95a5a6', color: '#95a5a6', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
               キャンセル
             </button>
-            <button 
-              onClick={handleGameStart} 
+            <button
+              onClick={handleGameStart}
               disabled={!p1DeckId || !p2DeckId}
               style={{ 
                 flex: 1, padding: '12px', 
@@ -987,7 +1044,16 @@ export const RealGame = ({
 
   return (
     <div ref={pixiContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-      
+
+      {/* 先行決定コイントス（CPU/対戦）。閉じるとゲーム画面へ。 */}
+      {coinResult && (
+        <CoinFlip
+          firstPlayerId={coinResult}
+          viewerId={viewerId}
+          onClose={() => setCoinResult(null)}
+        />
+      )}
+
       <button
         onClick={handleBackToTitle}
         style={{

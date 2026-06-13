@@ -35,11 +35,12 @@ export const useGameAction = (
     p1Deck: string,
     p2Deck: string,
     cpuOptions?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard'; cpuDeck?: string },
+    firstPlayer?: 'p1' | 'p2' | 'random',
   ) => {
     setIsPending(true);
     try {
-      // APIに選択されたデッキIDを渡す
-      const { game_id, state, pending_request } = await apiClient.createGame(p1Deck, p2Deck, cpuOptions);
+      // APIに選択されたデッキIDを渡す（先行プレイヤーも指定）
+      const { game_id, state, pending_request } = await apiClient.createGame(p1Deck, p2Deck, cpuOptions, firstPlayer);
       setGameId(game_id);
       setGameState(state);
       if (pending_request) {

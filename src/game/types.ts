@@ -132,7 +132,7 @@ export interface GameState {
   turn_info: {
     turn_count: number;
     active_player_id: 'p1' | 'p2';
-    current_phase: 'MAIN' | 'REFRESH' | 'DRAW' | 'DON' | 'END' | 'SETUP';
+    current_phase: 'MAIN' | 'REFRESH' | 'DRAW' | 'DON' | 'END' | 'SETUP' | 'MULLIGAN' | 'BLOCK_STEP' | 'BATTLE_COUNTER';
     winner: string | null;
   };
   ready_states?: { p1: boolean; p2: boolean };

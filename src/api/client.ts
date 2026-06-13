@@ -43,7 +43,9 @@ export const apiClient = {
     p1Deck: string,
     p2Deck: string,
     // CPU 対戦オプション（未指定＝従来のソロ/ホットシート）。
-    opts?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard'; cpuDeck?: string }
+    opts?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard'; cpuDeck?: string },
+    // 先行プレイヤー: ソロは 'p1'/'p2'（プレイヤーが選択）、CPU は 'random'（コイントス）。
+    firstPlayer?: 'p1' | 'p2' | 'random'
   ): Promise<{ game_id: string; state: GameState; pending_request?: PendingRequest }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
@@ -52,6 +54,7 @@ export const apiClient = {
         p2_deck: p2Deck,
         p1_name: CONST.PLAYER_KEYS.P1,
         p2_name: CONST.PLAYER_KEYS.P2,
+        ...(firstPlayer ? { first_player: firstPlayer } : {}),
         ...(opts?.vsCpu ? {
           vs_cpu: true,
           cpu_difficulty: opts.cpuDifficulty || 'normal',
