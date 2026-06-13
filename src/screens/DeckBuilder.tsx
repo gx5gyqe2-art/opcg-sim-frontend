@@ -513,10 +513,76 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete }: { 
   );
 };
 
+// デッキを「検証向けMarkdown」として書き出す。
+// リーダー + 各カードを「枚数 番号 名前 / 効果テキスト / トリガー」で列挙し、
+// 1枚ずつ効果の実装挙動を突合できる形にする。
+const formatCardBlock = (card: CardData, count?: number): string => {
+  const head = count !== undefined ? `### ${count}x ${card.uuid} ${card.name}` : `### ${card.uuid} ${card.name}`;
+  const meta: string[] = [];
+  if (card.type) meta.push(`種類: ${card.type}`);
+  if (card.cost !== undefined && card.cost !== null) meta.push(`コスト: ${card.cost}`);
+  if (card.power !== undefined && card.power !== null) meta.push(`パワー: ${card.power}`);
+  if (card.counter !== undefined && card.counter !== null) meta.push(`カウンター: ${card.counter}`);
+  if (card.color && card.color.length) meta.push(`色: ${card.color.join('/')}`);
+  if (card.attributes && card.attributes.length) meta.push(`属性: ${card.attributes.join('/')}`);
+  if (card.traits && card.traits.length) meta.push(`特徴: ${card.traits.join('/')}`);
+  const lines = [head, `- ${meta.join(' / ')}`];
+  lines.push(`- 効果: ${card.text && card.text.trim() ? card.text.trim() : '（なし）'}`);
+  if (card.trigger_text && card.trigger_text.trim()) lines.push(`- トリガー: ${card.trigger_text.trim()}`);
+  return lines.join('\n');
+};
+
+const buildDeckMarkdown = (deck: DeckData, allCards: CardData[]): string => {
+  const byUuid = new Map(allCards.map(c => [c.uuid, c]));
+  const leader = deck.leader_id ? byUuid.get(deck.leader_id) : undefined;
+
+  const counts = new Map<string, number>();
+  deck.card_uuids.forEach(uuid => counts.set(uuid, (counts.get(uuid) || 0) + 1));
+  const items: { card: CardData, count: number }[] = [];
+  counts.forEach((count, uuid) => { const card = byUuid.get(uuid); if (card) items.push({ card, count }); });
+  items.sort((a, b) => (a.card.cost || 0) - (b.card.cost || 0) || a.card.uuid.localeCompare(b.card.uuid));
+
+  const out: string[] = [];
+  out.push(`# ${deck.name || 'Deck'}`);
+  out.push('');
+  out.push(`- リーダー: ${leader ? `${leader.uuid} ${leader.name}` : (deck.leader_id || '（未設定）')}`);
+  out.push(`- メイン枚数: ${deck.card_uuids.length}枚（${items.length}種）`);
+  out.push('');
+  out.push('## リーダー');
+  out.push('');
+  out.push(leader ? formatCardBlock(leader) : '（リーダー未設定）');
+  out.push('');
+  out.push('## メインデッキ');
+  items.forEach(item => { out.push(''); out.push(formatCardBlock(item.card, item.count)); });
+  out.push('');
+  return out.join('\n');
+};
+
 const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCatalog }: { deck: DeckData, allCards: CardData[], onUpdateDeck: (d: DeckData) => void, onSave: () => void, onBack: () => void, onOpenCatalog: (mode: 'leader' | 'main') => void }) => {
   const [viewingCard, setViewingCard] = useState<CardData | null>(null);
   const [showStats, setShowStats] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [ownedCards] = useState<Record<string, number>>(getOwnedCards);
+
+  const handleExport = async () => {
+    const md = buildDeckMarkdown(deck, allCards);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(md);
+      copied = true;
+    } catch { /* クリップボード不可の環境ではダウンロードのみ */ }
+    try {
+      const safeName = (deck.name || 'deck').replace(/[^\w\-一-龠ぁ-んァ-ヶー]+/g, '_').slice(0, 40);
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${safeName}.md`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* noop */ }
+    setExportMsg(copied ? 'コピー＆ダウンロードしました' : 'ダウンロードしました');
+    setTimeout(() => setExportMsg(null), 2000);
+  };
 
   const groupedCards = useMemo(() => {
     const map = new Map<string, number>();
@@ -545,13 +611,15 @@ const DeckEditorView = ({ deck, allCards, onUpdateDeck, onSave, onBack, onOpenCa
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
-      <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '10px', alignItems: 'center' }}>
+      <div style={{ padding: '10px', background: '#333', borderBottom: '1px solid #444', display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto auto', gap: '10px', alignItems: 'center' }}>
         <button onClick={onBack} style={{ padding: '5px 10px', cursor: 'pointer' }}>←</button>
         <input value={deck.name} onChange={e => onUpdateDeck({...deck, name: e.target.value})} style={{ background: '#222', color: 'white', border: '1px solid #555', padding: '5px', borderRadius: '4px' }} />
+        <button onClick={handleExport} title="検証向けMarkdownで書き出し（クリップボード＋ファイル）" style={{ padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}>📤</button>
         <button onClick={() => setShowStats(true)} style={{ padding: '5px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}>📊</button>
         <div style={{ fontSize: '14px', fontWeight: 'bold' }}>{deck.card_uuids.length}枚</div>
         <button onClick={onSave} style={{ padding: '5px 15px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>保存</button>
       </div>
+      {exportMsg && <div style={{ padding: '6px 10px', background: '#2d6a4f', color: 'white', textAlign: 'center', fontSize: '13px' }}>{exportMsg}</div>}
       <div style={{ padding: '10px', background: '#2a2a2a', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>LEADER</div>
