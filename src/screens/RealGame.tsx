@@ -1262,6 +1262,10 @@ export const RealGame = ({
           padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
           border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
           minWidth: '220px', maxWidth: '320px',
+          // バナーが盤面中央に重なって背後のカードのタップを吸うと、相手キャラ等の
+          // 選択候補(EB01-061の【アタック時】等)が選べなくなる。バナー自体はクリックを
+          // 透過させ、内部のボタン(確定/パス)だけ操作可能にする。
+          pointerEvents: 'none',
         }}>
           <div style={{ fontWeight: 'bold', marginBottom: maxSelect > 1 ? '8px' : 0 }}>
             {decisionNote}{pendingRequest!.message}
@@ -1312,6 +1316,7 @@ export const RealGame = ({
                   color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
                   cursor: boardSelected.length >= minSelect && !isPending ? 'pointer' : 'not-allowed',
                   marginBottom: pendingRequest!.can_skip ? '8px' : 0,
+                  pointerEvents: 'auto',
                 }}
               >
                 確定
@@ -1327,6 +1332,7 @@ export const RealGame = ({
                 padding: '6px 20px', background: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER,
                 color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold',
                 cursor: isPending ? 'not-allowed' : 'pointer',
+                pointerEvents: 'auto',
               }}
             >
               パス
