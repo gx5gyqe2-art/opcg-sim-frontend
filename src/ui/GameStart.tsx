@@ -227,16 +227,16 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
             <div style={styles.sectionTitle}>Play</div>
 
             {/* Sandbox: ルール強制なしの自由操作 */}
-            <div style={styles.subGroupTitle}>サンドボックス（自由操作）</div>
+            <div style={styles.subGroupTitle}>サンドボックス（自由に操作）</div>
             <div style={styles.grid}>
               <MenuCard
-                label="1人回し"
+                label="ひとりで回す"
                 desc="Sandbox · Solo"
                 onClick={() => handleStartWithLog('sandbox', { role: 'both' })}
                 color="#2ecc71"
               />
               <MenuCard
-                label="対戦"
+                label="オンライン対戦"
                 desc="Sandbox · Online"
                 onClick={() => { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }}
                 color="#16a085"
@@ -244,16 +244,16 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
             </div>
 
             {/* Realgame: ルール強制エンジン */}
-            <div style={styles.subGroupTitle}>リアルゲーム（ルール強制）</div>
+            <div style={styles.subGroupTitle}>リアルゲーム（公式ルール）</div>
             <div style={styles.grid}>
               <MenuCard
-                label="1人回し（VS CPU）"
-                desc="Realgame · Solo (CPU)"
+                label="ひとりで回す"
+                desc="Realgame · Solo"
                 onClick={() => handleStartWithLog('normal')}
                 color="#e74c3c"
               />
               <MenuCard
-                label="対戦"
+                label="オンライン対戦"
                 desc="Realgame · Online"
                 onClick={() => {}}
                 disabled
