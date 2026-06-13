@@ -30,12 +30,16 @@ export const useGameAction = (
     if (externalGameId) setGameId(externalGameId);
   }, [externalGameId]);
 
-  // 【変更】引数でデッキIDを受け取るように修正
-  const startGame = useCallback(async (p1Deck: string, p2Deck: string) => {
+  // 【変更】引数でデッキIDを受け取るように修正。CPU 対戦時は cpuOptions を渡す。
+  const startGame = useCallback(async (
+    p1Deck: string,
+    p2Deck: string,
+    cpuOptions?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard'; cpuDeck?: string },
+  ) => {
     setIsPending(true);
     try {
       // APIに選択されたデッキIDを渡す
-      const { game_id, state, pending_request } = await apiClient.createGame(p1Deck, p2Deck);
+      const { game_id, state, pending_request } = await apiClient.createGame(p1Deck, p2Deck, cpuOptions);
       setGameId(game_id);
       setGameState(state);
       if (pending_request) {

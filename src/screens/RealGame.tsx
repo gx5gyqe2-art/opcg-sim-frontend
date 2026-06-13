@@ -80,6 +80,8 @@ export const RealGame = ({
   myPlayerId = 'both',
   roomName,
   onForceBack,
+  vsCpu = false,
+  cpuDifficulty = 'normal',
 }: {
   p1Deck: string,
   p2Deck: string,
@@ -89,9 +91,15 @@ export const RealGame = ({
   myPlayerId?: 'both' | 'p1' | 'p2',
   roomName?: string,
   onForceBack?: () => void,
+  // ▼ CPU 対戦用（人間=p1 固定・REST＋/api/game/cpu/step ポーリング・WS 不使用）
+  vsCpu?: boolean,
+  cpuDifficulty?: 'easy' | 'normal' | 'hard',
 }) => {
   // オンライン対戦かどうか（'both' = 従来のソロ／ホットシート）
   const isOnline = myPlayerId === 'p1' || myPlayerId === 'p2';
+  // 視点を自陣固定にするか（オンライン or CPU 対戦）。CPU 対戦の人間は常に p1。
+  const fixedViewer = isOnline || vsCpu;
+  const selfId: 'p1' | 'p2' = isOnline ? (myPlayerId as 'p1' | 'p2') : 'p1';
 
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -101,6 +109,9 @@ export const RealGame = ({
   const [readyStates, setReadyStates] = useState<{ p1: boolean; p2: boolean }>({ p1: false, p2: false });
   const [deckPreview, setDeckPreview] = useState<{ p1: { leader_id?: string; leader_name?: string } | null; p2: { leader_id?: string; leader_name?: string } | null }>({ p1: null, p2: null });
   const [wsConnected, setWsConnected] = useState(false);
+  // CPU 対戦: CPU 思考中フラグ（人間操作ロック表示用）と多重ポーリング防止。
+  const [cpuThinking, setCpuThinking] = useState(false);
+  const cpuBusyRef = useRef(false);
   // WebSocket 再接続管理
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,13 +153,14 @@ export const RealGame = ({
   // この端末を操作しているプレイヤー視点。
   // ・ソロ(both): 現在の手番プレイヤー（下側操作者）が常に切り替わる従来挙動。
   // ・オンライン: 自分の役割(p1/p2)で固定し、自陣を常に下側に描画する。
-  const viewerId: "p1" | "p2" = isOnline ? (myPlayerId as "p1" | "p2") : (activePlayerId ?? (CONST.PLAYER_KEYS.P1 as "p1"));
+  const viewerId: "p1" | "p2" = fixedViewer ? selfId : (activePlayerId ?? (CONST.PLAYER_KEYS.P1 as "p1"));
   const opponentId: "p1" | "p2" = viewerId === "p1" ? "p2" : "p1";
-  // オンライン時、メインの操作が可能なのは自分の手番のときのみ。
-  const isMyTurn = !isOnline || activePlayerId === myPlayerId;
+  // 自陣固定時(オンライン/CPU)、メインの操作が可能なのは自分の手番のときのみ。
+  const isMyTurn = !fixedViewer || activePlayerId === selfId;
   // 選択要求(マリガン/ブロッカー/カウンター/効果選択 等)が自分宛てかどうか。
-  const isMyDecision = !isOnline || pendingRequest?.player_id === myPlayerId;
+  const isMyDecision = !fixedViewer || pendingRequest?.player_id === selfId;
   // 盤面(PIXI)を初期化・描画してよいか。オンラインはルームが PLAYING になってから。
+  // CPU 対戦はソロと同じく createGame 完了（isSetupComplete）後。
   const boardReady = isOnline ? roomStatus === 'PLAYING' : isSetupComplete;
 
   const MAX_LOG = 50;
@@ -175,7 +187,7 @@ export const RealGame = ({
   }, []);
 
   const { startGame, sendAction, sendBattleAction, isPending, errorToast, setErrorToast } = useGameAction(
-    isOnline ? viewerId : (activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1")),
+    fixedViewer ? selfId : (activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1")),
     setGameState,
     setPendingRequest,
     pendingRequest,
@@ -256,6 +268,43 @@ export const RealGame = ({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- WS接続はオンライン時マウント1回のみ。addEventLog等は最新を本体で参照
   }, [isOnline, onlineGameId]);
+
+  // CPU 対戦: CPU(p2) が行動すべき状況なら /api/game/cpu/step をポーリングして
+  // 1 手ずつ盤面へ反映する（ステップ逐次の演出）。多重起動は cpuBusyRef でガードする。
+  useEffect(() => {
+    if (!vsCpu) return;
+    const gid = gameState?.game_id;
+    if (!gid || gameState?.turn_info?.winner) return;
+    // CPU が行動すべきか: 選択要求が p2 宛て、または(要求なしで)手番が p2。
+    const cpuShouldAct = pendingRequest
+      ? pendingRequest.player_id === 'p2'
+      : activePlayerId === 'p2';
+    if (!cpuShouldAct || cpuBusyRef.current) return;
+
+    cpuBusyRef.current = true;
+    setCpuThinking(true);
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+    (async () => {
+      try {
+        await sleep(450); // 初手の思考待ち（演出）
+        for (let i = 0; i < 2000; i++) {
+          const resp = await apiClient.cpuStep(gid);
+          if (!isMountedRef.current) return;
+          if (resp.game_state) setGameState(resp.game_state);
+          setPendingRequest(resp.pending_request ?? null);
+          if (resp.action_events?.length) addEventLog(resp.action_events);
+          if (resp.waiting_for !== 'cpu') break;
+          await sleep(700); // 1 手ずつ見せる
+        }
+      } catch (e) {
+        if (isMountedRef.current) setErrorToast(`CPUエラー: ${(e as Error).message}`);
+      } finally {
+        cpuBusyRef.current = false;
+        if (isMountedRef.current) setCpuThinking(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- CPU 駆動は手番/要求/勝敗の変化で再評価。ref で多重起動を防止
+  }, [vsCpu, gameState?.game_id, gameState?.turn_info?.active_player_id, gameState?.turn_info?.winner, pendingRequest, activePlayerId]);
 
   // オンライン対戦のロビー操作（デッキ選択/開始/キック）。
   const sendRuleLobbyAction = useCallback(async (
@@ -559,8 +608,11 @@ export const RealGame = ({
     setLayoutCoords(coords.turnEndPos);
 
     // オンラインではルーム START 時にサーバ側で対局生成済み。状態は WS で届くため
-    // ここで createGame は呼ばない（ソロのみ自前でゲーム生成）。
-    if (!isOnline) startGame(p1DeckId, p2DeckId);
+    // ここで createGame は呼ばない（ソロ/CPU のみ自前でゲーム生成）。
+    // CPU 対戦は p2 を CPU として生成（p2DeckId を CPU のデッキに使う）。
+    if (!isOnline) {
+      startGame(p1DeckId, p2DeckId, vsCpu ? { vsCpu: true, cpuDifficulty, cpuDeck: p2DeckId } : undefined);
+    }
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
@@ -602,14 +654,14 @@ export const RealGame = ({
       border.lineTo(W, midY);
       app.stage.addChild(border);
 
-      // オンラインは自陣(viewerId)を常に下側へ。ソロは現手番を下側へ（従来挙動）。
-      const bottomIsP2 = isOnline ? viewerId === 'p2' : activePlayerId === 'p2';
+      // 自陣固定時(オンライン/CPU)は自陣(viewerId)を常に下側へ。ソロは現手番を下側へ（従来挙動）。
+      const bottomIsP2 = fixedViewer ? viewerId === 'p2' : activePlayerId === 'p2';
       const bottomPlayer = bottomIsP2 ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = bottomIsP2 ? gameState.players.p1 : gameState.players.p2;
 
       const selectedSet = new Set(boardSelected);
-      // オンライン対戦では相手(上側)の手札の中身を伏せて描画する。
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet, isOnline);
+      // オンライン/CPU 対戦では相手(上側)の手札の中身を伏せて描画する。
+      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet, fixedViewer);
       topSide.y = 0;
 
       const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, selectableUuids, selectedSet, false);
@@ -918,6 +970,24 @@ export const RealGame = ({
 
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
       <EffectToast toasts={effectToasts} />
+
+      {/* CPU 対戦: 手番/勝敗の表示と CPU 思考中インジケータ */}
+      {vsCpu && (
+        <div style={{ position: 'absolute', top: '8px', right: '10px', zIndex: Z_INDEX.OVERLAY + 20, display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.6)', border: '1px solid #555', borderRadius: '4px', padding: '4px 10px' }}>
+          {cpuThinking && (
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f1c40f', display: 'inline-block', flexShrink: 0, animation: 'pulse 1s infinite' }} />
+          )}
+          <span style={{ color: 'white', fontSize: '11px' }}>
+            {gameState?.turn_info?.winner
+              ? (gameState.turn_info.winner === selfId ? '🏆 勝利' : '敗北')
+              : cpuThinking
+              ? 'CPU 思考中...'
+              : isMyTurn
+              ? (isMyDecision || !pendingRequest ? 'あなたの番' : '選択してください')
+              : 'CPU の番'}
+          </span>
+        </div>
+      )}
 
       {/* オンライン対戦: 接続状況と手番/待機状態の表示 */}
       {isOnline && (

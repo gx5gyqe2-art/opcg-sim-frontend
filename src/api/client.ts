@@ -1,4 +1,4 @@
-import type { GameActionRequest, BattleActionRequest, GameActionResult, PendingRequest } from './types';
+import type { GameActionRequest, BattleActionRequest, GameActionResult, PendingRequest, CpuStepResult } from './types';
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
@@ -41,7 +41,9 @@ export const apiClient = {
 
   async createGame(
     p1Deck: string,
-    p2Deck: string
+    p2Deck: string,
+    // CPU 対戦オプション（未指定＝従来のソロ/ホットシート）。
+    opts?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard'; cpuDeck?: string }
   ): Promise<{ game_id: string; state: GameState; pending_request?: PendingRequest }> {
     const res = await fetchWithLog(`${BASE_URL}${ENDPOINTS.CREATE_GAME}`, {
       method: 'POST',
@@ -49,7 +51,12 @@ export const apiClient = {
         p1_deck: p1Deck,
         p2_deck: p2Deck,
         p1_name: CONST.PLAYER_KEYS.P1,
-        p2_name: CONST.PLAYER_KEYS.P2
+        p2_name: CONST.PLAYER_KEYS.P2,
+        ...(opts?.vsCpu ? {
+          vs_cpu: true,
+          cpu_difficulty: opts.cpuDifficulty || 'normal',
+          cpu_deck: opts.cpuDeck || p2Deck,
+        } : {}),
       }),
     });
 
@@ -83,11 +90,24 @@ export const apiClient = {
     const pendingKey = CONST.API_ROOT_KEYS.PENDING_REQUEST as keyof typeof data;
     const pendingRequest = data[pendingKey];
 
-    return { 
-      game_id: gameId, 
-      state: newState, 
-      pending_request: pendingRequest 
+    return {
+      game_id: gameId,
+      state: newState,
+      pending_request: pendingRequest
     };
+  },
+
+  // CPU 対戦: CPU(p2) の次の 1 手を進める（ポーリング駆動）。
+  async cpuStep(gameId: string): Promise<CpuStepResult> {
+    const res = await fetchWithLog(`${BASE_URL}/api/game/cpu/step`, {
+      method: 'POST',
+      body: JSON.stringify({ game_id: gameId }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error?.message || 'CPU step failed');
+    }
+    return data as CpuStepResult;
   },
 
   async createSandboxGame(

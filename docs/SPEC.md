@@ -22,11 +22,13 @@
 
 ### モード × 対戦形態のマトリクス
 ```
-              ソロ                         オンライン対戦
-フリー    SandboxGame(role='both')   RoomLobby → SandboxGame(role=p1/p2) + /ws/sandbox
-ルール    RealGame(myPlayerId='both')  RuleLobby → RealGame(myPlayerId=p1/p2) + /ws/game
+              ソロ                         オンライン対戦                         CPU対戦
+フリー    SandboxGame(role='both')   RoomLobby → SandboxGame(role=p1/p2)+/ws/sandbox   —
+ルール    RealGame(myPlayerId='both')  RuleLobby → RealGame(myPlayerId=p1/p2)+/ws/game   RealGame(vsCpu)+/api/game/cpu/step
 ```
-メニュー導線（`GameStart`）: `PLAY → モード(フリー/ルール) → プレイ(ソロ/オンライン対戦)`。
+メニュー導線（`GameStart`）: `PLAY → モード(フリー/ルール) → プレイ(ソロ/オンライン対戦/CPU対戦)`。
+CPU 対戦はルールモードのみ。選択後に難易度（かんたん/ふつう/つよい）を選ぶ。詳細は
+[`docs/CPU_BATTLE_PLAN.md`](CPU_BATTLE_PLAN.md)。
 
 ---
 
@@ -37,6 +39,7 @@
 
 - `myPlayerId='both'`（ソロ／ホットシート）: 従来挙動。現在の手番プレイヤーを下側に描画し、両者を1端末で操作。`apiClient.createGame` で対局生成。
 - `myPlayerId='p1'|'p2'`（オンライン対戦）: 後述のオンライン挙動。
+- `vsCpu`（CPU 対戦）: 人間=p1 固定。後述 §1.1.5。
 
 ### 1.1 オンライン対戦
 - **接続**: `/ws/game/{gameId}` を購読（指数バックオフ再接続）。`STATE_UPDATE` で `roomStatus`／`ready_states`／`deck_preview`／`game_state`／`pending_request` を反映。
@@ -45,6 +48,15 @@
 - **手番ゲート**: `isMyTurn`（自分の手番のときのみメイン操作可）／`isMyDecision`（選択要求 `pending_request.player_id===myPlayerId` のときのみ各種オーバーレイ/モーダルを表示・操作可）。攻撃時は防御側だけがブロッカー/カウンターを選べる。
 - **状態同期**: 自分のアクションは `/api/game/action`・`/api/game/battle`（REST）で送信し、サーバが全接続へブロードキャストする。接続状況・手番待ちバナーを表示。
 - **離脱**: オンライン時の TOP ボタンは `onForceBack`（ルールロビーへ戻る）。
+
+### 1.1.5 CPU 対戦（`vsCpu`）
+- **単一クライアント・REST のみ**（WS 不使用）。人間=p1、CPU=p2。`fixedViewer = isOnline || vsCpu` で
+  自陣を下側固定・相手(CPU)手札を裏向き・手番ゲート（`isMyTurn`/`isMyDecision`）をオンラインと共通化。
+- **生成**: ソロ用「VS CPU SETUP」画面で人間(p1)・CPU(p2) のデッキを選び、`apiClient.createGame(p1,p2,{vsCpu,cpuDifficulty,cpuDeck})`。
+- **CPU 駆動**: CPU(p2) が行動すべき状況（p2 宛の `pending_request`、または p2 手番）で
+  `apiClient.cpuStep(gameId)` を 700ms 間隔でポーリングし、`waiting_for!=='cpu'` になるまで 1 手ずつ
+  盤面・`EffectToast`・`ActionLog` へ反映する（`cpuBusyRef` で多重起動防止）。CPU 思考中バナーを表示。
+- **離脱**: TOP ボタンは `onBack`（メニューへ戻る）。
 
 ### 1.2 対局中の操作（共通）
 - 盤面ゾーン操作（手札/場/デッキ/トラッシュ/ライフ/ドン!!）、カードアクション（`ui/CardActionMenu.tsx`／`ui/CardDetailSheet.tsx`）。
@@ -68,7 +80,8 @@
 
 | メソッド | 用途 |
 |---|---|
-| `createGame` / `sendAction` / `sendBattleAction` | ルールモードの対局生成・アクション・戦闘アクション（`/api/game/*`） |
+| `createGame`（CPU オプション可） / `sendAction` / `sendBattleAction` | ルールモードの対局生成・アクション・戦闘アクション（`/api/game/*`） |
+| `cpuStep` | CPU 対戦で CPU の次の 1 手を進める（`/api/game/cpu/step`）。`{cpu_acted, cpu_event, waiting_for}` を返す |
 | `createRuleRoom` / `sendRuleAction` | ルールモードのオンライン ルーム作成・ロビー操作（`/api/rule/*`） |
 | `createSandboxGame` / `sendSandboxAction` | フリーモードの盤面操作（`/api/sandbox/*`） |
 

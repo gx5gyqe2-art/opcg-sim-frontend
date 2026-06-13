@@ -80,3 +80,16 @@ export interface GameActionResult {
   };
   action_events?: ActionEvent[];
 }
+
+// CPU 対戦のポーリング待ち状態。
+//   cpu            : CPU が続けて行動する（フロントは続けて step を呼ぶ）
+//   human          : 人間の手番（メイン操作待ち）
+//   human_decision : 人間宛の選択要求（マリガン/ブロッカー/カウンター/効果選択）
+//   game_over      : 勝敗確定
+export type CpuWaitingFor = 'cpu' | 'human' | 'human_decision' | 'game_over';
+
+export interface CpuStepResult extends GameActionResult {
+  cpu_acted?: boolean;
+  cpu_event?: ActionEvent | null;
+  waiting_for?: CpuWaitingFor;
+}
