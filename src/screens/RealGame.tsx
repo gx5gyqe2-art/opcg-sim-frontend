@@ -433,28 +433,46 @@ export const RealGame = ({
     handleAction(CONST.c_to_s_interface.GAME_ACTIONS.TYPES.TURN_END);
   };
 
+  // 盤面上で実際にクリックして選べるカードの集合。盤面選択モード(下記 isBoardSelectMode)の
+  // 判定に使う。相手の手札は裏向きで個別選択できないため除外する（含めると「盤面で選べる」と
+  // 誤判定してモーダルを出さず、ハイライト対象が無くソフトロックする）。
   const boardUuids = gameState ? new Set<string>([
     ...(gameState.players.p1.zones.field.map(c => c.uuid)),
-    ...(gameState.players.p1.zones.hand.map(c => c.uuid)),
     ...(gameState.players.p2.zones.field.map(c => c.uuid)),
-    ...(gameState.players.p2.zones.hand.map(c => c.uuid)),
     ...(gameState.players.p1.leader ? [gameState.players.p1.leader.uuid] : []),
     ...(gameState.players.p2.leader ? [gameState.players.p2.leader.uuid] : []),
     ...(gameState.players.p1.stage ? [gameState.players.p1.stage.uuid] : []),
     ...(gameState.players.p2.stage ? [gameState.players.p2.stage.uuid] : []),
+    // 手札は自分(viewer)の分のみクリック可能。
+    ...(gameState.players[viewerId]?.zones.hand.map(c => c.uuid) ?? []),
   ]) : new Set<string>();
 
+  // 盤面選択モードに切り替えない（専用のモーダル/パネルを持つ、または「カードを選ぶ」操作
+  // ではない）アクション。これら以外は、選択候補がすべて盤面上にあれば覆わない盤面選択UIを使う。
+  const BOARD_SELECT_EXCLUDED_ACTIONS = new Set<string>([
+    CONST.c_to_s_interface.PENDING_ACTION_TYPES.ARRANGE_DECK,   // デッキ並び替え(DnDモーダル)
+    CONST.c_to_s_interface.PENDING_ACTION_TYPES.ORDER_CARDS,    // 順番指定(モーダル)
+    CONST.c_to_s_interface.PENDING_ACTION_TYPES.SELECT_RESOURCE,// ドン!!返却等(モーダル)
+    CONST.c_to_s_interface.PENDING_ACTION_TYPES.CONFIRM_DECISION,
+    CONST.c_to_s_interface.GAME_ACTIONS.TYPES.MULLIGAN,
+    CONST.c_to_s_interface.GAME_ACTIONS.TYPES.KEEP_HAND,
+    CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN,
+    // RealGame 内で文字列リテラルとして扱う専用UIアクション(Yes/No確認・コスト宣言・メイン操作)。
+    'CONFIRM_OPTIONAL', 'CONFIRM_TRIGGER', 'DECLARE_COST', 'MAIN_ACTION',
+  ]);
+
+  // 任意効果などで「盤面上のカードを選ぶ」要求のとき、画面を覆うモーダルを出すと盤面の
+  // カードをクリックできない。選択候補がすべて盤面上にあれば、覆わずにカードをハイライト＋
+  // コンパクトなバナーで直接クリック選択させる（SEARCH_AND_SELECT/カウンター/ブロッカーに
+  // 限らず全ての盤面対象選択へ一般化）。デッキ/トラッシュ等の非盤面候補を含む選択は従来通り
+  // モーダル（showSearchModal）にフォールバックする。
   const isBoardSelectMode =
     isMyDecision &&
     !isAttackTargeting &&
     !!pendingRequest &&
-    (pendingRequest.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
-     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER ||
-     // ブロッカー選択も盤面（防御側フィールド）からの選択。これが抜けていたため
-     // 「ブロッカーを選択」要求でカードをクリックできず、パスしかできなかった（=ブロック不能）。
-     pendingRequest.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_BLOCKER) &&
+    !BOARD_SELECT_EXCLUDED_ACTIONS.has(pendingRequest.action) &&
     (pendingRequest.selectable_uuids?.length ?? 0) > 0 &&
-    pendingRequest.selectable_uuids!.some(uuid => boardUuids.has(uuid));
+    pendingRequest.selectable_uuids!.every(uuid => boardUuids.has(uuid));
 
   const selectableUuids = isBoardSelectMode
     ? new Set(pendingRequest!.selectable_uuids)
