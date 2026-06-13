@@ -19,6 +19,10 @@ interface GameStartProps {
 const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
+  // PLAYメニューの階層ナビ: root → mode(フリー/ルール) → match(ソロ/オンライン対戦)
+  const [playStep, setPlayStep] = useState<'root' | 'mode' | 'match'>('root');
+  const [playMode, setPlayMode] = useState<'free' | 'rule'>('free');
+
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [contentScale, setContentScale] = useState(1);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -45,7 +49,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
         setContentScale(1);
       }
     }
-  }, [windowSize, isMobile]);
+  }, [windowSize, isMobile, playStep, playMode]);
 
   // ▼▼▼ 修正: モーダル表示ロジックを削除し、直接 onStart を呼ぶ形に戻しました ▼▼▼
   const handleStartWithLog = (
@@ -127,6 +131,11 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
     subGroupTitle: {
       fontSize: '13px', color: '#bbb', letterSpacing: '1px', margin: '8px 0 2px 0', fontWeight: 'bold' as const,
     },
+    backBtn: {
+      alignSelf: 'flex-start' as const, marginTop: '10px', background: 'transparent',
+      border: '1px solid #7f8c8d', color: '#bbb', padding: '8px 18px', borderRadius: '20px',
+      cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px'
+    },
     grid: { display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' },
     menuCard: (color: string) => ({
       background: 'rgba(255,255,255,0.05)', border: `1px solid ${color}`, borderRadius: '8px', padding: '20px',
@@ -199,69 +208,99 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
         <div ref={contentRef} style={styles.scaledContent}>
           <div style={styles.title}>OPCG SIM</div>
 
-          <div style={styles.section}>
-            <div style={styles.sectionTitle}>Deck & Cards</div>
-            <div style={styles.grid}>
-              <MenuCard 
-                label="デッキ作成 / 一覧" 
-                desc="Deck Builder" 
-                onClick={() => { 
-                  logger.log({level:'info', action:'menu.deck_builder', msg: 'Open DeckBuilder'}); 
-                  onDeckBuilder(); 
-                }} 
-                color="#3498db" 
-              />
-              <MenuCard 
-                label="カードリスト" 
-                desc="Card Catalog" 
-                onClick={() => { 
-                  logger.log({level:'info', action:'menu.card_list', msg: 'Open CardList'}); 
-                  onCardList(); 
-                }} 
-                color="#e67e22" 
-              />
-            </div>
-          </div>
+          {/* === 第1階層: PLAY 1ボタン + Deck & Cards === */}
+          {playStep === 'root' && (
+            <>
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Play</div>
+                <div style={styles.grid}>
+                  <MenuCard
+                    label="▶ PLAY"
+                    desc="ゲームを始める"
+                    onClick={() => { logger.log({level:'info', action:'menu.play', msg: 'Open Play menu'}); setPlayStep('mode'); }}
+                    color="#f1c40f"
+                  />
+                </div>
+              </div>
 
-          <div style={styles.section}>
-            <div style={styles.sectionTitle}>Play</div>
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Deck & Cards</div>
+                <div style={styles.grid}>
+                  <MenuCard
+                    label="デッキ作成 / 一覧"
+                    desc="Deck Builder"
+                    onClick={() => {
+                      logger.log({level:'info', action:'menu.deck_builder', msg: 'Open DeckBuilder'});
+                      onDeckBuilder();
+                    }}
+                    color="#3498db"
+                  />
+                  <MenuCard
+                    label="カードリスト"
+                    desc="Card Catalog"
+                    onClick={() => {
+                      logger.log({level:'info', action:'menu.card_list', msg: 'Open CardList'});
+                      onCardList();
+                    }}
+                    color="#e67e22"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
-            {/* フリーモード: ルール強制なしの自由操作 */}
-            <div style={styles.subGroupTitle}>フリーモード（自由に操作）</div>
-            <div style={styles.grid}>
-              <MenuCard
-                label="ソロプレイ"
-                desc="Free · Solo"
-                onClick={() => handleStartWithLog('sandbox', { role: 'both' })}
-                color="#2ecc71"
-              />
-              <MenuCard
-                label="オンライン対戦"
-                desc="Free · Online"
-                onClick={() => { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }}
-                color="#16a085"
-              />
+          {/* === 第2階層: フリー / ルール の選択 === */}
+          {playStep === 'mode' && (
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>Play — モードを選ぶ</div>
+              <div style={styles.grid}>
+                <MenuCard
+                  label="フリーモード"
+                  desc="自由に操作（ルールなし）"
+                  onClick={() => { setPlayMode('free'); setPlayStep('match'); }}
+                  color="#2ecc71"
+                />
+                <MenuCard
+                  label="ルールモード"
+                  desc="公式ルールで自動進行"
+                  onClick={() => { setPlayMode('rule'); setPlayStep('match'); }}
+                  color="#e74c3c"
+                />
+              </div>
+              <button style={styles.backBtn} onClick={() => setPlayStep('root')}>← 戻る</button>
             </div>
+          )}
 
-            {/* ルールモード: ルール強制エンジン */}
-            <div style={styles.subGroupTitle}>ルールモード（自動進行）</div>
-            <div style={styles.grid}>
-              <MenuCard
-                label="ソロプレイ"
-                desc="Rule · Solo"
-                onClick={() => handleStartWithLog('normal')}
-                color="#e74c3c"
-              />
-              <MenuCard
-                label="オンライン対戦"
-                desc="Rule · Online"
-                onClick={() => {}}
-                disabled
-                badge="今後実装予定"
-                color="#7f8c8d"
-              />
+          {/* === 第3階層: ソロプレイ / オンライン対戦 の選択 === */}
+          {playStep === 'match' && (
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>
+                {playMode === 'free' ? 'フリーモード' : 'ルールモード'} — プレイを選ぶ
+              </div>
+              <div style={styles.grid}>
+                <MenuCard
+                  label="ソロプレイ"
+                  desc={playMode === 'free' ? 'Free · Solo' : 'Rule · Solo'}
+                  onClick={() => {
+                    if (playMode === 'free') handleStartWithLog('sandbox', { role: 'both' });
+                    else handleStartWithLog('normal');
+                  }}
+                  color="#2ecc71"
+                />
+                <MenuCard
+                  label="オンライン対戦"
+                  desc={playMode === 'free' ? 'Free · Online' : 'Rule · Online'}
+                  onClick={() => {
+                    if (playMode === 'free') { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }
+                  }}
+                  disabled={playMode === 'rule'}
+                  badge={playMode === 'rule' ? '今後実装予定' : undefined}
+                  color="#16a085"
+                />
+              </div>
+              <button style={styles.backBtn} onClick={() => setPlayStep('mode')}>← 戻る</button>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
