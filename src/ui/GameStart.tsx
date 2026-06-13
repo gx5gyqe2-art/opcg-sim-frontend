@@ -124,6 +124,9 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
       fontSize: '18px', color: '#8b8b8b', borderBottom: '1px solid #444', paddingBottom: '5px', marginBottom: '5px',
       textTransform: 'uppercase' as const, letterSpacing: '2px'
     },
+    subGroupTitle: {
+      fontSize: '13px', color: '#bbb', letterSpacing: '1px', margin: '8px 0 2px 0', fontWeight: 'bold' as const,
+    },
     grid: { display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' },
     menuCard: (color: string) => ({
       background: 'rgba(255,255,255,0.05)', border: `1px solid ${color}`, borderRadius: '8px', padding: '20px',
@@ -165,18 +168,20 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
     })
   }), [isMobile, contentScale]);
 
-  const MenuCard = ({ label, desc, onClick, color = '#7f8c8d' }: { label: string, desc: string, onClick: () => void, color?: string }) => (
-    <div 
-      style={styles.menuCard(color)}
-      onClick={onClick}
+  const MenuCard = ({ label, desc, onClick, color = '#7f8c8d', disabled = false, badge }: { label: string, desc: string, onClick: () => void, color?: string, disabled?: boolean, badge?: string }) => (
+    <div
+      style={{ ...styles.menuCard(color), ...(disabled ? { opacity: 0.45, cursor: 'not-allowed', borderStyle: 'dashed' as const } : {}) }}
+      onClick={disabled ? undefined : onClick}
       role="button"
-      tabIndex={0}
-      className="hover-scale"
-      onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-      onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
+      className={disabled ? undefined : "hover-scale"}
+      onMouseOver={(e) => { if (!disabled) e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+      onMouseOut={(e) => { if (!disabled) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
     >
       <div style={styles.cardLabel}>{label}</div>
       <div style={styles.cardDesc}>{desc}</div>
+      {badge && <div style={{ fontSize: '11px', color: '#f1c40f', border: '1px solid #f1c40f', borderRadius: '10px', padding: '1px 8px', marginTop: '4px' }}>{badge}</div>}
     </div>
   );
 
@@ -219,26 +224,41 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
           </div>
 
           <div style={styles.section}>
-            <div style={styles.sectionTitle}>Simulation</div>
+            <div style={styles.sectionTitle}>Play</div>
+
+            {/* フリーモード: ルール強制なしの自由操作 */}
+            <div style={styles.subGroupTitle}>フリーモード（自由に操作）</div>
             <div style={styles.grid}>
-              {/* ▼▼▼ 修正: handleStartWithLog を呼んで、デッキID空で開始する ▼▼▼ */}
-              <MenuCard 
-                label="1人回しモード" 
-                desc="Solo Sandbox Mode" 
-                onClick={() => handleStartWithLog('sandbox', { role: 'both' })} 
-                color="#2ecc71" 
+              <MenuCard
+                label="ソロプレイ"
+                desc="Free · Solo"
+                onClick={() => handleStartWithLog('sandbox', { role: 'both' })}
+                color="#2ecc71"
               />
               <MenuCard
-                label="対戦モード"
-                desc="Online Multiplayer"
+                label="オンライン対戦"
+                desc="Free · Online"
                 onClick={() => { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }}
-                color="#9b59b6"
+                color="#16a085"
               />
-              <MenuCard 
-                label="自動モード" 
-                desc="VS CPU (Rule Enforced)" 
-                onClick={() => handleStartWithLog('normal')} 
-                color="#e74c3c" 
+            </div>
+
+            {/* ルールモード: ルール強制エンジン */}
+            <div style={styles.subGroupTitle}>ルールモード（自動進行）</div>
+            <div style={styles.grid}>
+              <MenuCard
+                label="ソロプレイ"
+                desc="Rule · Solo"
+                onClick={() => handleStartWithLog('normal')}
+                color="#e74c3c"
+              />
+              <MenuCard
+                label="オンライン対戦"
+                desc="Rule · Online"
+                onClick={() => {}}
+                disabled
+                badge="今後実装予定"
+                color="#7f8c8d"
               />
             </div>
           </div>
