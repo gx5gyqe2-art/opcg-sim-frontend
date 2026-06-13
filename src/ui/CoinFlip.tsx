@@ -180,6 +180,7 @@ export const CoinFlip: React.FC<{
         disabled={!revealed}
         style={{
           padding: '11px 34px', borderRadius: '999px', fontWeight: 800, fontSize: '14px',
+          fontFamily: 'inherit',  // ネイティブ button は font を継承しないため、全体の :root フォントへ揃える
           letterSpacing: '1px',
           color: revealed ? '#06281f' : MUTED,
           background: revealed ? ACCENT : 'transparent',
