@@ -12,6 +12,8 @@ interface CardActionMenuProps {
   onAction: (type: string, payload: Record<string, unknown>) => Promise<void>;
   onShowDetail: () => void;
   onClose: () => void;
+  // ドン!!ゾーンから対象を選んで開いた場合、最初から枚数選択(ステッパー)を表示する。
+  initialDonMode?: boolean;
 }
 
 const PANEL_WIDTH = 170;
@@ -19,14 +21,15 @@ const PANEL_WIDTH = 170;
 // カードタップ時にカード近傍へ表示するコンパクトな操作メニュー。
 // 詳細シートを毎回開かずに、攻撃/ドン付与/効果起動/登場を即実行できる。
 export const CardActionMenu: React.FC<CardActionMenuProps> = ({
-  card, location, activeDonCount, anchor, onAction, onShowDetail, onClose,
+  card, location, activeDonCount, anchor, onAction, onShowDetail, onClose, initialDonMode = false,
 }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
   const { Z_INDEX, SHAPE } = LAYOUT_PARAMS;
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   // ドン付与は枚数選択のためパネル内をステッパー表示に切り替える。
-  const [donMode, setDonMode] = useState(false);
+  // ドン!!ゾーンから対象を選んで開いた場合は最初からステッパーを表示する。
+  const [donMode, setDonMode] = useState(initialDonMode);
   const [donAmount, setDonAmount] = useState(1);
 
   const actions = getAvailableActions(card, location, true, activeDonCount);

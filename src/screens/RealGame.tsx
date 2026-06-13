@@ -8,6 +8,7 @@ import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardActionMenu } from '../ui/CardActionMenu';
 import { CardSelectModal } from '../ui/CardSelectModal';
 import { getAvailableActions } from '../game/cardActions';
+import { normalizeCardType } from '../game/cardTypes';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
@@ -127,10 +128,14 @@ export const RealGame = ({
     card: CardInstance;
     location: string;
     anchor: { x: number; y: number };
+    // ドン!!ゾーンから対象を選んで開いた場合、最初から枚数ステッパーを表示する。
+    donMode?: boolean;
   } | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
+  // ドン!!付与の対象選択モード（自分のアクティブドン!!をタップして開始）。
+  const [isDonTargeting, setIsDonTargeting] = useState(false);
   const [boardSelected, setBoardSelected] = useState<string[]>([]);
 
   const [layoutCoords, setLayoutCoords] = useState<{ x: number, y: number } | null>(null);
@@ -455,6 +460,18 @@ export const RealGame = ({
     ? new Set(pendingRequest!.selectable_uuids)
     : new Set<string>();
 
+  // ドン!!付与の対象候補: 自陣のリーダーとフィールドのキャラクター。
+  const donTargetUuids = (isDonTargeting && gameState)
+    ? new Set<string>([
+        ...(gameState.players[viewerId]?.leader ? [gameState.players[viewerId]!.leader!.uuid] : []),
+        ...((gameState.players[viewerId]?.zones.field ?? [])
+          .filter(c => normalizeCardType(c.type) === 'CHARACTER')
+          .map(c => c.uuid)),
+      ])
+    : new Set<string>();
+  // 盤面のハイライト集合: ドン!!付与中はその対象候補、それ以外は選択要求の候補。
+  const highlightUuids = isDonTargeting ? donTargetUuids : selectableUuids;
+
   const minSelect = pendingRequest?.constraints?.min ?? 1;
   const maxSelect = pendingRequest?.constraints?.max ?? 1;
 
@@ -492,6 +509,18 @@ export const RealGame = ({
       return;
     }
 
+    // ドン!!付与の対象選択中: 自陣のリーダー/キャラクターをタップしたら
+    // そのカードへ何枚付与するかのステッパー(ミニメニュー)を開く。
+    if (isDonTargeting) {
+      if (donTargetUuids.has(card.uuid)) {
+        const isLeader = gameState.players[viewerId]?.leader?.uuid === card.uuid;
+        setActionMenu({ card, location: isLeader ? 'leader' : 'field', anchor: pos, donMode: true });
+        setIsDonTargeting(false);
+      }
+      // 対象外のタップはターゲティングを継続（無視）。
+      return;
+    }
+
     if (isBoardSelectMode) {
       if (selectableUuids.has(card.uuid)) {
         if (maxSelect === 1) {
@@ -504,6 +533,16 @@ export const RealGame = ({
           );
         }
       }
+      return;
+    }
+
+    // 自陣のアクティブドン!!をタップ → ドン!!付与の対象選択モードを開始する。
+    // 対象（自リーダー/自キャラ）をハイライトし、続けて枚数を選ばせる。
+    if (card.uuid === `donactive-${viewerId}` && isMyTurn && activeDonCount > 0) {
+      setActionMenu(null);
+      setSelectedCard(null);
+      setIsDetailMode(false);
+      setIsDonTargeting(true);
       return;
     }
 
@@ -579,6 +618,10 @@ export const RealGame = ({
     if (pendingRequest && isAttackTargeting) {
       setIsAttackTargeting(false);
       setAttackingCardUuid(null);
+    }
+    // ドン!!付与の対象選択中に選択要求が割り込んだら解除する。
+    if (pendingRequest && isDonTargeting) {
+      setIsDonTargeting(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- request_id 変化時のみ実行する意図（pendingRequest/isAttackTargeting は最新値を本体で参照）
   }, [pendingRequest?.request_id]);
@@ -661,10 +704,10 @@ export const RealGame = ({
 
       const selectedSet = new Set(boardSelected);
       // オンライン/CPU 対戦では相手(上側)の手札の中身を伏せて描画する。
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet, fixedViewer);
+      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, highlightUuids, selectedSet, fixedViewer);
       topSide.y = 0;
 
-      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, selectableUuids, selectedSet, false);
+      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false);
       bottomSide.y = midY;
 
       app.stage.addChild(topSide, bottomSide);
@@ -672,7 +715,7 @@ export const RealGame = ({
 
     renderScene();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した盤面状態の変化時のみ再実行する意図。定数/コールバックは最新を本体で参照
-  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected]);
+  }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected, isDonTargeting]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -1179,6 +1222,14 @@ export const RealGame = ({
         </div>
       )}
 
+      {isDonTargeting && (
+        <div style={{ position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_INFO_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', textAlign: 'center', border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}` }}>
+          ドン!!を付与する対象を選択してください
+          <div style={{ fontSize: '12px', color: '#ccc', fontWeight: 'normal', marginTop: '4px' }}>アクティブなドン!!: {activeDonCount}枚</div>
+          <button onClick={() => setIsDonTargeting(false)} style={{ marginTop: '8px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
+        </div>
+      )}
+
       {isBoardSelectMode && (
         <div style={{
           position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
@@ -1339,10 +1390,12 @@ export const RealGame = ({
 
     {actionMenu && (
       <CardActionMenu
+        key={actionMenu.card.uuid + (actionMenu.donMode ? ':don' : '')}
         card={actionMenu.card}
         location={actionMenu.location}
         activeDonCount={activeDonCount}
         anchor={actionMenu.anchor}
+        initialDonMode={actionMenu.donMode}
         onAction={handleAction}
         onShowDetail={() => {
           setSelectedCard({ card: actionMenu.card, location: actionMenu.location, isMyTurn: true });
