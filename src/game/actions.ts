@@ -14,14 +14,21 @@ export const useGameAction = (
   setPendingRequest: (req: PendingRequest | null) => void,
   pendingRequest: PendingRequest | null,
   addEventLog?: (events: ActionEvent[]) => void,
+  // オンライン対戦では既存ルームの game_id を外部から受け取り、createGame は呼ばない。
+  externalGameId?: string,
 ) => {
   const [isPending, setIsPending] = useState(false);
   const [errorToast, setErrorToast] = useState<string | null>(null);
-  const [gameId, setGameId] = useState<string | null>(null);
+  const [gameId, setGameId] = useState<string | null>(externalGameId ?? null);
 
   useEffect(() => {
     apiClient.checkHealth().catch(e => setErrorToast(`サーバー接続エラー: ${e.message}`));
   }, []);
+
+  // 外部 game_id（オンライン対戦のルーム）が後から確定した場合に同期する。
+  useEffect(() => {
+    if (externalGameId) setGameId(externalGameId);
+  }, [externalGameId]);
 
   // 【変更】引数でデッキIDを受け取るように修正
   const startGame = useCallback(async (p1Deck: string, p2Deck: string) => {
