@@ -49,6 +49,8 @@ type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'r
 type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
 // ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
 type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
+// ルールモード・CPU 対戦の設定（null = CPU 対戦ではない）。
+type RuleCpuOptions = { difficulty: 'easy' | 'normal' | 'hard' } | null;
 
 export default function App() {
   // 対策①：初期値をsessionStorageから復元するように変更
@@ -77,6 +79,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
+  const [ruleCpu, setRuleCpu] = useState<RuleCpuOptions>(() => {
+    const saved = sessionStorage.getItem('opcg_rule_cpu');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // 対策①：状態が変更されるたびにsessionStorageへ保存
   useEffect(() => {
     sessionStorage.setItem('opcg_app_mode', mode);
@@ -95,6 +102,11 @@ export default function App() {
     else sessionStorage.removeItem('opcg_rule_online');
   }, [ruleOnline]);
 
+  useEffect(() => {
+    if (ruleCpu) sessionStorage.setItem('opcg_rule_cpu', JSON.stringify(ruleCpu));
+    else sessionStorage.removeItem('opcg_rule_cpu');
+  }, [ruleCpu]);
+
   const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: SandboxOptions) => {
 
     if (gameMode === 'sandbox') {
@@ -105,8 +117,9 @@ export default function App() {
         setSandboxOptions(sbOptions || { role: 'both' });
         setMode('sandbox');
     } else {
-        // ソロのルールモード開始時はオンライン接続情報を破棄する。
+        // ソロのルールモード開始時はオンライン/CPU 設定を破棄する。
         setRuleOnline(null);
+        setRuleCpu(null);
         setSelectedDecks({ p1, p2 });
         setMode('game');
     }
@@ -114,7 +127,16 @@ export default function App() {
 
   // ルールモード・オンライン対戦の開始（ロビーから入室/作成）。
   const startRuleOnline = (gameId: string, role: 'p1' | 'p2', roomName?: string) => {
+    setRuleCpu(null);
     setRuleOnline({ gameId, role, roomName });
+    setMode('game');
+  };
+
+  // ルールモード・CPU 対戦の開始（人間=p1。デッキは RealGame のセットアップ画面で選ぶ）。
+  const startRuleCpu = (difficulty: 'easy' | 'normal' | 'hard') => {
+    setRuleOnline(null);
+    setRuleCpu({ difficulty });
+    setSelectedDecks({ p1: '', p2: '' });
     setMode('game');
   };
 
@@ -122,17 +144,19 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#1a1a1a', overflow: 'hidden', position: 'fixed', top: 0, left: 0, touchAction: 'none' }}>
       <ErrorBoundary>
         {mode === 'start' && (
-          <GameStart onStart={handleStart} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
+          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
         )}
         {mode === 'game' && (
           <RealGame
-            key={ruleOnline ? ruleOnline.gameId : 'solo'}
+            key={ruleOnline ? ruleOnline.gameId : (ruleCpu ? 'cpu' : 'solo')}
             p1Deck={selectedDecks.p1}
             p2Deck={selectedDecks.p2}
             gameId={ruleOnline?.gameId}
             myPlayerId={ruleOnline ? ruleOnline.role : 'both'}
             roomName={ruleOnline?.roomName}
-            onBack={() => { if (confirm("終了しますか？")) { setRuleOnline(null); setMode('start'); } }}
+            vsCpu={!!ruleCpu}
+            cpuDifficulty={ruleCpu?.difficulty}
+            onBack={() => { if (confirm("終了しますか？")) { setRuleOnline(null); setRuleCpu(null); setMode('start'); } }}
             onForceBack={() => { setRuleOnline(null); setMode('ruleLobby'); }}
           />
         )}

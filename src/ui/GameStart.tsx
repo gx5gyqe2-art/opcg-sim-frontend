@@ -11,18 +11,21 @@ interface GameStartProps {
     mode?: 'normal' | 'sandbox', 
     sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string, gameId?: string }
   ) => void;
+  onStartCpu: (difficulty: 'easy' | 'normal' | 'hard') => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
   onLobby: () => void;
   onRuleLobby: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby, onRuleLobby }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onLobby, onRuleLobby }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
   // PLAYメニューの階層ナビ: root → mode(フリー/ルール) → match(ソロ/オンライン対戦)
   const [playStep, setPlayStep] = useState<'root' | 'mode' | 'match'>('root');
   const [playMode, setPlayMode] = useState<'free' | 'rule'>('free');
+  // ルールモードの CPU 対戦: 難易度選択パネルの表示。
+  const [cpuPick, setCpuPick] = useState(false);
 
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [contentScale, setContentScale] = useState(1);
@@ -272,8 +275,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
             </div>
           )}
 
-          {/* === 第3階層: ソロプレイ / オンライン対戦 の選択 === */}
-          {playStep === 'match' && (
+          {/* === 第3階層: ソロプレイ / オンライン対戦 / CPU対戦 の選択 === */}
+          {playStep === 'match' && !cpuPick && (
             <div style={styles.section}>
               <div style={styles.sectionTitle}>
                 {playMode === 'free' ? 'フリーモード' : 'ルールモード'} — プレイを選ぶ
@@ -297,8 +300,45 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
                   }}
                   color="#16a085"
                 />
+                {/* CPU 対戦はルールモードのみ */}
+                {playMode === 'rule' && (
+                  <MenuCard
+                    label="CPU対戦"
+                    desc="Rule · vs CPU"
+                    onClick={() => { logger.log({level:'info', action:'menu.cpu', msg: 'Open CPU difficulty'}); setCpuPick(true); }}
+                    color="#e67e22"
+                  />
+                )}
               </div>
               <button style={styles.backBtn} onClick={() => setPlayStep('mode')}>← 戻る</button>
+            </div>
+          )}
+
+          {/* === CPU対戦: 難易度選択 === */}
+          {playStep === 'match' && cpuPick && (
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>CPU対戦 — 難易度を選ぶ</div>
+              <div style={styles.grid}>
+                <MenuCard
+                  label="かんたん"
+                  desc="Easy · ランダム"
+                  onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU easy'}); onStartCpu('easy'); }}
+                  color="#2ecc71"
+                />
+                <MenuCard
+                  label="ふつう"
+                  desc="Normal · 貪欲"
+                  onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU normal'}); onStartCpu('normal'); }}
+                  color="#f39c12"
+                />
+                <MenuCard
+                  label="つよい"
+                  desc="Hard · 先読み"
+                  onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU hard'}); onStartCpu('hard'); }}
+                  color="#e74c3c"
+                />
+              </div>
+              <button style={styles.backBtn} onClick={() => setCpuPick(false)}>← 戻る</button>
             </div>
           )}
         </div>

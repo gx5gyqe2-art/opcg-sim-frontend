@@ -84,3 +84,25 @@ PLAY 階層ナビ `root → mode(フリー/ルール) → match` のルールモ
 
 全体計画（`opcg-sim-backend/docs/CPU_BATTLE_PLAN.md` §7）の **PR3** が本書の範囲。
 バックエンドの `/api/game/cpu/step` と create フラグ（PR2）が前提。
+
+---
+
+## 7. 実装メモ（PR3 完了）
+
+| 成果物 | パス |
+|---|---|
+| メニューに「CPU対戦」＋難易度（かんたん/ふつう/つよい） | `src/ui/GameStart.tsx`（`onStartCpu`、難易度選択パネル） |
+| CPU 対戦モードの配線（`ruleCpu` 状態・`startRuleCpu`） | `src/App.tsx`（`RealGame` に `vsCpu`/`cpuDifficulty` を渡す） |
+| RealGame の vsCpu 対応（自陣固定/相手手札裏向き/手番ゲート） | `src/screens/RealGame.tsx`（`fixedViewer`/`selfId`、CPU ポーリング useEffect、CPU 思考中バナー） |
+| createGame の CPU オプション＋`cpuStep` | `src/api/client.ts`、`startGame` 拡張: `src/game/actions.ts` |
+| 型 | `src/api/types.ts`（`CpuWaitingFor`/`CpuStepResult`） |
+
+実装方針:
+- 人間=p1 固定。`fixedViewer = isOnline || vsCpu` で自陣を下側固定・相手(CPU)手札を裏向き・
+  手番ゲート（`isMyTurn`/`isMyDecision`）をオンラインと共通化。通信は REST のみ（WS 不使用）。
+- CPU 駆動: `gameState`/`pendingRequest` の変化を監視し、CPU(p2) が行動すべき状況
+  （p2 宛の選択要求、または p2 手番）で `/api/game/cpu/step` を 700ms 間隔でポーリング。
+  `waiting_for !== 'cpu'` になるまで 1 手ずつ盤面・トースト・ログへ反映。`cpuBusyRef` で多重起動防止。
+- デッキ選択は既存のソロ用「VS CPU SETUP」画面を再利用（人間=p1、CPU=p2）。
+- 検証: `tsc -b` / `eslint .` / `vite build` すべて成功。バックエンド結合は
+  `opcg-sim-backend/tests/test_cpu_ai.py`（create→人間 keep→cpu/step ポーリング進行）で確認済み。
