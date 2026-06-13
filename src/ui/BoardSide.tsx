@@ -14,6 +14,8 @@ export const createBoardSide = (
   onCardClick: (card: CardInstance, pos: { x: number; y: number }) => void,
   selectableUuids?: Set<string>,
   selectedUuids?: Set<string>,
+  // オンライン対戦時、相手の手札の中身を伏せて表示する（情報秘匿はフロント側で制御）。
+  hideHand: boolean = false,
 ) => {
   const side = new PIXI.Container();
   const z = p.zones;
@@ -253,7 +255,9 @@ export const createBoardSide = (
 
   // 手札描画
   handList.forEach((c: CardInstance, i: number) => {
-    const card = createCardContainer(c, coords.CW, coords.CH, getCardOpts(c));
+    // オンライン対戦の相手手札は中身を伏せる（is_face_up=false で裏面描画 + 識別情報を空に）。
+    const renderCard: CardInstance = hideHand ? { ...c, is_face_up: false, card_id: '', name: 'Card' } : c;
+    const card = createCardContainer(renderCard, coords.CW, coords.CH, getCardOpts(renderCard));
     // Sandbox同様に getX で左右反転対応
     card.x = getX(startX + i * stepX);
     card.y = r4Y;

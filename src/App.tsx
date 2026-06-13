@@ -5,6 +5,7 @@ import { SandboxGame } from './screens/SandboxGame';
 import GameStart from './ui/GameStart';
 import { DeckBuilder } from './screens/DeckBuilder';
 import { RoomLobby } from './screens/RoomLobby';
+import { RuleLobby } from './screens/RuleLobby';
 
 interface Props {
   children: ReactNode;
@@ -44,8 +45,10 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby';
+type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'ruleLobby';
 type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
+// ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
+type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
 
 export default function App() {
   // 対策①：初期値をsessionStorageから復元するように変更
@@ -69,6 +72,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : { role: 'both' };
   });
 
+  const [ruleOnline, setRuleOnline] = useState<RuleOnlineOptions>(() => {
+    const saved = sessionStorage.getItem('opcg_rule_online');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // 対策①：状態が変更されるたびにsessionStorageへ保存
   useEffect(() => {
     sessionStorage.setItem('opcg_app_mode', mode);
@@ -82,8 +90,13 @@ export default function App() {
     sessionStorage.setItem('opcg_sandbox_options', JSON.stringify(sandboxOptions));
   }, [sandboxOptions]);
 
+  useEffect(() => {
+    if (ruleOnline) sessionStorage.setItem('opcg_rule_online', JSON.stringify(ruleOnline));
+    else sessionStorage.removeItem('opcg_rule_online');
+  }, [ruleOnline]);
+
   const handleStart = (p1: string, p2: string, gameMode: 'normal' | 'sandbox' = 'normal', sbOptions?: SandboxOptions) => {
-    
+
     if (gameMode === 'sandbox') {
         // メニューから新規にサンドボックスを開始する場合は、前回の進行中ゲーム保存を破棄する
         // （クラッシュ/リロード復帰用の保存を、意図的な新規開始と区別するため）
@@ -92,19 +105,36 @@ export default function App() {
         setSandboxOptions(sbOptions || { role: 'both' });
         setMode('sandbox');
     } else {
+        // ソロのルールモード開始時はオンライン接続情報を破棄する。
+        setRuleOnline(null);
         setSelectedDecks({ p1, p2 });
         setMode('game');
     }
+  };
+
+  // ルールモード・オンライン対戦の開始（ロビーから入室/作成）。
+  const startRuleOnline = (gameId: string, role: 'p1' | 'p2', roomName?: string) => {
+    setRuleOnline({ gameId, role, roomName });
+    setMode('game');
   };
 
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#1a1a1a', overflow: 'hidden', position: 'fixed', top: 0, left: 0, touchAction: 'none' }}>
       <ErrorBoundary>
         {mode === 'start' && (
-          <GameStart onStart={handleStart} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} />
+          <GameStart onStart={handleStart} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
         )}
         {mode === 'game' && (
-          <RealGame p1Deck={selectedDecks.p1} p2Deck={selectedDecks.p2} onBack={() => { if (confirm("終了しますか？")) setMode('start'); }} />
+          <RealGame
+            key={ruleOnline ? ruleOnline.gameId : 'solo'}
+            p1Deck={selectedDecks.p1}
+            p2Deck={selectedDecks.p2}
+            gameId={ruleOnline?.gameId}
+            myPlayerId={ruleOnline ? ruleOnline.role : 'both'}
+            roomName={ruleOnline?.roomName}
+            onBack={() => { if (confirm("終了しますか？")) { setRuleOnline(null); setMode('start'); } }}
+            onForceBack={() => { setRuleOnline(null); setMode('ruleLobby'); }}
+          />
         )}
         {mode === 'sandbox' && (
           <SandboxGame
@@ -127,6 +157,16 @@ export default function App() {
             onCreate={(gameId) => {
               localStorage.setItem('opcg_host_game', gameId);
               handleStart('', '', 'sandbox', { role: 'p1', gameId });
+            }}
+          />
+        )}
+        {mode === 'ruleLobby' && (
+          <RuleLobby
+            onBack={() => setMode('start')}
+            onJoin={(gameId, role, roomName) => startRuleOnline(gameId, role, roomName)}
+            onCreate={(gameId) => {
+              localStorage.setItem('opcg_rule_host_game', gameId);
+              startRuleOnline(gameId, 'p1');
             }}
           />
         )}

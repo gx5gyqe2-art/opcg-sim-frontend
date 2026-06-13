@@ -12,6 +12,7 @@ import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { API_CONFIG } from '../api/api.config';
+import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
@@ -71,10 +72,40 @@ const resolveCardName = (uuid: string, gs: GameState): string => {
   return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
 
-export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1Deck: string, p2Deck: string, onBack: () => void }) => {
+export const RealGame = ({
+  p1Deck: initialP1,
+  p2Deck: initialP2,
+  onBack,
+  gameId: onlineGameId,
+  myPlayerId = 'both',
+  roomName,
+  onForceBack,
+}: {
+  p1Deck: string,
+  p2Deck: string,
+  onBack: () => void,
+  // ▼ オンライン対戦用（ソロ時は myPlayerId='both' で未指定相当）
+  gameId?: string,
+  myPlayerId?: 'both' | 'p1' | 'p2',
+  roomName?: string,
+  onForceBack?: () => void,
+}) => {
+  // オンライン対戦かどうか（'both' = 従来のソロ／ホットシート）
+  const isOnline = myPlayerId === 'p1' || myPlayerId === 'p2';
+
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  // オンライン対戦のルーム状態（WAITING 中はセットアップ画面を表示）
+  const [roomStatus, setRoomStatus] = useState<'WAITING' | 'PLAYING' | 'FINISHED'>('WAITING');
+  const [readyStates, setReadyStates] = useState<{ p1: boolean; p2: boolean }>({ p1: false, p2: false });
+  const [deckPreview, setDeckPreview] = useState<{ p1: { leader_id?: string; leader_name?: string } | null; p2: { leader_id?: string; leader_name?: string } | null }>({ p1: null, p2: null });
+  const [wsConnected, setWsConnected] = useState(false);
+  // WebSocket 再接続管理
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const isMountedRef = useRef(true);
   const [selectedCard, setSelectedCard] = useState<{
     card: CardInstance;
     location: string;
@@ -108,6 +139,18 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
+  // この端末を操作しているプレイヤー視点。
+  // ・ソロ(both): 現在の手番プレイヤー（下側操作者）が常に切り替わる従来挙動。
+  // ・オンライン: 自分の役割(p1/p2)で固定し、自陣を常に下側に描画する。
+  const viewerId: "p1" | "p2" = isOnline ? (myPlayerId as "p1" | "p2") : (activePlayerId ?? (CONST.PLAYER_KEYS.P1 as "p1"));
+  const opponentId: "p1" | "p2" = viewerId === "p1" ? "p2" : "p1";
+  // オンライン時、メインの操作が可能なのは自分の手番のときのみ。
+  const isMyTurn = !isOnline || activePlayerId === myPlayerId;
+  // 選択要求(マリガン/ブロッカー/カウンター/効果選択 等)が自分宛てかどうか。
+  const isMyDecision = !isOnline || pendingRequest?.player_id === myPlayerId;
+  // 盤面(PIXI)を初期化・描画してよいか。オンラインはルームが PLAYING になってから。
+  const boardReady = isOnline ? roomStatus === 'PLAYING' : isSetupComplete;
+
   const MAX_LOG = 50;
   const addEventLog = useCallback((newEvents: ActionEvent[]) => {
     setEventLog(prev => [...newEvents, ...prev].slice(0, MAX_LOG));
@@ -132,11 +175,12 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   }, []);
 
   const { startGame, sendAction, sendBattleAction, isPending, errorToast, setErrorToast } = useGameAction(
-    activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1"),
+    isOnline ? viewerId : (activePlayerId || (CONST.PLAYER_KEYS.P1 as "p1")),
     setGameState,
     setPendingRequest,
     pendingRequest,
     addEventLog,
+    isOnline ? onlineGameId : undefined,
   );
 
   useEffect(() => {
@@ -161,6 +205,69 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     };
     fetchDecks();
   }, []);
+
+  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
+
+  // オンライン対戦: ルーム状態/対局状態を WebSocket で購読する（指数バックオフ再接続）。
+  useEffect(() => {
+    if (!isOnline || !onlineGameId) return;
+
+    const connectWs = () => {
+      if (!isMountedRef.current) return;
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+      const base = API_CONFIG.BASE_URL;
+      const proto = base.startsWith('https') ? 'wss:' : 'ws:';
+      const host = base.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const ws = new WebSocket(`${proto}//${host}/ws/game/${onlineGameId}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => { if (!isMountedRef.current) return; reconnectAttemptRef.current = 0; setWsConnected(true); };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'STATE_UPDATE') {
+            if (data.status) setRoomStatus(data.status);
+            if (data.ready_states) setReadyStates(data.ready_states);
+            if (data.deck_preview) setDeckPreview(data.deck_preview);
+            if (data.game_state) {
+              setGameState(data.game_state);
+              setPendingRequest(data.pending_request || null);
+              if (data.action_events?.length) addEventLog(data.action_events);
+            }
+          }
+        } catch (e) { logger.error('ws.parse_error', String(e)); }
+      };
+      ws.onerror = () => { logger.error('ws.error', 'WebSocket error'); };
+      ws.onclose = () => {
+        if (!isMountedRef.current) return;
+        setWsConnected(false);
+        const attempt = reconnectAttemptRef.current;
+        const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
+        reconnectAttemptRef.current += 1;
+        logger.warn('ws.disconnected', `Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
+        reconnectTimerRef.current = setTimeout(connectWs, delay);
+      };
+    };
+    connectWs();
+
+    return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- WS接続はオンライン時マウント1回のみ。addEventLog等は最新を本体で参照
+  }, [isOnline, onlineGameId]);
+
+  // オンライン対戦のロビー操作（デッキ選択/開始/キック）。
+  const sendRuleLobbyAction = useCallback(async (
+    action: { action_type: string; player_id?: string; deck_id?: string; target_player_id?: string }
+  ) => {
+    if (!onlineGameId) return;
+    try {
+      await apiClient.sendRuleAction(onlineGameId, action);
+    } catch (e) {
+      setErrorToast(`ロビー操作失敗: ${(e as Error).message}`);
+    }
+  }, [onlineGameId, setErrorToast]);
 
   const handleGameStart = () => {
     if (p1DeckId && p2DeckId) {
@@ -284,6 +391,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   ]) : new Set<string>();
 
   const isBoardSelectMode =
+    isMyDecision &&
     !isAttackTargeting &&
     !!pendingRequest &&
     (pendingRequest.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
@@ -317,7 +425,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       // 攻撃対象は相手のリーダー／フィールドのキャラ（またはステージ）に限定する。
       // 従来は任意のカード（自分のカードや手札）でも ATTACK_CONFIRM を送ってサーバ
       // エラーになり、攻撃ターゲティング状態から復帰できなかった。
-      const oppId = activePlayerId === 'p1' ? 'p2' : 'p1';
+      const oppId = isOnline ? opponentId : (activePlayerId === 'p1' ? 'p2' : 'p1');
       const opp = gameState.players[oppId];
       const isValidTarget =
         opp.leader?.uuid === card.uuid ||
@@ -374,13 +482,14 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     const p1Loc = getPhysicalLocation(p1, card);
     const p2Loc = getPhysicalLocation(p2, card);
 
-    if (activePlayerId === 'p1') {
+    // 「自分」の基準: ソロは現手番、オンラインは自分の役割(viewerId)。
+    if (viewerId === 'p1') {
       if (p1Loc) {
         currentLoc = p1Loc;
       } else if (p2Loc) {
         currentLoc = `opp_${p2Loc}`;
       }
-    } else if (activePlayerId === 'p2') {
+    } else if (viewerId === 'p2') {
       if (p2Loc) {
         currentLoc = p2Loc;
       } else if (p1Loc) {
@@ -388,7 +497,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       }
     }
 
-    const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc);
+    // オンラインでは自分の手番でなければ自陣カードも操作不可（閲覧のみ）。
+    const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc) && isMyTurn;
 
     logger.log({
       level: 'info',
@@ -399,7 +509,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
     // 操作可能カードで実行可能アクションが1つ以上あれば、詳細シートではなく
     // カード近傍のミニメニューを開く（タップ→即操作の導線）。
-    const donCount = activePlayerId ? gameState.players[activePlayerId].don_active.length : 0;
+    const donCount = gameState.players[viewerId]?.don_active.length ?? 0;
     if (isOperatable && getAvailableActions(card, currentLoc, true, donCount).length > 0) {
       setActionMenu({ card, location: currentLoc, anchor: pos });
       return;
@@ -431,7 +541,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   }, [gameState, pendingRequest?.request_id]);
 
   useEffect(() => {
-    if (!pixiContainerRef.current || !isSetupComplete) return;
+    if (!pixiContainerRef.current || !boardReady) return;
 
     const app = new PIXI.Application({
       width: window.innerWidth,
@@ -448,7 +558,9 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
-    startGame(p1DeckId, p2DeckId);
+    // オンラインではルーム START 時にサーバ側で対局生成済み。状態は WS で届くため
+    // ここで createGame は呼ばない（ソロのみ自前でゲーム生成）。
+    if (!isOnline) startGame(p1DeckId, p2DeckId);
 
     const handleResize = () => {
       app.renderer.resize(window.innerWidth, window.innerHeight);
@@ -461,8 +573,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       window.removeEventListener('resize', handleResize);
       app.destroy(true, { children: true });
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化はマウント時(=isSetupComplete)に1回のみ。startGame等の再実行は不要
-  }, [isSetupComplete]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化は盤面準備完了時に1回のみ。startGame等の再実行は不要
+  }, [boardReady]);
 
   useEffect(() => {
     const app = appRef.current;
@@ -490,15 +602,17 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       border.lineTo(W, midY);
       app.stage.addChild(border);
 
-      const isP2Turn = activePlayerId === 'p2';
-      const bottomPlayer = isP2Turn ? gameState.players.p2 : gameState.players.p1;
-      const topPlayer = isP2Turn ? gameState.players.p1 : gameState.players.p2;
+      // オンラインは自陣(viewerId)を常に下側へ。ソロは現手番を下側へ（従来挙動）。
+      const bottomIsP2 = isOnline ? viewerId === 'p2' : activePlayerId === 'p2';
+      const bottomPlayer = bottomIsP2 ? gameState.players.p2 : gameState.players.p1;
+      const topPlayer = bottomIsP2 ? gameState.players.p1 : gameState.players.p2;
 
       const selectedSet = new Set(boardSelected);
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet);
+      // オンライン対戦では相手(上側)の手札の中身を伏せて描画する。
+      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, selectableUuids, selectedSet, isOnline);
       topSide.y = 0;
 
-      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, selectableUuids, selectedSet);
+      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, selectableUuids, selectedSet, false);
       bottomSide.y = midY;
 
       app.stage.addChild(topSide, bottomSide);
@@ -520,10 +634,111 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
 
   const handleBackToTitle = () => {
     logger.flushLogs();
-    onBack();
+    // オンライン対戦からの離脱はルールロビーへ戻す（指定があれば）。
+    if (isOnline && onForceBack) onForceBack();
+    else onBack();
   };
 
-  if (!isSetupComplete) {
+  // ── オンライン対戦のルームセットアップ（WAITING 中） ──
+  if (isOnline && roomStatus !== 'PLAYING') {
+    const myPreview = deckPreview[myPlayerId as 'p1' | 'p2'];
+    const oppPreview = deckPreview[opponentId];
+    const bothReady = readyStates.p1 && readyStates.p2;
+    const isHost = myPlayerId === 'p1';
+
+    const slot = (pid: 'p1' | 'p2') => {
+      const isMine = pid === myPlayerId;
+      const preview = pid === myPlayerId ? myPreview : (pid === opponentId ? oppPreview : null);
+      const ready = readyStates[pid];
+      return (
+        <div key={pid} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ color: '#bdc3c7', fontSize: '12px', fontWeight: 'bold' }}>
+              {pid === 'p1' ? 'Player 1 (先攻)' : 'Player 2 (後攻)'}{isMine ? '（あなた）' : ''}
+            </label>
+            <span style={{ color: ready ? '#2ecc71' : '#e74c3c', fontSize: '10px', fontWeight: 'bold' }}>{ready ? 'READY' : 'NOT READY'}</span>
+          </div>
+          {isMine ? (
+            <div
+              onClick={() => setSelectingDeckFor(pid)}
+              style={{ height: '60px', background: '#2a1a1a', border: '1px solid #5d4037', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', position: 'relative' }}
+            >
+              {preview?.leader_id ? (
+                <>
+                  <img src={getCardImageUrl(preview.leader_id) || ''} alt="leader" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
+                  <span style={{ zIndex: 1, fontWeight: 'bold', textShadow: '0 2px 4px black' }}>{preview.leader_name || 'Deck Selected'}</span>
+                </>
+              ) : (
+                <span style={{ color: '#7f8c8d', fontSize: '14px' }}>＋ デッキを選択</span>
+              )}
+            </div>
+          ) : (
+            <div style={{ height: '60px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7f8c8d', fontSize: '14px', border: '1px dashed #555' }}>
+              {preview?.leader_id ? (preview.leader_name || 'Deck Selected') : '相手のデッキ選択を待っています...'}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div style={{ width: '100vw', height: '100vh', background: 'radial-gradient(circle at center, #3a2020 0%, #000000 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box' }}>
+        <div style={{ background: '#2c3e50', padding: '30px', borderRadius: '12px', border: '2px solid #7f8c8d', width: '90%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', color: '#ecf0f1' }}>
+          <h2 style={{ color: '#e74c3c', fontSize: '22px', fontWeight: 'bold', textAlign: 'center', borderBottom: '1px solid #7f8c8d', paddingBottom: '10px', margin: 0 }}>
+            {roomName || 'ONLINE BATTLE'}
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', fontSize: '11px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsConnected ? '#2ecc71' : '#e74c3c', display: 'inline-block' }} />
+            <span style={{ color: '#bdc3c7' }}>{wsConnected ? '接続中' : `再接続中... (${reconnectAttemptRef.current}回目)`}</span>
+          </div>
+
+          {slot('p1')}
+          <div style={{ textAlign: 'center', color: '#95a5a6', fontStyle: 'italic', margin: '-10px 0' }}>VS</div>
+          {slot('p2')}
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button onClick={onBack} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid #95a5a6', color: '#95a5a6', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
+              退出
+            </button>
+            {isHost && (
+              <button
+                onClick={() => sendRuleLobbyAction({ action_type: 'START', player_id: 'p1' })}
+                disabled={!bothReady}
+                style={{ flex: 1, padding: '12px', background: bothReady ? '#e67e22' : '#34495e', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: bothReady ? 'pointer' : 'not-allowed' }}
+              >
+                GAME START
+              </button>
+            )}
+          </div>
+          {!isHost && (
+            <p style={{ color: '#7f8c8d', fontSize: '11px', textAlign: 'center', margin: 0 }}>
+              ホスト(Player 1)の開始操作を待っています...
+            </p>
+          )}
+        </div>
+
+        {selectingDeckFor && (
+          <DeckSelectModal
+            title={`デッキを選択 (${selectingDeckFor.toUpperCase()})`}
+            options={deckOptions}
+            onSelect={(deckId) => {
+              sendRuleLobbyAction({ action_type: 'SET_DECK', player_id: myPlayerId, deck_id: deckId });
+              setSelectingDeckFor(null);
+            }}
+            onClose={() => setSelectingDeckFor(null)}
+          />
+        )}
+        {errorToast && (
+          <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#e74c3c', color: 'white', padding: '10px 20px', borderRadius: '5px', fontWeight: 'bold' }}>
+            ⚠️ {errorToast}
+            <button onClick={() => setErrorToast(null)} style={{ background: 'transparent', border: 'none', color: 'white', marginLeft: '10px', cursor: 'pointer' }}>×</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!isOnline && !isSetupComplete) {
     const getLeaderImage = (deckId: string) => {
       const opt = deckOptions.find(d => d.id === deckId);
       return opt?.leaderId ? getCardImageUrl(opt.leaderId) : null;
@@ -622,6 +837,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
   }
 
   const showSearchModal =
+    isMyDecision &&
     !isBoardSelectMode && (
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.ARRANGE_DECK ||
@@ -645,8 +861,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       : []
   );
 
-  const activeDonCount = gameState && activePlayerId 
-    ? gameState.players[activePlayerId].don_active.length 
+  const activeDonCount = gameState
+    ? gameState.players[viewerId]?.don_active.length ?? 0
     : 0;
 
   return (
@@ -703,7 +919,23 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
       <EffectToast toasts={effectToasts} />
 
-      {pendingRequest?.action === 'MULLIGAN' && (
+      {/* オンライン対戦: 接続状況と手番/待機状態の表示 */}
+      {isOnline && (
+        <div style={{ position: 'absolute', top: '8px', right: '10px', zIndex: Z_INDEX.OVERLAY + 20, display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.6)', border: '1px solid #555', borderRadius: '4px', padding: '4px 10px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsConnected ? '#2ecc71' : '#e74c3c', display: 'inline-block', flexShrink: 0 }} />
+          <span style={{ color: 'white', fontSize: '11px' }}>
+            {!wsConnected
+              ? `再接続中... (${reconnectAttemptRef.current}回目)`
+              : gameState?.turn_info?.winner
+              ? (gameState.turn_info.winner === myPlayerId ? '🏆 勝利' : '敗北')
+              : isMyTurn
+              ? (isMyDecision || !pendingRequest ? `あなたの番 (${(myPlayerId as string).toUpperCase()})` : '相手の操作待ち')
+              : '相手の番'}
+          </span>
+        </div>
+      )}
+
+      {isMyDecision && pendingRequest?.action === 'MULLIGAN' && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
           background: 'rgba(0,0,0,0.90)',
@@ -764,7 +996,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         </div>
       )}
 
-      {(pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (() => {
+      {isMyDecision && (pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (() => {
         // 盤面とどのカードの効果かを確認できるよう、背景は透過しコンパクトなパネルで表示する。
         const sourceCard = gameState ? resolveCard(pendingRequest.source_card_uuid, gameState) : null;
         const sourceImg = sourceCard?.card_id ? getCardImageUrl(sourceCard.card_id) : null;
@@ -824,7 +1056,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         );
       })()}
 
-      {pendingRequest?.action === 'DECLARE_COST' && (
+      {isMyDecision && pendingRequest?.action === 'DECLARE_COST' && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
           background: 'rgba(0,0,0,0.90)',
@@ -957,7 +1189,7 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         </div>
       )}
 
-      {pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
+      {isMyDecision && pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
         <div style={{
             position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
             zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
@@ -1016,8 +1248,8 @@ export const RealGame = ({ p1Deck: initialP1, p2Deck: initialP2, onBack }: { p1D
         </div>
       )}
 
-      {(pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
-        <button 
+      {isMyDecision && isMyTurn && (pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
+        <button
           onClick={handleTurnEnd} disabled={isPending}
           style={{
             position: 'absolute',

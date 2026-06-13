@@ -146,6 +146,35 @@ export const apiClient = {
     };
   },
 
+  // ルールモード・オンライン対戦: ルーム作成
+  async createRuleRoom(roomName: string): Promise<{ game_id: string }> {
+    const res = await fetchWithLog(`${BASE_URL}/api/rule/create`, {
+      method: 'POST',
+      body: JSON.stringify({ room_name: roomName }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || 'Failed to create rule room');
+    }
+    return { game_id: data.game_id };
+  },
+
+  // ルールモード・オンライン対戦: ロビー操作（SET_DECK / START / KICK_PLAYER）
+  async sendRuleAction(
+    gameId: string,
+    action: { action_type: string; player_id?: string; deck_id?: string; target_player_id?: string }
+  ): Promise<{ success: boolean }> {
+    const res = await fetchWithLog(`${BASE_URL}/api/rule/action`, {
+      method: 'POST',
+      body: JSON.stringify({ game_id: gameId, ...action }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.success === false) {
+      throw new Error(data.error || 'Rule lobby action failed');
+    }
+    return { success: true };
+  },
+
   async sendAction(gameId: string, request: GameActionRequest): Promise<GameActionResult> {
     const actionBody = {
       game_id: gameId,

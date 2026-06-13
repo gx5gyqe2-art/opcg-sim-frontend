@@ -14,9 +14,10 @@ interface GameStartProps {
   onDeckBuilder: () => void;
   onCardList: () => void;
   onLobby: () => void;
+  onRuleLobby: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardList, onLobby, onRuleLobby }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
   // PLAYメニューの階層ナビ: root → mode(フリー/ルール) → match(ソロ/オンライン対戦)
@@ -292,9 +293,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onDeckBuilder, onCardLis
                   desc={playMode === 'free' ? 'Free · Online' : 'Rule · Online'}
                   onClick={() => {
                     if (playMode === 'free') { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }
+                    else { logger.log({level:'info', action:'menu.rule_lobby', msg: 'Open Rule Lobby'}); onRuleLobby(); }
                   }}
-                  disabled={playMode === 'rule'}
-                  badge={playMode === 'rule' ? '今後実装予定' : undefined}
                   color="#16a085"
                 />
               </div>
