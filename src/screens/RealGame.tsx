@@ -156,9 +156,16 @@ export const RealGame = ({
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
   // この端末を操作しているプレイヤー視点。
-  // ・ソロ(both): 現在の手番プレイヤー（下側操作者）が常に切り替わる従来挙動。
-  // ・オンライン: 自分の役割(p1/p2)で固定し、自陣を常に下側に描画する。
-  const viewerId: "p1" | "p2" = fixedViewer ? selfId : (activePlayerId ?? (CONST.PLAYER_KEYS.P1 as "p1"));
+  // ・ソロ(both): 基本は現在の手番プレイヤーを下側に描画する。ただし手番外のプレイヤーに
+  //   選択要求(相手のアタック時の防御・カウンター・捨てコスト等)が来ている間は、その判断者
+  //   (pendingRequest.player_id)を下側に向ける。これにより判断者の手札/場が表向き・操作可能な
+  //   下段に来て、盤面を覆うモーダルではなく盤面ハイライトで直接選べる。
+  // ・オンライン/CPU: 自分の役割(p1/p2)で固定し、自陣を常に下側に描画する。
+  const viewerId: "p1" | "p2" = fixedViewer
+    ? selfId
+    : ((pendingRequest?.player_id as "p1" | "p2" | undefined)
+        ?? activePlayerId
+        ?? (CONST.PLAYER_KEYS.P1 as "p1"));
   const opponentId: "p1" | "p2" = viewerId === "p1" ? "p2" : "p1";
   // 自陣固定時(オンライン/CPU)、メインの操作が可能なのは自分の手番のときのみ。
   const isMyTurn = !fixedViewer || activePlayerId === selfId;
@@ -715,8 +722,8 @@ export const RealGame = ({
       border.lineTo(W, midY);
       app.stage.addChild(border);
 
-      // 自陣固定時(オンライン/CPU)は自陣(viewerId)を常に下側へ。ソロは現手番を下側へ（従来挙動）。
-      const bottomIsP2 = fixedViewer ? viewerId === 'p2' : activePlayerId === 'p2';
+      // 盤面の下側は常に viewerId。オンライン/CPU は自陣、ソロは手番(または判断要求中の判断者)。
+      const bottomIsP2 = viewerId === 'p2';
       const bottomPlayer = bottomIsP2 ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = bottomIsP2 ? gameState.players.p1 : gameState.players.p2;
 
