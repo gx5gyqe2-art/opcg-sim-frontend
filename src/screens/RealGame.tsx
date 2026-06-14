@@ -1045,16 +1045,26 @@ export const RealGame = ({
     
   const constraints = pendingRequest?.constraints || {};
 
+  // selectable_uuids からカード実体を引く際は、両プレイヤーの全ゾーンを走査する。
+  // 従来は手札・場・リーダーのみで、トラッシュ/デッキ/ライフ/ドン!!を対象にした選択
+  // （蘇生・デッキ操作・ライフ操作・ドン返却 等）で候補が空になり選べず停止し得た。
+  // サーバが candidates 実体を送る場合はそれを優先する。
   const modalCandidates = pendingRequest?.candidates || (
-    (gameState && pendingRequest?.selectable_uuids) ? 
-      [
-        ...gameState.players.p1.zones.hand, 
-        ...gameState.players.p1.zones.field, 
-        ...gameState.players.p2.zones.hand, 
-        ...gameState.players.p2.zones.field,
-        gameState.players.p1.leader,
-        gameState.players.p2.leader
-      ].filter((c): c is CardInstance => !!c && pendingRequest.selectable_uuids!.includes(c.uuid)) 
+    (gameState && pendingRequest?.selectable_uuids)
+      ? ([gameState.players.p1, gameState.players.p2].flatMap((p) => [
+          ...p.zones.hand,
+          ...p.zones.field,
+          ...p.zones.life,
+          ...p.zones.trash,
+          ...p.zones.deck,
+          ...p.zones.don_deck,
+          ...p.don_active,
+          ...p.don_rested,
+          ...p.don_attached,
+          p.leader,
+          p.stage,
+        ]) as (CardInstance | null | undefined)[])
+          .filter((c): c is CardInstance => !!c && pendingRequest.selectable_uuids!.includes(c.uuid))
       : []
   );
 
