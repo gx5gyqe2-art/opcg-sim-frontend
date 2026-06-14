@@ -46,6 +46,7 @@ CPU 対戦はルールモードのみ。選択後に難易度（かんたん/ふ
 - **視点固定**: 自陣（`viewerId=myPlayerId`）を常に下側に描画。相手（上側）の手札は**裏向き表示**（`createBoardSide` の `hideHand`、フロント側での情報秘匿）。
 - **手番ゲート**: `isMyTurn`（自分の手番のときのみメイン操作可）／`isMyDecision`（選択要求 `pending_request.player_id===myPlayerId` のときのみ各種オーバーレイ/モーダルを表示・操作可）。攻撃時は防御側だけがブロッカー/カウンターを選べる。
 - **状態同期**: 自分のアクションは `/api/game/action`・`/api/game/battle`（REST）で送信し、サーバが全接続へブロードキャストする。接続状況・手番待ちバナーを表示。
+- **再同期フォールバック**: 対局進行は相手へ WS ブロードキャストでのみ届くため、モバイルのバックグラウンド化・通信瞬断で取りこぼすと、古い「相手の操作待ち」状態のまま停止して見える（特にカウンター解決後に攻撃側の手番が戻らない事象）。対策として、**相手待ちの間だけ**（`isOnline && roomStatus==='PLAYING' && !winner && !isMyDecision`）`apiClient.fetchGameState`（`GET /api/game/state`）を約3秒間隔でポーリングし、`game_state`/`pending_request` を再同期する（読み取り専用・冪等。`action_events` はログ重複を避けるため積まない。自分の操作待ち中・決着後はポーリングしない）。
 - **離脱**: オンライン時の TOP ボタンは `onForceBack`（ルールロビーへ戻る）。
 
 ### 1.1.5 CPU 対戦（`vsCpu`）

@@ -271,5 +271,31 @@ export const apiClient = {
       pending_request: result.pending_request,
       action_events: result.action_events || [],
     };
+  },
+
+  // 読み取り専用の状態再取得（オンライン対戦で WS ブロードキャストを取りこぼした側が
+  // 待機中に最新状態へ再同期するためのフォールバック）。盤面は変更しない。
+  // 取得できなければ null を返す（呼び出し側はポーリング継続）。
+  async fetchGameState(gameId: string): Promise<GameActionResult | null> {
+    try {
+      const response = await fetchWithLog(`${BASE_URL}/api/game/state?game_id=${encodeURIComponent(gameId)}`, {
+        method: 'GET',
+      });
+      const result = await response.json();
+      const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
+      if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
+        return null;
+      }
+      return {
+        success: true,
+        game_id: gameId,
+        game_state: result[CONST.API_ROOT_KEYS.GAME_STATE],
+        pending_request: result.pending_request,
+        action_events: result.action_events || [],
+      };
+    } catch (e) {
+      logger.warn('api.fetch_game_state', String(e));
+      return null;
+    }
   }
 };
