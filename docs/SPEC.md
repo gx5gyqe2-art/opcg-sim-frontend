@@ -27,8 +27,7 @@
 ルール    RealGame(myPlayerId='both')  RuleLobby → RealGame(myPlayerId=p1/p2)+/ws/game   RealGame(vsCpu)+/api/game/cpu/step
 ```
 メニュー導線（`GameStart`）: `PLAY → モード(フリー/ルール) → プレイ(ソロ/オンライン対戦/CPU対戦)`。
-CPU 対戦はルールモードのみ。選択後に難易度（かんたん/ふつう/つよい）を選ぶ。詳細は
-[`docs/CPU_BATTLE_PLAN.md`](CPU_BATTLE_PLAN.md)。
+CPU 対戦はルールモードのみ。選択後に難易度（かんたん/ふつう/つよい）を選ぶ。詳細は §1.1.5。
 
 ---
 
@@ -52,6 +51,7 @@ CPU 対戦はルールモードのみ。選択後に難易度（かんたん/ふ
 ### 1.1.5 CPU 対戦（`vsCpu`）
 - **単一クライアント・REST のみ**（WS 不使用）。人間=p1、CPU=p2。`fixedViewer = isOnline || vsCpu` で
   自陣を下側固定・相手(CPU)手札を裏向き・手番ゲート（`isMyTurn`/`isMyDecision`）をオンラインと共通化。
+- **導線**: メニュー（`ui/GameStart.tsx` の「CPU 対戦」＋難易度パネル、`onStartCpu`）→ `App.tsx` の `ruleCpu` 状態（`ruleOnline` と並列）→ `RealGame`（`vsCpu`/`cpuDifficulty`）。
 - **生成**: ソロ用「VS CPU SETUP」画面で人間(p1)・CPU(p2) のデッキを選び、`apiClient.createGame(p1,p2,{vsCpu,cpuDifficulty,cpuDeck})`。
 - **CPU 駆動**: CPU(p2) が行動すべき状況（p2 宛の `pending_request`、または p2 手番）で
   `apiClient.cpuStep(gameId)` を 700ms 間隔でポーリングし、`waiting_for!=='cpu'` になるまで 1 手ずつ
