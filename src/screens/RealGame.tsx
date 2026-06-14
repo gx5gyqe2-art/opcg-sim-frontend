@@ -300,6 +300,26 @@ export const RealGame = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- WS接続はオンライン時マウント1回のみ。addEventLog等は最新を本体で参照
   }, [isOnline, onlineGameId]);
 
+  // オンライン対戦の取りこぼし対策: 対局の進行は WS ブロードキャストでしか相手へ
+  // 届かないため、モバイルのバックグラウンド化・通信瞬断で1回でも取りこぼすと、古い
+  // 「相手の操作待ち」状態のまま自力復帰できず停止して見える（特にカウンター解決後に
+  // 攻撃側の手番が戻らない）。相手待ちの間だけ /api/game/state を軽量ポーリングして
+  // 最新状態へ再同期する（読み取り専用・冪等。自分の操作待ち中・決着後は不要）。
+  useEffect(() => {
+    if (!isOnline || !onlineGameId || roomStatus !== 'PLAYING') return;
+    if (gameState?.turn_info?.winner) return;
+    if (isMyDecision) return; // 自分の番/自分宛ての選択中は最新（応答で同期済み）
+    const gid = onlineGameId;
+    const id = setInterval(async () => {
+      const resp = await apiClient.fetchGameState(gid);
+      if (!resp || !isMountedRef.current || !resp.game_state) return;
+      setGameState(resp.game_state);
+      setPendingRequest(resp.pending_request || null);
+      // action_events は再取得で重複し得るためログには積まない（状態のみ再同期）。
+    }, 3000);
+    return () => clearInterval(id);
+  }, [isOnline, onlineGameId, roomStatus, isMyDecision, gameState?.turn_info?.winner]);
+
   // CPU 対戦: CPU(p2) が行動すべき状況なら /api/game/cpu/step をポーリングして
   // 1 手ずつ盤面へ反映する（ステップ逐次の演出）。多重起動は cpuBusyRef でガードする。
   useEffect(() => {
@@ -1025,16 +1045,26 @@ export const RealGame = ({
     
   const constraints = pendingRequest?.constraints || {};
 
+  // selectable_uuids からカード実体を引く際は、両プレイヤーの全ゾーンを走査する。
+  // 従来は手札・場・リーダーのみで、トラッシュ/デッキ/ライフ/ドン!!を対象にした選択
+  // （蘇生・デッキ操作・ライフ操作・ドン返却 等）で候補が空になり選べず停止し得た。
+  // サーバが candidates 実体を送る場合はそれを優先する。
   const modalCandidates = pendingRequest?.candidates || (
-    (gameState && pendingRequest?.selectable_uuids) ? 
-      [
-        ...gameState.players.p1.zones.hand, 
-        ...gameState.players.p1.zones.field, 
-        ...gameState.players.p2.zones.hand, 
-        ...gameState.players.p2.zones.field,
-        gameState.players.p1.leader,
-        gameState.players.p2.leader
-      ].filter((c): c is CardInstance => !!c && pendingRequest.selectable_uuids!.includes(c.uuid)) 
+    (gameState && pendingRequest?.selectable_uuids)
+      ? ([gameState.players.p1, gameState.players.p2].flatMap((p) => [
+          ...p.zones.hand,
+          ...p.zones.field,
+          ...p.zones.life,
+          ...p.zones.trash,
+          ...p.zones.deck,
+          ...p.zones.don_deck,
+          ...p.don_active,
+          ...p.don_rested,
+          ...p.don_attached,
+          p.leader,
+          p.stage,
+        ]) as (CardInstance | null | undefined)[])
+          .filter((c): c is CardInstance => !!c && pendingRequest.selectable_uuids!.includes(c.uuid))
       : []
   );
 
