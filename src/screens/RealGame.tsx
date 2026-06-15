@@ -1052,15 +1052,17 @@ export const RealGame = ({
   const modalCandidates = pendingRequest?.candidates || (
     (gameState && pendingRequest?.selectable_uuids)
       ? ([gameState.players.p1, gameState.players.p2].flatMap((p) => [
-          ...p.zones.hand,
-          ...p.zones.field,
-          ...p.zones.life,
-          ...p.zones.trash,
-          ...p.zones.deck,
-          ...p.zones.don_deck,
-          ...p.don_active,
-          ...p.don_rested,
-          ...p.don_attached,
+          // サーバ state は非公開ゾーン（deck/don_deck）や don_attached の配列を送らない（count のみ）。
+          // 未定義ゾーンをそのままスプレッドすると TypeError になるため全て || [] でガードする。
+          ...(p.zones.hand || []),
+          ...(p.zones.field || []),
+          ...(p.zones.life || []),
+          ...(p.zones.trash || []),
+          ...(p.zones.deck || []),
+          ...(p.zones.don_deck || []),
+          ...(p.don_active || []),
+          ...(p.don_rested || []),
+          ...(p.don_attached || []),
           p.leader,
           p.stage,
         ]) as (CardInstance | null | undefined)[])
