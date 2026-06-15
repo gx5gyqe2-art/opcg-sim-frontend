@@ -45,7 +45,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'ruleLobby';
+type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'cpuTemplate' | 'lobby' | 'ruleLobby';
 type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
 // ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
 type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
@@ -144,7 +144,7 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#1a1a1a', overflow: 'hidden', position: 'fixed', top: 0, left: 0, touchAction: 'none' }}>
       <ErrorBoundary>
         {mode === 'start' && (
-          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
+          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onCpuTemplate={() => setMode('cpuTemplate')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
         )}
         {mode === 'game' && (
           <RealGame
@@ -173,6 +173,9 @@ export default function App() {
         )}
         {(mode === 'deck' || mode === 'cardList') && (
           <DeckBuilder onBack={() => setMode('start')} viewOnly={mode === 'cardList'} />
+        )}
+        {mode === 'cpuTemplate' && (
+          <DeckBuilder onBack={() => setMode('start')} templateMode />
         )}
         {mode === 'lobby' && (
           <RoomLobby

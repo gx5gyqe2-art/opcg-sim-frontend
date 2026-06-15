@@ -14,11 +14,12 @@ interface GameStartProps {
   onStartCpu: (difficulty: 'easy' | 'normal' | 'hard') => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
+  onCpuTemplate: () => void;
   onLobby: () => void;
   onRuleLobby: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onLobby, onRuleLobby }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onCpuTemplate, onLobby, onRuleLobby }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
   // PLAYメニューの階層ナビ: root → mode(フリー/ルール) → match(ソロ/オンライン対戦)
@@ -248,6 +249,15 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                     }}
                     color="#e67e22"
                   />
+                  <MenuCard
+                    label="CPU相手モデル"
+                    desc="ふつうの推測に使う相手デッキ"
+                    onClick={() => {
+                      logger.log({level:'info', action:'menu.cpu_template', msg: 'Open CPU template builder'});
+                      onCpuTemplate();
+                    }}
+                    color="#9b59b6"
+                  />
                 </div>
               </div>
             </>
@@ -321,19 +331,19 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
               <div style={styles.grid}>
                 <MenuCard
                   label="かんたん"
-                  desc="Easy · ランダム"
+                  desc="フェア · 公開情報のみ"
                   onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU easy'}); onStartCpu('easy'); }}
                   color="#2ecc71"
                 />
                 <MenuCard
                   label="ふつう"
-                  desc="Normal · 貪欲"
+                  desc="リーダー推測 · 多手先読み"
                   onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU normal'}); onStartCpu('normal'); }}
                   color="#f39c12"
                 />
                 <MenuCard
                   label="つよい"
-                  desc="Hard · 先読み"
+                  desc="最強 · 全力先読み"
                   onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU hard'}); onStartCpu('hard'); }}
                   color="#e74c3c"
                 />
