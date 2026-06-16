@@ -68,7 +68,18 @@ export const DeckSelectModal: React.FC<DeckSelectModalProps> = ({ title, options
               {/* 左側: リーダー画像 */}
               <div style={{ width: '50px', height: '70px', flexShrink: 0, marginRight: '15px', background: '#000', borderRadius: '4px', overflow: 'hidden', border: '1px solid #666' }}>
                 {opt.leaderId ? (
-                  <img src={getCardImageUrl(opt.leaderId)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="leader" />
+                  <img
+                    src={getCardImageUrl(opt.leaderId)}
+                    alt="leader"
+                    loading="lazy"
+                    decoding="async"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      img.style.display = 'none';
+                      if (img.parentElement) img.parentElement.innerText = opt.leaderId || 'No Img';
+                    }}
+                  />
                 ) : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '10px' }}>No Img</div>
                 )}
