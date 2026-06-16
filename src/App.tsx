@@ -6,6 +6,8 @@ import GameStart from './ui/GameStart';
 import { DeckBuilder } from './screens/DeckBuilder';
 import { RoomLobby } from './screens/RoomLobby';
 import { RuleLobby } from './screens/RuleLobby';
+import { API_CONFIG } from './api/api.config';
+import { setImageVersion } from './utils/imageAssets';
 
 interface Props {
   children: ReactNode;
@@ -83,6 +85,17 @@ export default function App() {
     const saved = sessionStorage.getItem('opcg_rule_cpu');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // 起動時に画像キャッシュ版数を取得し、以降の getCardImageUrl に ?v= として反映する。
+  // 取得前は localStorage の前回値で描画するためブロッキングしない（失敗時も無害）。
+  useEffect(() => {
+    let aborted = false;
+    fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.ASSETS_VERSION}`)
+      .then(r => r.json())
+      .then(data => { if (!aborted && data?.success && data.v) setImageVersion(String(data.v)); })
+      .catch(() => { /* オフライン等: 前回版数のまま継続 */ });
+    return () => { aborted = true; };
+  }, []);
 
   // 対策①：状態が変更されるたびにsessionStorageへ保存
   useEffect(() => {

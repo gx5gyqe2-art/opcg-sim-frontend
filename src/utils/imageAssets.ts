@@ -1,10 +1,23 @@
 import { API_CONFIG } from '../api/api.config';
 import { logger } from './logger';
 
+// 画像キャッシュ版数（バックエンドの /api/assets/version 由来）。
+// URL に ?v= として付与し、版数が変わったときだけブラウザ/SW キャッシュを無効化する。
+// 起動直後の取得完了前は localStorage の前回値を使い、描画をブロックしない。
+let imageVersion: string = (() => {
+  try { return localStorage.getItem('opcg_img_v') || '0'; } catch { return '0'; }
+})();
+
+export const setImageVersion = (v: string): void => {
+  if (!v || v === imageVersion) return;
+  imageVersion = v;
+  try { localStorage.setItem('opcg_img_v', v); } catch { /* ignore */ }
+};
+
 // カードIDから画像URLを取得する統一関数
 export const getCardImageUrl = (cardId: string): string => {
   if (!cardId) return '';
-  return `${API_CONFIG.IMAGE_BASE_URL}/${cardId}.png`;
+  return `${API_CONFIG.IMAGE_BASE_URL}/${cardId}.png?v=${imageVersion}`;
 };
 
 // 特定のキー（Deck, Life, Don!! Deck）用の裏面画像URL
@@ -37,15 +50,14 @@ export const prefetchAllCardImages = async (cards: { uuid: string; card_id?: str
       const batch = uniqueIds.slice(i, i + BATCH_SIZE);
       
       await Promise.all(batch.map(async (id) => {
-        const url = getCardImageUrl(id);
+        const url = getCardImageUrl(id);  // ?v=<版数> を含む
         try {
-          // 1. キャッシュバスター(?update=...)をつけて強制的にネットワークから取得
-          // これによりService Workerの古いキャッシュを回避し、必ず最新のバケットの画像を取りに行きます
-          const response = await fetch(`${url}?update=${Date.now()}`, { mode: 'cors' });
-          
+          // URL に版数(?v=)が入っているため、版数が変わったときだけ新規取得になる。
+          // 同一版数では SW/HTTP キャッシュにヒットし、不要な再ダウンロードをしない。
+          const response = await fetch(url, { mode: 'cors' });
+
           if (response.ok) {
-            // 2. 取得したレスポンスを、元のURL（クエリなし）としてキャッシュに上書き保存
-            // これで次回以降、アプリ内ではこの新しい画像が使われます
+            // 版数付き URL をキーにキャッシュへ保存（img src と同一キー）
             await cache.put(url, response);
           } else {
              console.warn(`Failed to fetch image for ${id}: ${response.status}`);
@@ -62,10 +74,10 @@ export const prefetchAllCardImages = async (cards: { uuid: string; card_id?: str
     // Cache APIが使えない環境などのフォールバック
     logger.log({ level: 'error', action: 'assets.prefetch_error', msg: 'Error accessing cache storage', payload: { error: err } });
     
-    // 従来の方法（ただしSWがいると効果が薄い場合があります）
+    // フォールバック: 版数付き URL をそのまま取得（SW/HTTP キャッシュに委ねる）
     for (let i = 0; i < total; i += BATCH_SIZE) {
         const batch = uniqueIds.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(id => fetch(getCardImageUrl(id), { cache: 'reload', mode: 'cors' })));
+        await Promise.all(batch.map(id => fetch(getCardImageUrl(id), { mode: 'cors' })));
         loaded += batch.length;
         if (onProgress) onProgress(Math.min(loaded, total), total);
     }

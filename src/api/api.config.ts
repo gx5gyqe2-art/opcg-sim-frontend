@@ -14,6 +14,7 @@ export const API_CONFIG = {
   ENDPOINTS: {
     HEALTH: '/health',
     CREATE_GAME: '/api/game/create',
-    ACTION: '/api/game/action'
+    ACTION: '/api/game/action',
+    ASSETS_VERSION: '/api/assets/version'
   }
 } as const;
