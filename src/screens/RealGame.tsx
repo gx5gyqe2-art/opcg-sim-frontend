@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide } from '../ui/BoardSide';
+import { createCardContainer } from '../ui/CardRenderer';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardActionMenu } from '../ui/CardActionMenu';
@@ -13,11 +14,13 @@ import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { CoinFlip } from '../ui/CoinFlip';
+import { PhaseBanner } from '../ui/banners/PhaseBanner';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
 import { createEffectsLayer, type EffectsLayer } from '../ui/anim/effectsLayer';
-import { attachTweenTicker, detachTweenTicker, clearTweens } from '../ui/anim/tween';
+import { attachTweenTicker, detachTweenTicker, clearTweens, tween, easeOutCubic, setAnimSpeed } from '../ui/anim/tween';
+import { snapshotPositions, type PositionMap } from '../ui/anim/positionTracker';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
@@ -150,6 +153,10 @@ export const RealGame = ({
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const effectsRef = useRef<EffectsLayer | null>(null);
+  // カード移動グライド（Phase3）用の前回状態。
+  const prevPositionsRef = useRef<PositionMap>(new Map());
+  const prevGameStateRef = useRef<GameState | null>(null);
+  const prevViewerRef = useRef<'p1' | 'p2' | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   // オンライン対戦のルーム状態（WAITING 中はセットアップ画面を表示）
   const [roomStatus, setRoomStatus] = useState<'WAITING' | 'PLAYING' | 'FINISHED'>('WAITING');
@@ -861,6 +868,105 @@ export const RealGame = ({
 
       // 演出レイヤを最前面へ再アタッチ（飛行中の演出を維持）。
       if (effectsContainer) app.stage.addChild(effectsContainer);
+
+      // --- カード移動グライド（Phase3）---
+      // 前回位置→今回位置を uuid で突き合わせ、移動カードを旧位置から滑らせる。
+      // viewer 反転時は全カードが鏡像移動するため 1 フレーム skip。
+      const prevPos = prevPositionsRef.current;
+      const viewerFlipped = prevViewerRef.current !== null && prevViewerRef.current !== viewerId;
+      const newPos = snapshotPositions(app);
+      if (!viewerFlipped && prevPos.size > 0) {
+        for (const [uuid, np] of newPos) {
+          const cont = findCardContainer(app, uuid);
+          if (!cont || cont.destroyed) continue;
+          const op = prevPos.get(uuid);
+          if (op) {
+            // 移動: 旧位置（グローバル差分＝ローカル差分; 各サイドは平行移動のみ）から新位置へ。
+            const dx = op.x - np.x;
+            const dy = op.y - np.y;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+              const baseX = cont.x;
+              const baseY = cont.y;
+              cont.x = baseX + dx;
+              cont.y = baseY + dy;
+              tween(
+                {
+                  durationMs: 220,
+                  ease: easeOutCubic,
+                  onUpdate: (k) => {
+                    if (cont.destroyed) return;
+                    cont.x = baseX + dx * (1 - k);
+                    cont.y = baseY + dy * (1 - k);
+                  },
+                },
+                cont,
+                'glide',
+              );
+            }
+          } else {
+            // 登場: スケール/アルファのフェードイン。
+            const sx = cont.scale.x;
+            const sy = cont.scale.y;
+            cont.alpha = 0;
+            cont.scale.set(sx * 0.85, sy * 0.85);
+            tween(
+              {
+                durationMs: 200,
+                ease: easeOutCubic,
+                onUpdate: (k) => {
+                  if (cont.destroyed) return;
+                  cont.alpha = k;
+                  cont.scale.set(sx * (0.85 + 0.15 * k), sy * (0.85 + 0.15 * k));
+                },
+                onComplete: () => {
+                  if (cont.destroyed) return;
+                  cont.alpha = 1;
+                  cont.scale.set(sx, sy);
+                },
+              },
+              cont,
+              'enter',
+            );
+          }
+        }
+
+        // 退場: 消えた uuid は実体が破棄済みなので、前状態からゴーストを再生成して
+        // 永続レイヤ上でフェードアウトさせる。一括変化（リセット等）では出さない。
+        const prevGs = prevGameStateRef.current;
+        const exiting: string[] = [];
+        for (const uuid of prevPos.keys()) {
+          if (!newPos.has(uuid)) exiting.push(uuid);
+        }
+        if (prevGs && effectsContainer && exiting.length > 0 && exiting.length <= 6) {
+          for (const uuid of exiting) {
+            const card = resolveCard(uuid, prevGs);
+            const op = prevPos.get(uuid);
+            if (!card || !op) continue;
+            const ghost = createCardContainer(card, coords.CW * 0.7, coords.CH * 0.7, {
+              onClick: () => {},
+            });
+            ghost.position.set(op.x, op.y);
+            effectsContainer.addChild(ghost);
+            const by = op.y;
+            tween({
+              durationMs: 320,
+              ease: easeOutCubic,
+              onUpdate: (k) => {
+                if (ghost.destroyed) return;
+                ghost.alpha = 1 - k;
+                ghost.y = by - 14 * k;
+                ghost.scale.set(1 - 0.1 * k);
+              },
+              onComplete: () => {
+                if (!ghost.destroyed) ghost.destroy({ children: true });
+              },
+            });
+          }
+        }
+      }
+      prevPositionsRef.current = newPos;
+      prevGameStateRef.current = gameState;
+      prevViewerRef.current = viewerId;
     };
 
     renderScene();
@@ -899,6 +1005,33 @@ export const RealGame = ({
       if (tc) fx.shake(tc, 7, 260);
     });
   }, [battleAttacker, battleTarget]);
+
+  // CPU 思考中はアニメを高速化し、cpu/step ポーリングを詰まらせない（Phase5）。
+  useEffect(() => {
+    setAnimSpeed(cpuThinking ? 2.6 : 1);
+    return () => setAnimSpeed(1);
+  }, [cpuThinking]);
+
+  // ターン交代バナー（Phase5）。
+  const [phaseBanner, setPhaseBanner] = useState<{ id: number; text: string } | null>(null);
+  const bannerIdRef = useRef(0);
+  const lastTurnRef = useRef<'p1' | 'p2' | null>(null);
+  useEffect(() => {
+    if (!activePlayerId || !boardReady) return;
+    if (lastTurnRef.current === null) {
+      lastTurnRef.current = activePlayerId;
+      return;
+    }
+    if (lastTurnRef.current !== activePlayerId) {
+      lastTurnRef.current = activePlayerId;
+      const text = fixedViewer
+        ? activePlayerId === selfId
+          ? 'あなたのターン'
+          : '相手のターン'
+        : `${activePlayerId.toUpperCase()} のターン`;
+      setPhaseBanner({ id: (bannerIdRef.current += 1), text });
+    }
+  }, [activePlayerId, boardReady, fixedViewer, selfId]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -1325,6 +1458,7 @@ export const RealGame = ({
 
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
       <EffectToast toasts={effectToasts} />
+      <PhaseBanner banner={phaseBanner} />
 
       {/* CPU 対戦: 手番/勝敗の表示と CPU 思考中インジケータ */}
       {vsCpu && (
