@@ -72,6 +72,48 @@ const resolveCard = (uuid: string | undefined | null, gs: GameState): CardInstan
   return null;
 };
 
+// 演出（Phase2）用ヘルパー: 盤面上のカードコンテナを uuid で探し、画面座標を得る。
+// カードコンテナは createCardContainer で name=uuid が設定されている。
+const findCardContainer = (app: PIXI.Application, uuid: string): PIXI.Container | null => {
+  let found: PIXI.Container | null = null;
+  const walk = (c: PIXI.Container) => {
+    if (found || c.destroyed) return;
+    if (c.name === uuid) { found = c; return; }
+    for (const k of c.children) {
+      if (k instanceof PIXI.Container) walk(k);
+    }
+  };
+  walk(app.stage);
+  return found;
+};
+
+const cardGlobalPos = (app: PIXI.Application, uuid: string): { x: number; y: number } | null => {
+  const c = findCardContainer(app, uuid);
+  if (!c || c.destroyed) return null;
+  const p = c.getGlobalPosition();
+  return { x: p.x, y: p.y };
+};
+
+// ActionEvent は uuid を持たず card_name のみ。現状態から名前→uuid を引く（先頭一致）。
+const resolveUuidByName = (name: string | undefined | null, gs: GameState): string | null => {
+  if (!name) return null;
+  for (const pid of ['p1', 'p2'] as const) {
+    const p = gs.players[pid];
+    if (!p) continue;
+    if (p.leader?.name === name) return p.leader.uuid;
+    if (p.stage?.name === name) return p.stage.uuid;
+    const z = p.zones;
+    for (const zone of [z.field, z.hand, z.life, z.trash, z.deck]) {
+      const c = zone?.find(c => c.name === name);
+      if (c?.uuid) return c.uuid;
+    }
+  }
+  return null;
+};
+
+// 除去・喪失系（赤フラッシュ＋煙）。
+const REMOVAL_ACTIONS = new Set(['KO', 'TRASH', 'DISCARD', 'BOUNCE', 'MOVE_TO_HAND', 'DECK_BOTTOM']);
+
 const resolveCardName = (uuid: string, gs: GameState): string => {
   return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
@@ -187,9 +229,38 @@ export const RealGame = ({
   // CPU 対戦はソロと同じく createGame 完了（isSetupComplete）後。
   const boardReady = isOnline ? roomStatus === 'PLAYING' : isSetupComplete;
 
+  // 最新 gameState を ref で参照（addEventLog 等の安定コールバックから読む用）。
+  const gameStateRef = useRef<GameState | null>(null);
+  gameStateRef.current = gameState;
+
   const MAX_LOG = 50;
   const addEventLog = useCallback((newEvents: ActionEvent[]) => {
     setEventLog(prev => [...newEvents, ...prev].slice(0, MAX_LOG));
+
+    // イベント駆動の盤面フラッシュ（Phase2）。状態適用前（盤面はまだ旧配置）に
+    // カード位置を引けるので、除去対象も消える直前の場所で演出できる。演出は
+    // 永続レイヤ上に出るため、この後の全再構築でも残る。状態は一切変更しない。
+    const app = appRef.current;
+    const fx = effectsRef.current;
+    const gs = gameStateRef.current;
+    if (app && fx && gs) {
+      for (const ev of newEvents) {
+        if (ev.success === false || !ev.action) continue;
+        const uuid = resolveUuidByName(ev.card_name, gs);
+        const pos = uuid ? cardGlobalPos(app, uuid) : null;
+        if (!pos) continue;
+        if (REMOVAL_ACTIONS.has(ev.action)) {
+          fx.impactFlash(pos.x, pos.y, 0xff6b6b);
+          fx.puff(pos.x, pos.y, 0xff8a8a);
+        } else if (ev.action === 'ATTACH_DON') {
+          fx.glowPulse(pos.x, pos.y, 30, 0xffd34d);
+        } else if (ev.action === 'BUFF') {
+          fx.glowPulse(pos.x, pos.y, 30, 0x5fd0ff);
+        } else if (ev.action === 'HEAL' || ev.action === 'LIFE_RECOVER') {
+          fx.glowPulse(pos.x, pos.y, 34, 0x6bff8c);
+        }
+      }
+    }
 
     // 主要効果は一時トーストで視覚フィードバックする（失敗/対象なし/no-op は除外）。
     const fresh = newEvents.filter(
@@ -795,6 +866,39 @@ export const RealGame = ({
     renderScene();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した盤面状態の変化時のみ再実行する意図。定数/コールバックは最新を本体で参照
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected, isDonTargeting]);
+
+  // 攻撃演出（Phase2）: active_battle の攻撃者/対象が確定したら、攻撃者の位置から
+  // 対象へ ghost トークンを突進させ、最接近時に着弾フラッシュ＋対象シェイク。
+  // この effect は renderScene の後に走るため、新盤面のカードを名前ではなく uuid で引ける。
+  const battleAttacker = gameState?.active_battle?.attacker_uuid;
+  const battleTarget = gameState?.active_battle?.target_uuid;
+  useEffect(() => {
+    if (!battleAttacker || !battleTarget) return;
+    const app = appRef.current;
+    const fx = effectsRef.current;
+    if (!app || !fx) return;
+    const from = cardGlobalPos(app, battleAttacker);
+    const to = cardGlobalPos(app, battleTarget);
+    if (!from || !to) return;
+
+    const coords = calculateCoordinates(app.screen.width, app.screen.height);
+    const w = coords.CW * 0.7;
+    const h = coords.CH * 0.7;
+    const ghost = new PIXI.Container();
+    const g = new PIXI.Graphics();
+    g.beginFill(0xff5555, 0.18);
+    g.lineStyle(2.5, 0xff9a9a, 0.95);
+    g.drawRoundedRect(-w / 2, -h / 2, w, h, 8);
+    g.endFill();
+    ghost.addChild(g);
+
+    fx.lunge(ghost, from.x, from.y, to.x, to.y, () => {
+      const to2 = cardGlobalPos(app, battleTarget) ?? to;
+      fx.impactFlash(to2.x, to2.y, 0xffd0d0);
+      const tc = findCardContainer(app, battleTarget);
+      if (tc) fx.shake(tc, 7, 260);
+    });
+  }, [battleAttacker, battleTarget]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
