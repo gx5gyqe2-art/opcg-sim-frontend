@@ -1,9 +1,7 @@
 import CONST from '../../shared_constants.json';
 import { sessionManager } from './session';
-import { API_CONFIG } from '../api/api.config';
 
 const K = CONST.LOG_CONFIG.KEYS;
-const baseUrl = API_CONFIG.BASE_URL.replace(/\/$/, "");
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type PlayerType = 'p1' | 'p2' | 'system' | 'unknown' | string;
@@ -50,33 +48,12 @@ const createLogPayload = (options: LogOptions) => {
 };
 
 export const logger = {
-  sendRemoteLog: (options: LogOptions) => {
-    const LOG_URL = `${baseUrl}/api/log`;
-    const logObject = createLogPayload(options);
+  // バックエンドの汎用ログ受け口（/api/log）は撤去済み。リモート送信は行わず、
+  // コンソール出力のみに留める（無駄な 404 リクエストを出さない）。ログ採取は
+  // 採取ボタン（クライアント履歴＋/replay のCPU思考トレース）に一本化した。
+  sendRemoteLog: (_options: LogOptions) => { /* no-op: /api/log は廃止 */ },
 
-    fetch(LOG_URL, {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logObject)
-    }).catch(() => {});
-  },
-
-  flushLogs: () => {
-    if (logBuffer.length === 0) return;
-
-    const LOG_URL = `${baseUrl}/api/log`;
-    const payload = [...logBuffer];
-    logBuffer.length = 0;
-
-    fetch(LOG_URL, {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true 
-    }).catch(e => console.error("Failed to flush logs", e));
-  },
+  flushLogs: () => { logBuffer.length = 0; },
 
   log: (options: LogOptions) => {
     const { level, action, msg, sessionId, player = "unknown" } = options;

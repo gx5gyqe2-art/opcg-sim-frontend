@@ -59,6 +59,8 @@ export const apiClient = {
           vs_cpu: true,
           cpu_difficulty: opts.cpuDifficulty || 'normal',
           cpu_deck: opts.cpuDeck || p2Deck,
+          // CPU 思考トレースを有効化（ログ採取ボタンで GET /api/game/{id}/replay から取得するため）。
+          cpu_trace: true,
         } : {}),
       }),
     });
@@ -98,6 +100,19 @@ export const apiClient = {
       state: newState,
       pending_request: pendingRequest
     };
+  },
+
+  // ログ採取: CPU 思考トレース＋リプレイ種を取得する（cpu_trace=true で作成した対局のみ）。
+  // 失敗・未対応（success:false）は null を返す（採取は最善努力で、無くても他データは出す）。
+  async getReplay(gameId: string): Promise<{ replay: unknown; decisions: unknown[] } | null> {
+    try {
+      const res = await fetchWithLog(`${BASE_URL}/api/game/${gameId}/replay`, { method: 'GET' });
+      const data = await res.json();
+      if (!res.ok || data.success === false) return null;
+      return { replay: data.replay, decisions: data.decisions || [] };
+    } catch {
+      return null;
+    }
   },
 
   // CPU 対戦: CPU(p2) の次の 1 手を進める（ポーリング駆動）。

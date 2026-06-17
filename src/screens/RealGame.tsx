@@ -18,6 +18,7 @@ import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
 import { logger } from '../utils/logger';
+import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
 
@@ -154,6 +155,8 @@ export const RealGame = ({
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
   const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
   const [showLog, setShowLog] = useState(false);
+  // ログ採取（クリップボードコピーが不可な環境向けのフォールバック表示用）。
+  const [captureText, setCaptureText] = useState<string | null>(null);
   const [effectToasts, setEffectToasts] = useState<EffectToastItem[]>([]);
   const toastIdRef = useRef(0);
 
@@ -803,6 +806,35 @@ export const RealGame = ({
     else onBack();
   };
 
+  // ログ採取: クライアントのイベント履歴＋盤面に、CPU 思考トレース（/replay・cpu_trace 対局のみ）を
+  // まとめて 1 つの JSON にし、クリップボードへコピーする（不可ならフォールバックで画面表示）。
+  const handleCaptureLogs = async () => {
+    const gid = gameState?.game_id ?? null;
+    const dump: Record<string, unknown> = {
+      capturedAt: new Date().toISOString(),
+      game_id: gid,
+      sessionId: sessionManager.getSessionId(),
+      turn_info: gameState?.turn_info ?? null,
+      winner: gameState?.turn_info?.winner ?? null,
+      eventLog,
+    };
+    if (gid) {
+      const replay = await apiClient.getReplay(gid);
+      if (replay) {
+        dump.replay = replay.replay;       // リプレイ種（seed/leaders/decks/actions）
+        dump.cpuDecisions = replay.decisions; // CPU の各意思決定トレース
+      }
+    }
+    const text = JSON.stringify(dump, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert('ログをクリップボードにコピーしました。チャットに貼り付けてください。');
+    } catch {
+      // クリップボード不可（非セキュアコンテキスト等）はテキスト表示にフォールバック。
+      setCaptureText(text);
+    }
+  };
+
   // ── オンライン対戦のルームセットアップ（WAITING 中） ──
   if (isOnline && roomStatus !== 'PLAYING') {
     const myPreview = deckPreview[myPlayerId as 'p1' | 'p2'];
@@ -1126,12 +1158,60 @@ export const RealGame = ({
         ログ
       </button>
 
+      <button
+        onClick={handleCaptureLogs}
+        title="ログ（イベント履歴＋CPU思考トレース）をクリップボードにコピー"
+        style={{
+          position: 'absolute',
+          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+          left: '100px',
+          transform: 'translateY(-50%)',
+          zIndex: Z_INDEX.OVERLAY + 20,
+          background: 'rgba(0, 0, 0, 0.6)',
+          color: '#aaa',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          padding: '4px 9px',
+          cursor: 'pointer',
+          fontSize: '11px',
+        }}
+      >
+        採取
+      </button>
+
       {showLog && layoutCoords && (
         <ActionLog
           events={eventLog}
           anchorY={layoutCoords.y}
           onClose={() => setShowLog(false)}
         />
+      )}
+
+      {captureText !== null && (
+        <div
+          onClick={() => setCaptureText(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: Z_INDEX.OVERLAY + 60,
+            background: 'rgba(0,0,0,0.7)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', padding: '20px',
+          }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(680px, 92vw)', background: '#1b1b1b', border: '1px solid #444', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ color: '#ddd', fontSize: '12px', marginBottom: '8px' }}>
+              クリップボードに自動コピーできませんでした。下のテキストを選択してコピーしてください。
+            </div>
+            <textarea
+              readOnly
+              autoFocus
+              onFocus={e => e.currentTarget.select()}
+              value={captureText}
+              style={{ width: '100%', height: '50vh', fontFamily: 'monospace', fontSize: '11px', background: '#111', color: '#ccc', border: '1px solid #333', borderRadius: '4px', padding: '8px', boxSizing: 'border-box' }}
+            />
+            <div style={{ textAlign: 'right', marginTop: '8px' }}>
+              <button onClick={() => setCaptureText(null)} style={{ background: 'rgba(41,128,185,0.8)', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px' }}>閉じる</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
