@@ -2,7 +2,6 @@ import type { GameActionRequest, BattleActionRequest, GameActionResult, PendingR
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger';
 import { sessionManager } from '../utils/session';
 
 const { BASE_URL, ENDPOINTS } = API_CONFIG;
@@ -16,20 +15,6 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
   };
 
   const res = await fetch(url, { ...options, headers });
-
-  if (import.meta.env.DEV) {
-    const logRes = res.clone();
-    console.group(`%cAPI Response: ${url}`, `color: ${res.ok ? '#2ecc71' : '#e74c3c'}; font-weight: bold;`);
-    console.log('Status:', res.status);
-    try {
-      const data = await logRes.json();
-      console.table(data);
-    } catch {
-      console.log('Data: (not json)');
-    }
-    console.groupEnd();
-  }
-
   return res;
 };
 
@@ -59,6 +44,8 @@ export const apiClient = {
           vs_cpu: true,
           cpu_difficulty: opts.cpuDifficulty || 'normal',
           cpu_deck: opts.cpuDeck || p2Deck,
+          // CPU 思考トレースを有効化（ログ採取ボタンで GET /api/game/{id}/replay から取得するため）。
+          cpu_trace: true,
         } : {}),
       }),
     });
@@ -68,26 +55,16 @@ export const apiClient = {
     const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
     if (!res.ok || data[SUCCESS_KEY] === false) {
       const msg = data.error?.message || 'Failed to create game';
-      logger.error('api.create_game', msg, { response: data });
       throw new Error(msg);
     }
 
-    const oldSid = sessionManager.getSessionId();
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
     const gameId = data[GAME_ID_KEY] || data[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
-    
+
     if (gameId) {
       sessionManager.setSessionId(gameId);
-      if (oldSid !== gameId) {
-        logger.log({
-          level: 'info',
-          action: 'session.updated',
-          msg: `Session ID updated from ${oldSid} to ${gameId}`,
-          payload: { old: oldSid, new: gameId }
-        });
-      }
     }
-    
+
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey];
     const pendingKey = CONST.API_ROOT_KEYS.PENDING_REQUEST as keyof typeof data;
@@ -98,6 +75,19 @@ export const apiClient = {
       state: newState,
       pending_request: pendingRequest
     };
+  },
+
+  // ログ採取: CPU 思考トレース＋リプレイ種を取得する（cpu_trace=true で作成した対局のみ）。
+  // 失敗・未対応（success:false）は null を返す（採取は最善努力で、無くても他データは出す）。
+  async getReplay(gameId: string): Promise<{ replay: unknown; decisions: unknown[] } | null> {
+    try {
+      const res = await fetchWithLog(`${BASE_URL}/api/game/${gameId}/replay`, { method: 'GET' });
+      const data = await res.json();
+      if (!res.ok || data.success === false) return null;
+      return { replay: data.replay, decisions: data.decisions || [] };
+    } catch {
+      return null;
+    }
   },
 
   // CPU 対戦: CPU(p2) の次の 1 手を進める（ポーリング駆動）。
@@ -216,27 +206,17 @@ export const apiClient = {
     });
 
     const result = await response.json();
-    const oldSid = sessionManager.getSessionId();
-    
+
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
     const newGameId = result[GAME_ID_KEY] || result[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
 
     if (newGameId) {
       sessionManager.setSessionId(newGameId);
-      if (oldSid !== newGameId) {
-        logger.log({
-          level: 'info',
-          action: 'session.updated',
-          msg: `Session ID updated from ${oldSid} to ${newGameId}`,
-          payload: { old: oldSid, new: newGameId }
-        });
-      }
     }
 
     const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
     if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
       const msg = result.error?.message || "Action failed";
-      logger.error('api.send_action', msg, { request: actionBody, response: result });
       throw new Error(msg);
     }
 
@@ -260,7 +240,6 @@ export const apiClient = {
     const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
     if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
       const msg = result.error?.message || "Battle action failed";
-      logger.error('api.send_battle_action', msg, { request, response: result });
       throw new Error(msg);
     }
 
@@ -293,9 +272,8 @@ export const apiClient = {
         pending_request: result.pending_request,
         action_events: result.action_events || [],
       };
-    } catch (e) {
-      logger.warn('api.fetch_game_state', String(e));
-      return null;
-    }
+    } catch {
+            return null;
+          }
   }
 };

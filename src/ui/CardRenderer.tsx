@@ -2,7 +2,6 @@ import * as PIXI from 'pixi.js';
 import type { VirtualZoneCard } from '../game/types';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
-import { logger } from '../utils/logger';
 import { getCardImageUrl, getBackImageUrl } from '../utils/imageAssets';
 
 const { COLORS, SIZES } = LAYOUT_CONSTANTS;
@@ -347,12 +346,6 @@ export const createCardContainer = (
     const dy = e.global.y - pointerDownPos.y;
     if (Math.sqrt(dx * dx + dy * dy) <= PHYSICS.TAP_THRESHOLD) {
       e.stopPropagation();
-      logger.log({
-        level: 'info',
-        action: 'ui.card_tap',
-        msg: `Card tapped: ${card?.name || 'unknown'}`,
-        payload: { uuid: card?.uuid, isOpponent }
-      });
       // autoDensity + 全画面キャンバスのため e.global は CSS ピクセル座標と一致。
       // DOM オーバーレイ(ミニメニュー)の配置にそのまま渡せる。
       if (options.onClick) options.onClick({ x: e.global.x, y: e.global.y });

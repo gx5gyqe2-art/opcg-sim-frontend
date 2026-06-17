@@ -3,7 +3,6 @@ import type { LayoutCoords } from '../layout/layoutEngine';
 import { createCardContainer } from './CardRenderer';
 import type { PlayerState, CardInstance, BoardCard, VirtualZoneCard } from '../game/types';
 import { normalizeCardType } from '../game/cardTypes';
-import { logger } from '../utils/logger';
 // 未使用のインポートを削除しました
 
 export const createBoardSide = (
@@ -45,16 +44,7 @@ export const createBoardSide = (
     isSelected: selectedUuids?.has(c.uuid || '') ?? false,
   });
 
-  if (z.field && z.field.length > 0 && !isOpponent) {
-     logger.log({
-      level: 'info',
-      action: 'ui.debug_field_cards',
-      msg: `Field Check for ${p.player_id}`,
-      payload: { 
-        cards: z.field.map(c => ({ name: c.name, type: c.type, uuid: c.uuid }))
-      }
-    });
-  }
+  if (z.field && z.field.length > 0 && !isOpponent) { /* noop */ }
 
   let stageCard = p.stage;
   const fieldCards = [...(z.field || [])]; 

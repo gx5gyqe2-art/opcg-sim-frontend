@@ -1,4 +1,3 @@
-import { logger } from '../utils/logger';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from './layout.config';
 
 export interface LayoutCoords {
@@ -56,9 +55,8 @@ export const calculateCoordinates = (W: number, H: number): LayoutCoords => {
     V_GAP = Math.max(0, V_GAP);
   }
   
-  const validateCoordinate = (val: number, label: string) => {
+  const validateCoordinate = (val: number, _label: string) => {
     if (isNaN(val)) {
-      logger.warn('layout.calculation_anomaly', `NaN detected for ${label}`, { W, H });
       return 0;
     }
     return val;

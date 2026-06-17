@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 // ▼ 変更: imageAssetsから関数をインポート
 import { getCardImageUrl } from '../utils/imageAssets';
@@ -25,23 +24,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const [donAmount, setDonAmount] = useState(1);
 
   useEffect(() => {
-    logger.log({
-      level: 'debug',
-      action: "debug.sheet_mount",
-      msg: `Detail sheet mounted for: ${card.name}`,
-      payload: { uuid: card.uuid, location }
-    });
   }, [card.name, card.uuid, location]);
 
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   const handleExecute = async (type: string, extra: Record<string, unknown> = {}) => {
-    logger.log({
-      level: 'info',
-      action: "trace.handleExecute_called",
-      msg: `Execute clicked: ${type}`,
-      payload: { type, uuid: card.uuid }
-    });
     await onAction(type, { uuid: card.uuid, extra });
   };
 

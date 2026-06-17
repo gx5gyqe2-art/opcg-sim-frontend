@@ -17,7 +17,7 @@ import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger';
+import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
 
@@ -154,6 +154,8 @@ export const RealGame = ({
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
   const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
   const [showLog, setShowLog] = useState(false);
+  // ログ採取（クリップボードコピーが不可な環境向けのフォールバック表示用）。
+  const [captureText, setCaptureText] = useState<string | null>(null);
   const [effectToasts, setEffectToasts] = useState<EffectToastItem[]>([]);
   const toastIdRef = useRef(0);
 
@@ -238,9 +240,7 @@ export const RealGame = ({
             options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id });
           });
         }
-      } catch(e) {
-        console.error(e);
-      }
+      } catch { /* noop */ }
 
       const uniqueMap = new Map();
       options.forEach(o => uniqueMap.set(o.id, o));
@@ -278,16 +278,15 @@ export const RealGame = ({
               if (data.action_events?.length) addEventLog(data.action_events);
             }
           }
-        } catch (e) { logger.error('ws.parse_error', String(e)); }
+        } catch { /* noop */ }
       };
-      ws.onerror = () => { logger.error('ws.error', 'WebSocket error'); };
+      ws.onerror = () => { };
       ws.onclose = () => {
         if (!isMountedRef.current) return;
         setWsConnected(false);
         const attempt = reconnectAttemptRef.current;
         const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
         reconnectAttemptRef.current += 1;
-        logger.warn('ws.disconnected', `Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
         reconnectTimerRef.current = setTimeout(connectWs, delay);
       };
     };
@@ -651,14 +650,6 @@ export const RealGame = ({
 
     // オンラインでは自分の手番でなければ自陣カードも操作不可（閲覧のみ）。
     const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc) && isMyTurn;
-
-    logger.log({
-      level: 'info',
-      action: "ui.onCardClick",
-      msg: `Card: ${card.name}, Loc: ${currentLoc}, Turn: ${activePlayerId}, Operatable: ${isOperatable}`,
-      payload: { uuid: card.uuid, activePlayerId, currentLoc }
-    });
-
     // 操作可能カードで実行可能アクションが1つ以上あれば、詳細シートではなく
     // カード近傍のミニメニューを開く（タップ→即操作の導線）。
     const donCount = gameState.players[viewerId]?.don_active.length ?? 0;
@@ -788,7 +779,6 @@ export const RealGame = ({
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      logger.flushLogs();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
@@ -797,10 +787,38 @@ export const RealGame = ({
   }, []);
 
   const handleBackToTitle = () => {
-    logger.flushLogs();
     // オンライン対戦からの離脱はルールロビーへ戻す（指定があれば）。
     if (isOnline && onForceBack) onForceBack();
     else onBack();
+  };
+
+  // ログ採取: クライアントのイベント履歴＋盤面に、CPU 思考トレース（/replay・cpu_trace 対局のみ）を
+  // まとめて 1 つの JSON にし、クリップボードへコピーする（不可ならフォールバックで画面表示）。
+  const handleCaptureLogs = async () => {
+    const gid = gameState?.game_id ?? null;
+    const dump: Record<string, unknown> = {
+      capturedAt: new Date().toISOString(),
+      game_id: gid,
+      sessionId: sessionManager.getSessionId(),
+      turn_info: gameState?.turn_info ?? null,
+      winner: gameState?.turn_info?.winner ?? null,
+      eventLog,
+    };
+    if (gid) {
+      const replay = await apiClient.getReplay(gid);
+      if (replay) {
+        dump.replay = replay.replay;       // リプレイ種（seed/leaders/decks/actions）
+        dump.cpuDecisions = replay.decisions; // CPU の各意思決定トレース
+      }
+    }
+    const text = JSON.stringify(dump, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      window.alert('ログをクリップボードにコピーしました。チャットに貼り付けてください。');
+    } catch {
+      // クリップボード不可（非セキュアコンテキスト等）はテキスト表示にフォールバック。
+      setCaptureText(text);
+    }
   };
 
   // ── オンライン対戦のルームセットアップ（WAITING 中） ──
@@ -1126,12 +1144,60 @@ export const RealGame = ({
         ログ
       </button>
 
+      <button
+        onClick={handleCaptureLogs}
+        title="ログ（イベント履歴＋CPU思考トレース）をクリップボードにコピー"
+        style={{
+          position: 'absolute',
+          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
+          left: '100px',
+          transform: 'translateY(-50%)',
+          zIndex: Z_INDEX.OVERLAY + 20,
+          background: 'rgba(0, 0, 0, 0.6)',
+          color: '#aaa',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          padding: '4px 9px',
+          cursor: 'pointer',
+          fontSize: '11px',
+        }}
+      >
+        採取
+      </button>
+
       {showLog && layoutCoords && (
         <ActionLog
           events={eventLog}
           anchorY={layoutCoords.y}
           onClose={() => setShowLog(false)}
         />
+      )}
+
+      {captureText !== null && (
+        <div
+          onClick={() => setCaptureText(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: Z_INDEX.OVERLAY + 60,
+            background: 'rgba(0,0,0,0.7)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', padding: '20px',
+          }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ width: 'min(680px, 92vw)', background: '#1b1b1b', border: '1px solid #444', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ color: '#ddd', fontSize: '12px', marginBottom: '8px' }}>
+              クリップボードに自動コピーできませんでした。下のテキストを選択してコピーしてください。
+            </div>
+            <textarea
+              readOnly
+              autoFocus
+              onFocus={e => e.currentTarget.select()}
+              value={captureText}
+              style={{ width: '100%', height: '50vh', fontFamily: 'monospace', fontSize: '11px', background: '#111', color: '#ccc', border: '1px solid #333', borderRadius: '4px', padding: '8px', boxSizing: 'border-box' }}
+            />
+            <div style={{ textAlign: 'right', marginTop: '8px' }}>
+              <button onClick={() => setCaptureText(null)} style={{ background: 'rgba(41,128,185,0.8)', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px' }}>閉じる</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}

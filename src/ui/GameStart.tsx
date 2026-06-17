@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 're
 import { API_CONFIG } from '../api/api.config';
 import './GameUI.css'; 
 import { prefetchAllCardImages } from '../utils/imageAssets';
-import { logger } from '../utils/logger';
 
 interface GameStartProps {
   onStart: (
@@ -61,12 +60,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
     mode: 'normal' | 'sandbox',
     sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string }
   ) => {
-    logger.log({
-      level: 'info',
-      action: 'game_menu.select',
-      msg: `Menu selected: ${mode}`,
-      payload: { mode, role: sandboxOptions?.role, room: sandboxOptions?.room_name }
-    });
     // デッキIDは空文字で渡す（Sandbox側で選択させるため）
     onStart('', '', mode, sandboxOptions);
   };
@@ -85,10 +78,9 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
         });
         alert("画像のダウンロードが完了しました。\nオフラインでも快適に動作します。");
       }
-    } catch (e) {
-      console.error(e);
-      alert("カードリストの取得に失敗しました");
-    } finally {
+    } catch {
+            alert("カードリストの取得に失敗しました");
+          } finally {
       setDownloadProgress(null);
     }
   };
@@ -222,7 +214,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                   <MenuCard
                     label="▶ PLAY"
                     desc="ゲームを始める"
-                    onClick={() => { logger.log({level:'info', action:'menu.play', msg: 'Open Play menu'}); setPlayStep('mode'); }}
+                    onClick={() => { setPlayStep('mode'); }}
                     color="#f1c40f"
                   />
                 </div>
@@ -235,7 +227,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                     label="デッキ作成 / 一覧"
                     desc="Deck Builder"
                     onClick={() => {
-                      logger.log({level:'info', action:'menu.deck_builder', msg: 'Open DeckBuilder'});
                       onDeckBuilder();
                     }}
                     color="#3498db"
@@ -244,7 +235,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                     label="カードリスト"
                     desc="Card Catalog"
                     onClick={() => {
-                      logger.log({level:'info', action:'menu.card_list', msg: 'Open CardList'});
                       onCardList();
                     }}
                     color="#e67e22"
@@ -253,7 +243,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                     label="CPU相手モデル"
                     desc="ふつうの推測に使う相手デッキ"
                     onClick={() => {
-                      logger.log({level:'info', action:'menu.cpu_template', msg: 'Open CPU template builder'});
                       onCpuTemplate();
                     }}
                     color="#9b59b6"
@@ -305,8 +294,8 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                   label="オンライン対戦"
                   desc={playMode === 'free' ? 'Free · Online' : 'Rule · Online'}
                   onClick={() => {
-                    if (playMode === 'free') { logger.log({level:'info', action:'menu.lobby', msg: 'Open Lobby'}); onLobby(); }
-                    else { logger.log({level:'info', action:'menu.rule_lobby', msg: 'Open Rule Lobby'}); onRuleLobby(); }
+                    if (playMode === 'free') { onLobby(); }
+                    else { onRuleLobby(); }
                   }}
                   color="#16a085"
                 />
@@ -315,7 +304,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                   <MenuCard
                     label="CPU対戦"
                     desc="Rule · vs CPU"
-                    onClick={() => { logger.log({level:'info', action:'menu.cpu', msg: 'Open CPU difficulty'}); setCpuPick(true); }}
+                    onClick={() => { setCpuPick(true); }}
                     color="#e67e22"
                   />
                 )}
@@ -332,19 +321,19 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                 <MenuCard
                   label="かんたん"
                   desc="フェア · 公開情報のみ"
-                  onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU easy'}); onStartCpu('easy'); }}
+                  onClick={() => { onStartCpu('easy'); }}
                   color="#2ecc71"
                 />
                 <MenuCard
                   label="ふつう"
                   desc="リーダー推測 · 多手先読み"
-                  onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU normal'}); onStartCpu('normal'); }}
+                  onClick={() => { onStartCpu('normal'); }}
                   color="#f39c12"
                 />
                 <MenuCard
                   label="つよい"
                   desc="最強 · 全力先読み"
-                  onClick={() => { logger.log({level:'info', action:'menu.cpu_start', msg: 'CPU hard'}); onStartCpu('hard'); }}
+                  onClick={() => { onStartCpu('hard'); }}
                   color="#e74c3c"
                 />
               </div>

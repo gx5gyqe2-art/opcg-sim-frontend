@@ -12,7 +12,6 @@ import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { apiClient } from '../api/client';
 import type { GameState, CardInstance, PlayerState, DeckInput } from '../game/types';
 import { API_CONFIG } from '../api/api.config';
-import { logger } from '../utils/logger';
 import { handleLocalAction } from '../game/localActionHandler';
 import { getCardImageUrl } from '../utils/imageAssets';
 
@@ -230,7 +229,6 @@ export const SandboxGame = ({
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       pressStartPosRef.current = { x, y };
       longPressTimerRef.current = setTimeout(() => {
-          logger.log({ level: 'info', action: 'ui.long_press', msg: `Show detail: ${card.name}`, payload: { uuid: card.uuid } });
           setSelectedCard(card);
           setDragState(null);
           longPressTriggeredRef.current = true;
@@ -273,7 +271,7 @@ export const SandboxGame = ({
             options.push({ id, name: d.name, leaderId: d.leader_id });
           });
         }
-      } catch(e) { console.error(e); }
+      } catch { /* noop */ }
 
       const uniqueMap = new Map();
       options.forEach(o => uniqueMap.set(o.id, o));
@@ -339,7 +337,6 @@ export const SandboxGame = ({
         if (!isMountedRef.current) return;
         reconnectAttemptRef.current = 0;
         setWsConnected(true);
-        logger.log({ level: 'info', action: 'ws.connected', msg: `WebSocket connected: ${gameId}` });
       };
       ws.onmessage = (event) => {
         try {
@@ -351,9 +348,9 @@ export const SandboxGame = ({
               else onBack();
             }
           }
-        } catch(e) { logger.error('ws.parse_error', String(e)); }
+        } catch { /* noop */ }
       };
-      ws.onerror = () => { logger.error('ws.error', 'WebSocket error'); };
+      ws.onerror = () => { };
       ws.onclose = () => {
         if (!isMountedRef.current) return;
         setWsConnected(false);
@@ -361,7 +358,6 @@ export const SandboxGame = ({
         // 指数バックオフ: 2s → 4s → 8s → 16s → 30s(上限)
         const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
         reconnectAttemptRef.current += 1;
-        logger.warn('ws.disconnected', `Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
         reconnectTimerRef.current = setTimeout(() => connectWs(gameId), delay);
       };
     };
@@ -376,7 +372,7 @@ export const SandboxGame = ({
             setGameState(state);
         }
         if (currentId) connectWs(currentId);
-      } catch (e) { logger.error('sandbox.init_fail', String(e)); alert("Failed to start sandbox"); onBack(); }
+      } catch { alert("Failed to start sandbox"); onBack(); }
     };
     initGame();
     return () => {
@@ -453,7 +449,7 @@ export const SandboxGame = ({
         try {
             app.ticker.remove(autoScrollTicker);
             app.destroy(true, { children: true });
-        } catch(e) { console.warn(e); }
+        } catch { /* noop */ }
         appRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は status 変化時のみ再実行する意図（COLORS は定数）
@@ -772,9 +768,7 @@ export const SandboxGame = ({
       try {
         await apiClient.sendSandboxAction(activeGameId, { action_type: 'MOVE_CARD', ...trashParams });
         await apiClient.sendSandboxAction(activeGameId, { action_type: 'MOVE_CARD', ...fieldParams });
-      } catch (e) {
-        console.error("Failed to sync replacement actions", e);
-      }
+      } catch { /* noop */ }
     }
   };
 
@@ -838,7 +832,7 @@ export const SandboxGame = ({
           if (!isLocalMode) {
               await apiClient.sendSandboxAction(activeGameId!, { action_type: type, player_id: pid, ...params }); 
           }
-      } catch(e) { console.error(e); alert('アクションエラー'); } finally { setIsPending(false); }
+      } catch { alert('アクションエラー'); } finally { setIsPending(false); }
   };
 
   const shouldShowSetupScreen = gameState && gameState.status === 'WAITING' && !(initialP1DeckId && initialP2DeckId);
