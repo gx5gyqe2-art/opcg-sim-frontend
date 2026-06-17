@@ -995,11 +995,21 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
       } catch(e) { console.error(e); }
 
       try {
-        const cRes = await fetch(`${API_CONFIG.BASE_URL}/api/cards`);
-        const cData = await cRes.json();
-        if (cData.success) {
-           setAllCards(cData.cards);
-           localStorage.setItem('opcg_card_db', JSON.stringify(cData.cards));
+        // ETag条件付きGET: キャッシュ済みデータとETagが揃っていれば If-None-Match を送る。
+        // 変更が無ければ 304 が返り、1.2MBの再ダウンロードと再stringifyを丸ごとスキップする。
+        const cachedEtag = localStorage.getItem('opcg_card_db_etag');
+        const headers: HeadersInit = (loadedFromCache && cachedEtag) ? { 'If-None-Match': cachedEtag } : {};
+        const cRes = await fetch(`${API_CONFIG.BASE_URL}/api/cards`, { headers });
+        if (cRes.status === 304) {
+           // 変更なし → localStorage 由来の allCards をそのまま使う（転送0・stringify0）
+        } else if (cRes.ok) {
+           const cData = await cRes.json();
+           if (cData.success) {
+              setAllCards(cData.cards);
+              localStorage.setItem('opcg_card_db', JSON.stringify(cData.cards));
+              const et = cRes.headers.get('ETag');
+              if (et) localStorage.setItem('opcg_card_db_etag', et);
+           }
         }
       } catch {
          if (!loadedFromCache) {
