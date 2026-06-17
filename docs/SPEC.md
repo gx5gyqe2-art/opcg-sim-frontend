@@ -130,6 +130,7 @@ npx vite build  # 本番ビルド
 ---
 
 ## 6. 関連ドキュメント
+- 画面設計書: [`docs/screen-design.md`](screen-design.md)（各画面の目的・遷移・レイアウト・UI 要素・状態）
 - ユーザ目線の機能分類: [`docs/user-feature-classification.md`](user-feature-classification.md)
 - バックエンド仕様: `opcg-sim-backend/docs/SPEC.md`（コアルール・オンライン対戦・効果システム）
 - バックエンドのテスト仕様: `opcg-sim-backend/docs/TEST_SPEC.md`

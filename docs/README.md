@@ -10,6 +10,7 @@
 | 文書 | 内容 |
 |---|---|
 | [`SPEC.md`](SPEC.md) | **システム仕様書**（React + Vite + Pixi.js）。画面モード／ルールモード（ソロ・オンライン対戦・**CPU 対戦**）／フリーモード・ロビー／API クライアント・状態同期／ファイルマップ／検証手順 |
+| [`screen-design.md`](screen-design.md) | **画面設計書**。各画面（`AppMode`）の目的・遷移・レイアウト・UI 要素・状態（条件分岐）を画面単位で記述。共通モーダル／オーバーレイも収録 |
 | [`user-feature-classification.md`](user-feature-classification.md) | **ユーザ目線の機能分類**。メニュー階層（PLAY → モード → プレイ／Deck & Cards）に沿った全機能の整理 |
 
 ## 関連（バックエンド）
