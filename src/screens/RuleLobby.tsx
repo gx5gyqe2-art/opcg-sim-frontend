@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
-import { logger } from '../utils/logger';
 import '../ui/GameUI.css';
 
 interface RuleRoomInfo {
@@ -37,10 +36,9 @@ export const RuleLobby: React.FC<RuleLobbyProps> = ({ onBack, onJoin, onCreate }
     try {
       const { game_id } = await apiClient.createRuleRoom(newRoomName.trim());
       if (game_id) onCreate(game_id);
-    } catch (e) {
-      logger.error('rule_lobby.create_fail', String(e));
-      alert('ルームの作成に失敗しました');
-    } finally {
+    } catch {
+            alert('ルームの作成に失敗しました');
+          } finally {
       setCreating(false);
     }
   };
@@ -50,9 +48,7 @@ export const RuleLobby: React.FC<RuleLobbyProps> = ({ onBack, onJoin, onCreate }
       const res = await fetch(`${API_CONFIG.BASE_URL}/api/rule/list`);
       const data = await res.json();
       if (data.success) setRooms(data.games);
-    } catch (e) {
-      logger.error('rule_lobby.fetch_fail', String(e));
-    } finally {
+    } catch { /* noop */ } finally {
       setLoading(false);
     }
   };

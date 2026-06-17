@@ -2,7 +2,6 @@ import type { GameActionRequest, BattleActionRequest, GameActionResult, PendingR
 import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger';
 import { sessionManager } from '../utils/session';
 
 const { BASE_URL, ENDPOINTS } = API_CONFIG;
@@ -16,20 +15,6 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
   };
 
   const res = await fetch(url, { ...options, headers });
-
-  if (import.meta.env.DEV) {
-    const logRes = res.clone();
-    console.group(`%cAPI Response: ${url}`, `color: ${res.ok ? '#2ecc71' : '#e74c3c'}; font-weight: bold;`);
-    console.log('Status:', res.status);
-    try {
-      const data = await logRes.json();
-      console.table(data);
-    } catch {
-      console.log('Data: (not json)');
-    }
-    console.groupEnd();
-  }
-
   return res;
 };
 
@@ -70,26 +55,16 @@ export const apiClient = {
     const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
     if (!res.ok || data[SUCCESS_KEY] === false) {
       const msg = data.error?.message || 'Failed to create game';
-      logger.error('api.create_game', msg, { response: data });
       throw new Error(msg);
     }
 
-    const oldSid = sessionManager.getSessionId();
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
     const gameId = data[GAME_ID_KEY] || data[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
-    
+
     if (gameId) {
       sessionManager.setSessionId(gameId);
-      if (oldSid !== gameId) {
-        logger.log({
-          level: 'info',
-          action: 'session.updated',
-          msg: `Session ID updated from ${oldSid} to ${gameId}`,
-          payload: { old: oldSid, new: gameId }
-        });
-      }
     }
-    
+
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
     const newState = data[stateKey];
     const pendingKey = CONST.API_ROOT_KEYS.PENDING_REQUEST as keyof typeof data;
@@ -231,27 +206,17 @@ export const apiClient = {
     });
 
     const result = await response.json();
-    const oldSid = sessionManager.getSessionId();
-    
+
     const GAME_ID_KEY = CONST.API_ROOT_KEYS.GAME_ID;
     const newGameId = result[GAME_ID_KEY] || result[CONST.API_ROOT_KEYS.GAME_STATE]?.[GAME_ID_KEY];
 
     if (newGameId) {
       sessionManager.setSessionId(newGameId);
-      if (oldSid !== newGameId) {
-        logger.log({
-          level: 'info',
-          action: 'session.updated',
-          msg: `Session ID updated from ${oldSid} to ${newGameId}`,
-          payload: { old: oldSid, new: newGameId }
-        });
-      }
     }
 
     const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
     if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
       const msg = result.error?.message || "Action failed";
-      logger.error('api.send_action', msg, { request: actionBody, response: result });
       throw new Error(msg);
     }
 
@@ -275,7 +240,6 @@ export const apiClient = {
     const SUCCESS_KEY = CONST.API_ROOT_KEYS.SUCCESS || 'success';
     if (!response.ok || result[SUCCESS_KEY] === false || !result[CONST.API_ROOT_KEYS.GAME_STATE]) {
       const msg = result.error?.message || "Battle action failed";
-      logger.error('api.send_battle_action', msg, { request, response: result });
       throw new Error(msg);
     }
 
@@ -308,9 +272,8 @@ export const apiClient = {
         pending_request: result.pending_request,
         action_events: result.action_events || [],
       };
-    } catch (e) {
-      logger.warn('api.fetch_game_state', String(e));
-      return null;
-    }
+    } catch {
+            return null;
+          }
   }
 };

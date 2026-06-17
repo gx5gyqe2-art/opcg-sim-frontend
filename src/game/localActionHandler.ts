@@ -12,8 +12,6 @@ import {
   resetGameLocal 
 } from './localLogic';
 import type { DeckInput } from './types';
-import { logger } from '../utils/logger';
-
 // ローカルアクションのペイロード（アクション種別ごとに使うフィールドが異なるため全て optional）。
 interface LocalActionParams {
   player_id?: string;
@@ -29,13 +27,6 @@ interface LocalActionParams {
 }
 
 export const handleLocalAction = (state: GameState, actionType: string, params: LocalActionParams): GameState => {
-  logger.log({
-    level: 'info',
-    action: `local_action.${actionType}`,
-    msg: `Processing local action: ${actionType}`,
-    payload: params
-  });
-
   switch (actionType) {
     case 'SET_DECK': {
       const newState = JSON.parse(JSON.stringify(state));
@@ -112,7 +103,6 @@ export const handleLocalAction = (state: GameState, actionType: string, params: 
       return resetGameLocal(state);
 
     default:
-      logger.warn('local_action.unknown', `Action ${actionType} is not implemented locally.`);
       return state;
   }
 };

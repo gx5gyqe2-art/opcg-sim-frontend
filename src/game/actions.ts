@@ -3,8 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { apiClient } from '../api/client';
 import type { GameActionRequest, ActionType, BattleActionRequest, PendingRequest, ActionEvent } from '../api/types';
 import type { GameState } from './types';
-import { logger } from '../utils/logger';
-
 // API クライアントが throw するエラー（部分的に game_state/pending_request を含み得る）。
 type ApiActionError = { message?: string; game_state?: GameState; pending_request?: PendingRequest | null };
 
@@ -62,19 +60,6 @@ export const useGameAction = (
     setIsPending(true);
     
     const targetPlayerId = pendingRequest?.player_id || playerId;
-    
-    logger.log({
-      level: 'info',
-      action: 'game.sendAction',
-      msg: 'Sending action to server',
-      payload: { 
-        type, 
-        targetPlayerId,
-        full_payload: payload
-      }
-    });
-
-
     try {
       const result = await apiClient.sendAction(gameId, {
         request_id: uuidv4(),
@@ -104,14 +89,6 @@ export const useGameAction = (
     setIsPending(true);
 
     const targetPlayerId = pendingRequest?.player_id || playerId;
-
-    logger.log({
-      level: 'info',
-      action: 'game.sendBattleAction',
-      msg: 'Sending battle action to server',
-      payload: { actionType, targetPlayerId }
-    });
-
     try {
       const result = await apiClient.sendBattleAction({
         game_id: gameId,

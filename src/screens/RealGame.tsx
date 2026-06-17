@@ -17,7 +17,6 @@ import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
 import CONST from '../../shared_constants.json';
-import { logger } from '../utils/logger';
 import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
@@ -241,9 +240,7 @@ export const RealGame = ({
             options.push({ id: `db:${d.id}`, name: d.name, leaderId: d.leader_id });
           });
         }
-      } catch(e) {
-        console.error(e);
-      }
+      } catch { /* noop */ }
 
       const uniqueMap = new Map();
       options.forEach(o => uniqueMap.set(o.id, o));
@@ -281,16 +278,15 @@ export const RealGame = ({
               if (data.action_events?.length) addEventLog(data.action_events);
             }
           }
-        } catch (e) { logger.error('ws.parse_error', String(e)); }
+        } catch { /* noop */ }
       };
-      ws.onerror = () => { logger.error('ws.error', 'WebSocket error'); };
+      ws.onerror = () => { };
       ws.onclose = () => {
         if (!isMountedRef.current) return;
         setWsConnected(false);
         const attempt = reconnectAttemptRef.current;
         const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
         reconnectAttemptRef.current += 1;
-        logger.warn('ws.disconnected', `Reconnecting in ${delay}ms (attempt ${attempt + 1})`);
         reconnectTimerRef.current = setTimeout(connectWs, delay);
       };
     };
@@ -654,14 +650,6 @@ export const RealGame = ({
 
     // オンラインでは自分の手番でなければ自陣カードも操作不可（閲覧のみ）。
     const isOperatable = ['leader', 'hand', 'field'].includes(currentLoc) && isMyTurn;
-
-    logger.log({
-      level: 'info',
-      action: "ui.onCardClick",
-      msg: `Card: ${card.name}, Loc: ${currentLoc}, Turn: ${activePlayerId}, Operatable: ${isOperatable}`,
-      payload: { uuid: card.uuid, activePlayerId, currentLoc }
-    });
-
     // 操作可能カードで実行可能アクションが1つ以上あれば、詳細シートではなく
     // カード近傍のミニメニューを開く（タップ→即操作の導線）。
     const donCount = gameState.players[viewerId]?.don_active.length ?? 0;
@@ -791,7 +779,6 @@ export const RealGame = ({
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      logger.flushLogs();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
@@ -800,7 +787,6 @@ export const RealGame = ({
   }, []);
 
   const handleBackToTitle = () => {
-    logger.flushLogs();
     // オンライン対戦からの離脱はルールロビーへ戻す（指定があれば）。
     if (isOnline && onForceBack) onForceBack();
     else onBack();

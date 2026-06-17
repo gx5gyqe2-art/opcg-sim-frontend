@@ -1,7 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { GameState, CardInstance, PlayerState, LeaderCard, BoardCard, DeckInput, DeckCardData, ZoneState } from './types';
-import { logger } from '../utils/logger';
-
 const cloneState = (state: GameState): GameState => JSON.parse(JSON.stringify(state));
 
 const updatePlayerCounts = (player: PlayerState) => {
@@ -106,8 +104,6 @@ export const createInitialGameState = (p1Deck: DeckInput, p2Deck: DeckInput, roo
       updatePlayerCounts(p1);
     }
   }
-
-  logger.log({ level: 'info', action: 'local.init_game', msg: 'Local game state initialized', payload: { gameId: state.game_id } });
   return state;
 };
 
@@ -153,17 +149,15 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
   const isLeader = targetCard.type === 'LEADER' || targetCard.type === 'リーダー';
 
   if (sourcePid !== destPid) {
-    logger.warn('local.move_blocked', 'Cannot move card to opponent\'s area');
     return state;
   }
 
   if (destZone === 'leader') {
-    if (!isLeader) { logger.warn('local.move_blocked', 'Only Leader can be placed in Leader zone'); return state; }
+    if (!isLeader) { return state; }
   } else if (['don_active', 'don_rested', 'don_deck'].includes(destZone)) {
-    if (!isDon) { logger.warn('local.move_blocked', 'Only Don!! can be placed in Don zone'); return state; }
+    if (!isDon) { return state; }
   } else if (['hand', 'deck', 'life', 'trash', 'field', 'stage'].includes(destZone)) {
-    if (isDon || isLeader) { 
-      logger.warn('local.move_blocked', `Leader/Don cannot be placed in ${destZone}`); 
+    if (isDon || isLeader) {
       return state; 
     }
   }
@@ -203,7 +197,6 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
           destPlayer.don_rested.push(don);
         }
       }
-      logger.log({ level: 'info', action: 'local.auto_cost', msg: `Paid ${cost} cost`, payload: { card: targetCard.name } });
     }
   }
 
@@ -225,8 +218,6 @@ export const moveCardLocal = (state: GameState, cardUuid: string, destPid: 'p1' 
 
   updatePlayerCounts(newState.players[sourcePid]);
   if (sourcePid !== destPid) updatePlayerCounts(newState.players[destPid]);
-
-  logger.log({ level: 'info', action: 'local.move_card', msg: `Moved ${targetCard.name}`, payload: { uuid: cardUuid, to: destZone } });
   return newState;
 };
 
@@ -361,7 +352,6 @@ export const resolveTurnEndLocal = (state: GameState): GameState => {
   updatePlayerCounts(nextPlayer);
 
   newState.turn_info.current_phase = 'MAIN';
-  logger.log({ level: 'info', action: 'local.turn_end', msg: `Turn passed to ${nextPid}`, payload: { turn: currentTurn } });
   return newState;
 };
 
@@ -382,8 +372,6 @@ export const mulliganLocal = (state: GameState, playerId: string): GameState => 
     const card = deck.shift();
     if (card) { card.is_face_up = true; player.zones.hand.push(card); }
   }
-
-  logger.log({ level: 'info', action: 'local.mulligan', msg: `Mulligan executed for ${playerId}` });
   return newState;
 };
 
@@ -403,7 +391,6 @@ export const drawCardLocal = (state: GameState, playerId: string): GameState => 
     const card = deck.shift(); 
     if (card) { card.is_face_up = true; player.zones.hand.push(card); } 
     player.zones.deck = deck; 
-    logger.log({ level: 'info', action: 'local.draw', msg: `${playerId} manually drew a card` }); 
   }
   return newState;
 };
@@ -413,7 +400,6 @@ export const shuffleDeckLocal = (state: GameState, playerId: string): GameState 
   const player = newState.players[playerId as 'p1' | 'p2'];
   if (player.zones.deck) { 
     player.zones.deck.sort(() => Math.random() - 0.5); 
-    logger.log({ level: 'info', action: 'local.shuffle', msg: `${playerId} shuffled deck` }); 
   }
   return newState;
 };
@@ -480,7 +466,5 @@ export const resetGameLocal = (state: GameState): GameState => {
       updatePlayerCounts(p1);
     }
   }
-
-  logger.log({ level: 'info', action: 'local.reset', msg: 'Game reset executed locally' });
   return newState;
 };

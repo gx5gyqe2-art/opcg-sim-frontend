@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { API_CONFIG } from '../api/api.config';
-import { logger } from '../utils/logger';
 import '../ui/GameUI.css';
 
 interface RoomInfo {
@@ -40,13 +39,11 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }
       if (data.success && data.game_id) {
         onCreate(data.game_id);
       } else {
-        logger.error('lobby.create_fail', data.error || 'Unknown error');
         alert('ルームの作成に失敗しました');
       }
-    } catch (e) {
-      logger.error('lobby.create_fail', String(e));
-      alert('ルームの作成に失敗しました');
-    } finally {
+    } catch {
+            alert('ルームの作成に失敗しました');
+          } finally {
       setCreating(false);
     }
   };
@@ -58,9 +55,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({ onBack, onJoin, onCreate }
       if (data.success) {
         setRooms(data.games);
       }
-    } catch (e) {
-      logger.error('lobby.fetch_fail', String(e));
-    } finally {
+    } catch { /* noop */ } finally {
       setLoading(false);
     }
   };

@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { logger } from '../utils/logger';
 import { API_CONFIG } from '../api/api.config';
 import { getCardImageUrl } from '../utils/imageAssets';
 
@@ -989,10 +988,9 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
            if (Array.isArray(parsed) && parsed.length > 0) {
              setAllCards(parsed);
              loadedFromCache = true;
-             logger.log({ level: 'info', action: 'deck_builder.cache_hit', msg: 'Loaded cards from local storage' });
            }
         }
-      } catch(e) { console.error(e); }
+      } catch { /* noop */ }
 
       try {
         // ETag条件付きGET: キャッシュ済みデータとETagが揃っていれば If-None-Match を送る。
@@ -1012,9 +1010,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
            }
         }
       } catch {
-         if (!loadedFromCache) {
-           logger.error('deck_builder.init', 'Failed to load cards');
-         }
+         if (!loadedFromCache) { /* noop */ }
       }
 
       if (!viewOnly) {
@@ -1025,7 +1021,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
           if (dData.success && Array.isArray(dData[ep.listKey])) {
              serverDecks = dData[ep.listKey].filter((d: DeckData) => !d.id || !d.id.endsWith('.json'));
           }
-        } catch { console.log('Offline'); }
+        } catch { /* noop */ }
 
         // テンプレ（CPU相手モデル）はサーバ専用。ローカル下書き(getLocalDecks)はデッキ専用なので混ぜない。
         if (templateMode) {
@@ -1109,35 +1105,22 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
          setCurrentDeck(finalDeck);
          alert('保存しました');
       } else {
-         logger.error('deck_builder.save', 'Server returned error', { error: data.error });
          alert(`保存に失敗しました: ${data.error}`);
       }
-    } catch (e) { 
-        logger.error('deck_builder.save', 'Network error', { error: e });
-        alert('サーバー通信エラーが発生しました。保存できません。'); 
-    }
+    } catch {
+              alert('サーバー通信エラーが発生しました。保存できません。'); 
+          }
   };
 
   const handleDeleteDeck = async (deckId: string) => {
-    console.log(`[Delete] 削除開始: ID=${deckId}`);
-
     if (!confirm(`本当にこの${ep.label}を削除しますか？`)) return;
 
     try {
-      console.log(`[Delete] サーバー削除API呼び出し: ${API_CONFIG.BASE_URL}${ep.base}/${deckId}`);
-
       const res = await fetch(`${API_CONFIG.BASE_URL}${ep.base}/${deckId}`, {
           method: 'DELETE'
       });
-      
-      console.log(`[Delete] APIレスポンス: Status=${res.status}`);
-      
-      if (!res.ok) {
-        console.warn(`[Delete] サーバー上の削除に失敗しましたが、ローカル削除を続行します。Status: ${res.status}`);
-      }
-    } catch (e) {
-      console.error('[Delete] サーバー通信エラー:', e);
-    }
+      if (!res.ok) { /* noop */ }
+    } catch { /* noop */ }
 
     try {
       if (!templateMode) {
@@ -1148,13 +1131,10 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
       }
 
       setDecks(prev => prev.filter(d => d.id !== deckId));
-
-      console.log('[Delete] 削除処理完了');
       alert('削除しました');
-    } catch (e) {
-      console.error(e);
-      alert('ローカルデータの削除中にエラーが発生しました');
-    }
+    } catch {
+            alert('ローカルデータの削除中にエラーが発生しました');
+          }
   };
 
   if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} />;

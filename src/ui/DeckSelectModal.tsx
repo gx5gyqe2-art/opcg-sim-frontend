@@ -1,6 +1,5 @@
 import React from 'react';
 import { getCardImageUrl } from '../utils/imageAssets';
-import { logger } from '../utils/logger';
 
 export interface DeckOption {
   id: string;
@@ -18,16 +17,6 @@ interface DeckSelectModalProps {
 export const DeckSelectModal: React.FC<DeckSelectModalProps> = ({ title, options, onSelect, onClose }) => {
   
   const handleDeckClick = (deck: DeckOption) => {
-    logger.log({
-      level: 'info',
-      action: 'deck_select.tap',
-      msg: `Deck tapped: ${deck.name}`,
-      payload: {
-        deck_id: deck.id,
-        is_local_id: deck.id.startsWith('local-'),
-        has_leader: !!deck.leaderId
-      }
-    });
     onSelect(deck.id);
   };
 
