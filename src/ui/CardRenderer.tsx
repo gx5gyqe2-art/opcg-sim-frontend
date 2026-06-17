@@ -3,6 +3,8 @@ import type { VirtualZoneCard } from '../game/types';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
 import { getCardImageUrl, getBackImageUrl } from '../utils/imageAssets';
+import { createSelectableGlow } from './anim/glowSprite';
+import { tween } from './anim/tween';
 
 const { COLORS, SIZES } = LAYOUT_CONSTANTS;
 const { SHAPE, UI_DETAILS, PHYSICS } = LAYOUT_PARAMS;
@@ -316,12 +318,11 @@ export const createCardContainer = (
     addText('効果無効', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
   }
 
-  // 選択可能ハイライト: ゴールド枠線
+  // 選択可能ハイライト: 脈動するゴールドグロー（共有 ticker 駆動）
   if (options.isSelectable) {
-    const border = new PIXI.Graphics();
-    border.lineStyle(3, COLORS.HIGHLIGHT_SELECTABLE, 1.0);
-    border.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
-    container.addChild(border);
+    const { display, stop } = createSelectableGlow(cw, ch, COLORS.HIGHLIGHT_SELECTABLE);
+    container.addChild(display);
+    container.once('destroyed', stop);
   }
 
   // 選択済みオーバーレイ: 緑半透明 + チェックマーク
@@ -346,6 +347,18 @@ export const createCardContainer = (
     const dy = e.global.y - pointerDownPos.y;
     if (Math.sqrt(dx * dx + dy * dy) <= PHYSICS.TAP_THRESHOLD) {
       e.stopPropagation();
+      // タップフィードバック: 軽いスケールバウンス（0→peak→0）。
+      tween(
+        {
+          durationMs: 200,
+          onUpdate: (k) => {
+            if (container.destroyed) return;
+            container.scale.set(1 + 0.12 * Math.sin(k * Math.PI));
+          },
+        },
+        container,
+        'tapBounce',
+      );
       // autoDensity + 全画面キャンバスのため e.global は CSS ピクセル座標と一致。
       // DOM オーバーレイ(ミニメニュー)の配置にそのまま渡せる。
       if (options.onClick) options.onClick({ x: e.global.x, y: e.global.y });

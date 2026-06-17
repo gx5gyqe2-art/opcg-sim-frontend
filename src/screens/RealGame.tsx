@@ -16,6 +16,8 @@ import { CoinFlip } from '../ui/CoinFlip';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
+import { createEffectsLayer, type EffectsLayer } from '../ui/anim/effectsLayer';
+import { attachTweenTicker, detachTweenTicker, clearTweens } from '../ui/anim/tween';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
@@ -105,6 +107,7 @@ export const RealGame = ({
 
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
+  const effectsRef = useRef<EffectsLayer | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   // オンライン対戦のルーム状態（WAITING 中はセットアップ画面を表示）
   const [roomStatus, setRoomStatus] = useState<'WAITING' | 'PLAYING' | 'FINISHED'>('WAITING');
@@ -702,6 +705,10 @@ export const RealGame = ({
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
+    // 演出レイヤ（全再構築から独立した永続オーバーレイ）と共有 ticker を初期化。
+    effectsRef.current = createEffectsLayer();
+    attachTweenTicker(app);
+
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
@@ -726,6 +733,9 @@ export const RealGame = ({
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      detachTweenTicker();
+      clearTweens();
+      effectsRef.current = null;
       app.destroy(true, { children: true });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化は盤面準備完了時に1回のみ。startGame等の再実行は不要
@@ -736,6 +746,12 @@ export const RealGame = ({
     if (!app || !gameState) return;
 
     const renderScene = () => {
+      // 永続演出レイヤは破棄せず退避し、再構築後に最前面へ戻す。
+      const effectsContainer = effectsRef.current?.container ?? null;
+      if (effectsContainer?.parent) {
+        effectsContainer.parent.removeChild(effectsContainer);
+      }
+
       while (app.stage.children.length > 0) {
         const child = app.stage.children[0];
         app.stage.removeChild(child);
@@ -771,6 +787,9 @@ export const RealGame = ({
       bottomSide.y = midY;
 
       app.stage.addChild(topSide, bottomSide);
+
+      // 演出レイヤを最前面へ再アタッチ（飛行中の演出を維持）。
+      if (effectsContainer) app.stage.addChild(effectsContainer);
     };
 
     renderScene();
