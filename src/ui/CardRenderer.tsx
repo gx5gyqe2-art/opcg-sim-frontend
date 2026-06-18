@@ -24,14 +24,18 @@ type CardTextStyle = {
 export interface CardRenderOptions {
   count?: number;
   onClick: (pos: { x: number; y: number }) => void;
+  // ドラッグ開始（pointerdown）通知。指定時のみドラッグ&ドロップ操作の起点になる。
+  // タップ（onClick）とは独立して呼ばれ、移動量の判定は呼び出し側が行う。
+  onDragStart?: (pos: { x: number; y: number }) => void;
   isOpponent?: boolean;
   isSelectable?: boolean;
   isSelected?: boolean;
 }
 
-// 再利用（Phase4 reconcile）に備え、コンテナへ最新クリック・脈動グロー状態を持たせる。
+// 再利用（Phase4 reconcile）に備え、コンテナへ最新クリック・ドラッグ開始・脈動グロー状態を持たせる。
 export interface CardContainer extends PIXI.Container {
   __onClick?: (pos: { x: number; y: number }) => void;
+  __onDragStart?: (pos: { x: number; y: number }) => void;
   __glow?: { display: PIXI.Graphics; stop: () => void; key: string };
 }
 
@@ -59,6 +63,7 @@ export const drawCardVisuals = (
   // 再利用時に既定へ戻すべき外側プロパティ。
   container.rotation = isRest ? Math.PI / 2 : 0;
   container.__onClick = options.onClick;
+  container.__onDragStart = options.onDragStart;
 
   // 選択グローの保持判定（サイズ・選択状態が同じなら脈動を維持）。
   const glowKey = options.isSelectable ? `${Math.round(cw)}x${Math.round(ch)}` : '';
@@ -399,6 +404,8 @@ export const createCardContainer = (
   let pointerDownPos = { x: 0, y: 0 };
   container.on('pointerdown', (e) => {
     pointerDownPos = { x: e.global.x, y: e.global.y };
+    // ドラッグ起点を通知（移動量判定・ゴースト生成は呼び出し側）。タップ判定とは独立。
+    container.__onDragStart?.({ x: e.global.x, y: e.global.y });
   });
   container.on('pointertap', (e) => {
     const dx = e.global.x - pointerDownPos.x;
