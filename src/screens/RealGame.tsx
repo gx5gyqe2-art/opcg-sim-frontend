@@ -126,6 +126,12 @@ const resolveUuidByName = (name: string | undefined | null, gs: GameState): stri
 // 除去・喪失系（赤フラッシュ＋煙）。
 const REMOVAL_ACTIONS = new Set(['KO', 'TRASH', 'DISCARD', 'BOUNCE', 'MOVE_TO_HAND', 'DECK_BOTTOM']);
 
+// 攻撃エフェクトのサイド配色（盤面の枠色＝boardBackground の手番グローに対応）。
+// 自分＝緑系（0x34e0a6）／相手＝赤系（0xe74c3c）。攻撃元のサイドで色を切り替える。
+type FxPalette = { core: number; glow: number; glow2: number; ring: number; spark: number; flash: number };
+const FX_SELF: FxPalette = { core: 0xeafff8, glow: 0x21d99a, glow2: 0x4fe6b6, ring: 0x6cf0c8, spark: 0x8affda, flash: 0xeafff8 };
+const FX_OPP: FxPalette = { core: 0xffe9e4, glow: 0xe74c3c, glow2: 0xff7d6c, ring: 0xff9e8e, spark: 0xffc2b6, flash: 0xffeee9 };
+
 const resolveCardName = (uuid: string, gs: GameState): string => {
   return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
@@ -212,9 +218,11 @@ export const RealGame = ({
   const dragInfoRef = useRef<{ card: CardInstance; kind: DragKind } | null>(null);
   const dragGhostRef = useRef<PIXI.Container | null>(null);
   const dropHighlightRef = useRef<PIXI.Graphics | null>(null);
-  // 攻撃ドラッグはカード本体を動かさず、攻撃元→ポインタを結ぶ線（弧＋矢じり）で示す。
+  // 攻撃ドラッグはカード本体を動かさず、攻撃元→ポインタを結ぶネオン・テザー（発光弦＋照準）で示す。
   const attackLineRef = useRef<PIXI.Graphics | null>(null);
   const attackOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const attackToRef = useRef<{ x: number; y: number } | null>(null);
+  const attackTickRef = useRef<(() => void) | null>(null);
 
   // 先行プレイヤー選択（ソロ専用。CPU/対戦はランダム）。既定は P1 先攻。
   const [firstChoice, setFirstChoice] = useState<'p1' | 'p2'>('p1');
@@ -1120,6 +1128,10 @@ export const RealGame = ({
       }
     };
     const removeAttackLine = () => {
+      if (attackTickRef.current) {
+        app.ticker.remove(attackTickRef.current);
+        attackTickRef.current = null;
+      }
       const l = attackLineRef.current;
       if (l) {
         if (!l.destroyed) {
@@ -1129,6 +1141,7 @@ export const RealGame = ({
         attackLineRef.current = null;
       }
       attackOriginRef.current = null;
+      attackToRef.current = null;
     };
     // 盤面再構築でゴースト/ハイライトが破棄されたらドラッグを中断する。
     const ghostAlive = () => !!dragGhostRef.current && !dragGhostRef.current.destroyed;
@@ -1136,8 +1149,9 @@ export const RealGame = ({
     const dragVisualAlive = () =>
       ghostAlive() || (!!attackLineRef.current && !attackLineRef.current.destroyed);
 
-    // 攻撃元→終点を結ぶ線を描く。中点を進行方向の垂直へ膨らませた緩やかな弧＋矢じり。
-    const drawAttackLine = (to: { x: number; y: number }) => {
+    // 攻撃元→終点を結ぶ「ネオン・テザー」。根元太→先端細のテーパー発光弦（紅グロー＋白金芯）に、
+    // 終点は矢じりではなく回転する照準リング＋十字。phase で脈動・回転させ“生きてる”線にする。
+    const drawAttackLine = (to: { x: number; y: number }, phase: number) => {
       const g = attackLineRef.current;
       const from = attackOriginRef.current;
       if (!g || g.destroyed || !from) return;
@@ -1147,36 +1161,70 @@ export const RealGame = ({
       const len = Math.hypot(dx, dy) || 1;
       const nx = -dy / len;
       const ny = dx / len;
-      const bow = Math.min(len * 0.16, 54);
+      const bow = Math.min(len * 0.16, 70);
       const cx = (from.x + to.x) / 2 + nx * bow;
       const cy = (from.y + to.y) / 2 + ny * bow;
-      // 外側グロー（太・淡）→ 芯（細・明）の二層で立体感を出す。
-      g.lineStyle({ width: 10, color: 0xff5566, alpha: 0.16, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      const bez = (t: number) => {
+        const u = 1 - t;
+        return {
+          x: u * u * from.x + 2 * u * t * cx + t * t * to.x,
+          y: u * u * from.y + 2 * u * t * cy + t * t * to.y,
+        };
+      };
+      const pulse = 0.85 + 0.15 * Math.sin(phase * 0.006);
+      const ROUND = PIXI.LINE_CAP.ROUND;
+      const JROUND = PIXI.LINE_JOIN.ROUND;
+      // 自分の攻撃ターゲティングなので自陣カラー（緑系）。
+      const pal = FX_SELF;
+      // 外側グロー（太）と中間グローは単一ストロークで滑らかに。
+      g.lineStyle({ width: 20, color: pal.glow, alpha: 0.12 * pulse, cap: ROUND, join: JROUND });
       g.moveTo(from.x, from.y);
       g.quadraticCurveTo(cx, cy, to.x, to.y);
-      g.lineStyle({ width: 3.5, color: 0xffe08a, alpha: 0.95, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.lineStyle({ width: 11, color: pal.glow2, alpha: 0.22 * pulse, cap: ROUND, join: JROUND });
       g.moveTo(from.x, from.y);
       g.quadraticCurveTo(cx, cy, to.x, to.y);
-      // 起点リング。
-      g.lineStyle(2.5, 0xffe08a, 0.9);
-      g.beginFill(0xff5566, 0.18);
-      g.drawCircle(from.x, from.y, 9);
-      g.endFill();
-      // 矢じり（終点での接線方向＝制御点→終点）。
-      const ang = Math.atan2(to.y - cy, to.x - cx);
-      const ah = 15;
-      const a1 = ang + Math.PI - 0.42;
-      const a2 = ang + Math.PI + 0.42;
+      // 芯（明・テーパー: 根元太→先端細）。短いセグメントで線幅を補間し、丸キャップで連続に。
+      const N = 40;
+      for (let i = 0; i < N; i++) {
+        const t0 = i / N;
+        const t1 = (i + 1) / N;
+        const p0 = bez(t0);
+        const p1 = bez(t1);
+        const w = (6.5 * (1 - (t0 + t1) / 2) + 2.2) * pulse;
+        g.lineStyle({ width: w, color: pal.core, alpha: 0.96, cap: ROUND, join: JROUND });
+        g.moveTo(p0.x, p0.y);
+        g.lineTo(p1.x, p1.y);
+      }
+      // 起点ノード（リング＋ドット）。
+      g.lineStyle(2.5, pal.core, 0.9);
+      g.drawCircle(from.x, from.y, 8);
       g.lineStyle(0);
-      g.beginFill(0xffe08a, 0.98);
-      g.moveTo(to.x, to.y);
-      g.lineTo(to.x + Math.cos(a1) * ah, to.y + Math.sin(a1) * ah);
-      g.lineTo(to.x + Math.cos(a2) * ah, to.y + Math.sin(a2) * ah);
-      g.closePath();
+      g.beginFill(pal.glow, 0.9);
+      g.drawCircle(from.x, from.y, 3.6);
       g.endFill();
-      // 線・矢じりを最前面へ。
+      // 終点の回転照準リング＋十字。
+      const ang = phase * 0.0016;
+      const R = 15 + Math.sin(phase * 0.006) * 1.5;
+      g.lineStyle(1.5, pal.ring, 0.6);
+      g.drawCircle(to.x, to.y, R + 5);
+      g.lineStyle(2.5, pal.core, 0.95);
+      g.drawCircle(to.x, to.y, R);
+      for (let k = 0; k < 4; k++) {
+        const a = ang + (k * Math.PI) / 2;
+        g.moveTo(to.x + Math.cos(a) * (R - 4), to.y + Math.sin(a) * (R - 4));
+        g.lineTo(to.x + Math.cos(a) * (R + 8), to.y + Math.sin(a) * (R + 8));
+      }
+      g.lineStyle(0);
+      // 線・照準を最前面へ。
       if (g.parent === app.stage) app.stage.setChildIndex(g, app.stage.children.length - 1);
     };
+
+    // 攻撃線を毎フレーム再描画（脈動・回転のため）。終点は onPointerMove が更新する attackToRef。
+    const tickAttackLine = () => {
+      if (!attackToRef.current) return;
+      drawAttackLine(attackToRef.current, performance.now());
+    };
+
 
     // uuid 群の中からドロップ点に最も近いカードを返す（実描画位置で判定）。
     const hitCandidate = (
@@ -1214,16 +1262,19 @@ export const RealGame = ({
     };
 
     const startGhost = (card: CardInstance, kind: DragKind, pos: { x: number; y: number }) => {
-      // 攻撃: カード本体は動かさず、攻撃元から伸びる線で示す。
+      // 攻撃: カード本体は動かさず、攻撃元から伸びるネオン・テザーで示す（ticker で脈動・回転）。
       if (kind === 'attack') {
         const origin = cardGlobalPos(app, card.uuid) ?? pos;
         attackOriginRef.current = origin;
+        attackToRef.current = pos;
         const line = new PIXI.Graphics();
         line.eventMode = 'none';
         app.stage.addChild(line);
         attackLineRef.current = line;
         dragInfoRef.current = { card, kind };
-        drawAttackLine(pos);
+        drawAttackLine(pos, performance.now());
+        attackTickRef.current = tickAttackLine;
+        app.ticker.add(tickAttackLine);
         return;
       }
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
@@ -1291,12 +1342,24 @@ export const RealGame = ({
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
       const { kind } = dragInfoRef.current;
 
-      // 攻撃: ゴーストではなく線を更新する。対象に重なれば終点をカード中心へスナップ。
+      // 対象カードがレスト（90°横向き）なら、枠の縦横を入れ替えて footprint に合わせる
+      // （アクティブ向きの縦長枠のままだとレストのカードと向きが合わず不恰好になる）。
+      const targetRect = (best: { uuid: string; x: number; y: number }) => {
+        const rested = resolveCard(best.uuid, gameState)?.is_rest === true;
+        return {
+          x: best.x,
+          y: best.y,
+          w: rested ? coords.CH : coords.CW,
+          h: rested ? coords.CW : coords.CH,
+        };
+      };
+
+      // 攻撃: ゴーストではなく線の終点を更新する（描画は ticker が毎フレーム行う）。
+      // 対象に重なれば終点をカード中心へスナップ。
       if (kind === 'attack') {
         const best = hitCandidate(pos, attackUuids, coords.CW, coords.CH);
-        const to = best ? { x: best.x, y: best.y } : pos;
-        drawAttackLine(to);
-        drawHighlight(best ? { x: best.x, y: best.y, w: coords.CW, h: coords.CH } : null);
+        attackToRef.current = best ? { x: best.x, y: best.y } : pos;
+        drawHighlight(best ? targetRect(best) : null);
         return;
       }
 
@@ -1305,7 +1368,7 @@ export const RealGame = ({
       let rect: { x: number; y: number; w: number; h: number } | null = null;
       if (kind === 'don') {
         const best = hitCandidate(pos, donUuids, coords.CW, coords.CH);
-        if (best) rect = { x: best.x, y: best.y, w: coords.CW, h: coords.CH };
+        if (best) rect = targetRect(best);
       } else {
         const { valid, rect: pr } = playRectAndValid(pos);
         if (valid) rect = pr;
@@ -1360,23 +1423,97 @@ export const RealGame = ({
     const to = cardGlobalPos(app, battleTarget);
     if (!from || !to) return;
 
-    const coords = calculateCoordinates(app.screen.width, app.screen.height);
-    const w = coords.CW * 0.7;
-    const h = coords.CH * 0.7;
-    const ghost = new PIXI.Container();
-    const g = new PIXI.Graphics();
-    g.beginFill(0xff5555, 0.18);
-    g.lineStyle(2.5, 0xff9a9a, 0.95);
-    g.drawRoundedRect(-w / 2, -h / 2, w, h, 8);
-    g.endFill();
-    ghost.addChild(g);
+    // 攻撃元のサイドで配色（自分の攻撃＝緑 / 相手の攻撃＝赤）。盤面の枠色に対応。
+    const me = gameState?.players[viewerId];
+    const isMyAttack = !!me && (
+      me.leader?.uuid === battleAttacker ||
+      me.zones.field.some(c => c.uuid === battleAttacker) ||
+      me.stage?.uuid === battleAttacker
+    );
+    const pal: FxPalette = isMyAttack ? FX_SELF : FX_OPP;
 
-    fx.lunge(ghost, from.x, from.y, to.x, to.y, () => {
-      const to2 = cardGlobalPos(app, battleTarget) ?? to;
-      fx.impactFlash(to2.x, to2.y, 0xffd0d0);
-      const tc = findCardContainer(app, battleTarget);
-      if (tc) fx.shake(tc, 7, 260);
-    });
+    const ROUND = PIXI.LINE_CAP.ROUND;
+    const JROUND = PIXI.LINE_JOIN.ROUND;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const bow = Math.min(len * 0.16, 70);
+    const cx = (from.x + to.x) / 2 + nx * bow;
+    const cy = (from.y + to.y) / 2 + ny * bow;
+    const bez = (t: number) => {
+      const u = 1 - t;
+      return { x: u * u * from.x + 2 * u * t * cx + t * t * to.x, y: u * u * from.y + 2 * u * t * cy + t * t * to.y };
+    };
+
+    const teth = new PIXI.Graphics(); teth.eventMode = 'none'; fx.container.addChild(teth);
+    const bolt = new PIXI.Graphics(); bolt.eventMode = 'none'; fx.container.addChild(bolt);
+
+    const drawTether = (alpha: number) => {
+      teth.clear();
+      teth.lineStyle({ width: 14, color: pal.glow, alpha: 0.12 * alpha, cap: ROUND, join: JROUND });
+      teth.moveTo(from.x, from.y); teth.quadraticCurveTo(cx, cy, to.x, to.y);
+      teth.lineStyle({ width: 8, color: pal.glow2, alpha: 0.22 * alpha, cap: ROUND, join: JROUND });
+      teth.moveTo(from.x, from.y); teth.quadraticCurveTo(cx, cy, to.x, to.y);
+      const N = 34;
+      for (let i = 0; i < N; i++) {
+        const t0 = i / N;
+        const t1 = (i + 1) / N;
+        const p0 = bez(t0);
+        const p1 = bez(t1);
+        teth.lineStyle({ width: 4 * (1 - (t0 + t1) / 2) + 1.4, color: pal.core, alpha: 0.9 * alpha, cap: ROUND, join: JROUND });
+        teth.moveTo(p0.x, p0.y); teth.lineTo(p1.x, p1.y);
+      }
+    };
+    const drawBolt = (p: { x: number; y: number }, r: number) => {
+      bolt.clear();
+      bolt.beginFill(pal.glow, 0.18); bolt.drawCircle(p.x, p.y, r * 2.3); bolt.endFill();
+      bolt.beginFill(pal.glow2, 0.30); bolt.drawCircle(p.x, p.y, r * 1.4); bolt.endFill();
+      bolt.beginFill(pal.core, 0.98); bolt.drawCircle(p.x, p.y, r); bolt.endFill();
+    };
+    const shockwave = (p: { x: number; y: number }) => {
+      const r = new PIXI.Graphics(); r.eventMode = 'none'; fx.container.addChild(r);
+      tween({ durationMs: 440, ease: easeOutCubic, onUpdate: (k) => {
+        if (r.destroyed) return;
+        r.clear();
+        const rad = 8 + k * 48;
+        r.lineStyle(3 * (1 - k) + 0.5, pal.ring, 0.9 * (1 - k));
+        r.drawCircle(p.x, p.y, rad);
+        r.lineStyle(2 * (1 - k), pal.glow, 0.5 * (1 - k));
+        r.drawCircle(p.x, p.y, rad * 0.66);
+      }, onComplete: () => { if (!r.destroyed) r.destroy(); } });
+    };
+
+    // ① チャージ: テザーが伸び、弾が攻撃元で溜まる。
+    tween({ durationMs: 140, ease: easeOutCubic, onUpdate: (k) => {
+      if (teth.destroyed) return;
+      drawTether(0.9 * k);
+      drawBolt(from, 5 + 2 * k);
+    }, onComplete: () => {
+      // ② ストライク: 弾がテザーを走って対象へ。
+      tween({ durationMs: 200, ease: easeOutCubic, onUpdate: (k) => {
+        if (bolt.destroyed) return;
+        drawTether(0.9);
+        drawBolt(bez(k), 8);
+      }, onComplete: () => {
+        // ③ 着弾: フラッシュ＋衝撃波リング＋火花＋対象シェイク。テザー/弾はフェードアウト。
+        const t2 = cardGlobalPos(app, battleTarget) ?? to;
+        fx.impactFlash(t2.x, t2.y, pal.flash);
+        shockwave(t2);
+        fx.puff(t2.x, t2.y, pal.spark);
+        const tc = findCardContainer(app, battleTarget);
+        if (tc) fx.shake(tc, 7, 260);
+        tween({ durationMs: 160, ease: easeOutCubic, onUpdate: (k) => {
+          if (!teth.destroyed) teth.alpha = 1 - k;
+          if (!bolt.destroyed) bolt.alpha = 1 - k;
+        }, onComplete: () => {
+          if (!teth.destroyed) teth.destroy();
+          if (!bolt.destroyed) bolt.destroy();
+        } });
+      } });
+    } });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 攻撃確定時のみ発火。viewerId/gameState は最新を本体参照
   }, [battleAttacker, battleTarget]);
 
   // CPU 思考中はアニメを高速化し、cpu/step ポーリングを詰まらせない（Phase5）。
@@ -1735,72 +1872,62 @@ export const RealGame = ({
         />
       )}
 
-      <button
-        onClick={handleBackToTitle}
+      {/* 中央ライン上のユーティリティ・ツールバー（TOP / ログ）。半透明だと中央ラインや
+          手番枠が透けて貫通し不恰好なため、不透明チップ＋影で手前に立たせるセグメント型。
+          「採取」はログと同系統のためログポップアップ内へ移設（ActionLog の onCapture）。 */}
+      <div
         style={{
           position: 'absolute',
           top: layoutCoords ? `${layoutCoords.y}px` : '50%',
           left: '10px',
           transform: 'translateY(-50%)',
           zIndex: Z_INDEX.OVERLAY + 20,
-          background: 'rgba(0, 0, 0, 0.6)',
-          color: '#aaa',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontSize: '11px',
+          display: 'flex',
+          alignItems: 'stretch',
+          background: 'rgba(22,24,30,0.96)',
+          border: '1px solid #5f6273',
+          borderRadius: '10px',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.55)',
+          overflow: 'hidden',
         }}
       >
-        TOP
-      </button>
-
-      <button
-        onClick={() => setShowLog(p => !p)}
-        style={{
-          position: 'absolute',
-          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
-          left: '55px',
-          transform: 'translateY(-50%)',
-          zIndex: Z_INDEX.OVERLAY + 20,
-          background: showLog ? 'rgba(41,128,185,0.7)' : 'rgba(0, 0, 0, 0.6)',
-          color: showLog ? '#fff' : '#aaa',
-          border: showLog ? '1px solid #2980b9' : '1px solid #444',
-          borderRadius: '4px',
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontSize: '11px',
-        }}
-      >
-        ログ
-      </button>
-
-      <button
-        onClick={handleCaptureLogs}
-        title="ログ（イベント履歴＋CPU思考トレース）をクリップボードにコピー"
-        style={{
-          position: 'absolute',
-          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
-          left: '100px',
-          transform: 'translateY(-50%)',
-          zIndex: Z_INDEX.OVERLAY + 20,
-          background: 'rgba(0, 0, 0, 0.6)',
-          color: '#aaa',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontSize: '11px',
-        }}
-      >
-        採取
-      </button>
+        <button
+          onClick={handleBackToTitle}
+          style={{
+            background: 'transparent',
+            color: '#cdd2da',
+            border: 'none',
+            padding: '5px 12px',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: 'bold',
+          }}
+        >
+          TOP
+        </button>
+        <div style={{ width: '1px', background: '#484c5a' }} />
+        <button
+          onClick={() => setShowLog(p => !p)}
+          style={{
+            background: showLog ? 'rgba(41,128,185,0.92)' : 'transparent',
+            color: showLog ? '#fff' : '#cdd2da',
+            border: 'none',
+            padding: '5px 12px',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: 'bold',
+          }}
+        >
+          ログ
+        </button>
+      </div>
 
       {showLog && layoutCoords && (
         <ActionLog
           events={eventLog}
           anchorY={layoutCoords.y}
           onClose={() => setShowLog(false)}
+          onCapture={handleCaptureLogs}
         />
       )}
 
