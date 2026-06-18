@@ -31,6 +31,8 @@ interface PromptBannerProps {
   children?: React.ReactNode;
   actions?: PromptBannerAction[];
   zIndex?: number;
+  /** アクセント色（指定時は枠＋外周グローをこの色にし、バナー種別を視覚的に区別する）。 */
+  accentColor?: string;
 }
 
 const { MODAL, Z_INDEX } = LAYOUT_PARAMS;
@@ -40,6 +42,7 @@ const pillStyle: React.CSSProperties = { padding: '7px 18px', borderRadius: 999,
 export const PromptBanner: React.FC<PromptBannerProps> = ({
   position = 'top', topPx, message, subText, accentDot = false,
   pointerThrough = false, children, actions, zIndex = Z_INDEX.BANNER,
+  accentColor,
 }) => {
   const posStyle: React.CSSProperties = position === 'top'
     ? { top: 'max(12px, env(safe-area-inset-top, 0px))', left: '50%', transform: 'translateX(-50%)' }
@@ -53,8 +56,10 @@ export const PromptBanner: React.FC<PromptBannerProps> = ({
     padding: '9px 16px 11px', borderRadius: 14,
     background: MODAL.BANNER_BG,
     backdropFilter: MODAL.BANNER_BLUR, WebkitBackdropFilter: MODAL.BANNER_BLUR,
-    border: MODAL.BANNER_BORDER,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+    border: accentColor ? `1.5px solid ${accentColor}` : MODAL.BANNER_BORDER,
+    boxShadow: accentColor
+      ? `0 0 0 1px ${accentColor}55, 0 0 18px ${accentColor}40, 0 8px 24px rgba(0,0,0,0.45)`
+      : '0 8px 24px rgba(0,0,0,0.45)',
     color: '#fff', textAlign: 'center', maxWidth: 'min(92vw, 360px)',
     pointerEvents: pointerThrough ? 'none' : 'auto',
   };

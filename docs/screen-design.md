@@ -258,6 +258,7 @@ flowchart LR
 | ターン終了ボタン | 常時 | `layoutCoords` で配置。非自手番／処理待ち／CPU 思考中は無効 |
 | アタック対象選択 | アタック宣言中 | 相手カードをハイライト |
 | 盤面選択モード | 場から選択時 | 候補カードをハイライト＋「タップで選択」バナー |
+| ブロック／カウンター選択 | 防御側の選択時 | 盤面選択バナーを種別ごとに色分け表示（`ui/banners/BattleDecisionInfo.tsx`）。ブロック=🛡青／カウンター=🔼金。アイコン・タイトル・効果説明・パワー計算・「パス」文言（ブロックしない／カウンターしない）で明確に区別 |
 | マリガンボタン | MULLIGAN フェーズ | MULLIGAN / KEEP_HAND |
 | アクションログ | ログボタン | `ui/ActionLog.tsx`（§10.5） |
 | エラートースト | エラー時 | 上部中央。5 秒で自動消去（×で手動クローズも可。§10.10） |
@@ -429,7 +430,8 @@ RoomLobby とほぼ同一構成。差分のみ示す：
 |---|---|---|
 | `ModalShell` | 全画面 scrim ＋ blur ＋ ダークパネルの土台（`align='center'\|'bottom'`、タイトル／×クローズ、背景タップ） | CardSelect／CardDetail／DeckSelect／各確認ダイアログ |
 | `ModalButton` | variant ベースの統一ボタン（`primary/danger/success/warning/secondary/ghost`、`disabled`、`fullWidth`） | 全モーダルのボタン |
-| `PromptBanner` | 上部中央の細バナー（メッセージ＋カウンタ＋アクション、`Z_INDEX.BANNER`） | 対象選択・盤面選択・Generic Pending |
+| `PromptBanner` | 上部中央の細バナー（メッセージ＋カウンタ＋アクション、`Z_INDEX.BANNER`、`accentColor` で枠＋外周グローを着色し種別を区別） | 対象選択・盤面選択・Generic Pending・ブロック／カウンター選択 |
+| `BattleDecisionInfo` | ブロック／カウンター選択の見出し（`BattleDecisionHeader`）＋数値パネル（`BattleDecisionPanel`）。メタは `battleDecision.ts`（`getBattleDecisionMeta`） | 防御側の選択バナー内 |
 | `toastStyles` | トースト presentation（位置・配色・rise）の共通スタイル | 効果トースト・エラートースト |
 
 ### 10.1 カード操作メニュー（CardActionMenu）

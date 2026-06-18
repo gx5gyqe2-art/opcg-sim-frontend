@@ -19,6 +19,8 @@ import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { CoinFlip } from '../ui/CoinFlip';
 import { PhaseBanner } from '../ui/banners/PhaseBanner';
+import { getBattleDecisionMeta } from '../ui/banners/battleDecision';
+import { BattleDecisionHeader, BattleDecisionPanel } from '../ui/banners/BattleDecisionInfo';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
@@ -1864,6 +1866,8 @@ export const RealGame = ({
       {isBoardSelectMode && (() => {
         // 盤面に覆い被さらず最上部中央へスリムに配置する（PromptBanner が背後タップを透過、
         // ボタンのみ有効化）。選択候補はカードのハイライトで示す。
+        // ブロック/カウンターは専用の見出し・配色・効果説明で明確に区別する。
+        const battleMeta = getBattleDecisionMeta(pendingRequest!.action);
         const actions: PromptBannerAction[] = [];
         if (maxSelect > 1) {
           actions.push({
@@ -1877,20 +1881,46 @@ export const RealGame = ({
           actions.push({ label: '選ばない', variant: 'ghost', disabled: isPending, onClick: () => handleSelectionResolve([]) });
         }
         if (pendingRequest!.can_skip) {
-          actions.push({ label: 'パス', variant: 'danger', disabled: isPending, onClick: handlePass });
+          // バトル選択時は「パス」の意味（ブロックしない／カウンターしない）を明示する。
+          actions.push({ label: battleMeta?.passLabel ?? 'パス', variant: 'danger', disabled: isPending, onClick: handlePass });
         }
-        const subText = maxSelect > 1
+        const baseHint = maxSelect > 1
           ? `${boardSelected.length} / ${maxSelect} 枚選択中（最小 ${minSelect}）`
           : (minSelect === 0 ? 'カードをタップ、または「選ばない」' : 'カードをタップして選択');
+        const subText = battleMeta
+          ? (maxSelect > 1 ? `${battleMeta.selectHint}（${boardSelected.length}/${maxSelect}）` : battleMeta.selectHint)
+          : baseHint;
+
+        const battlePanel = gameState?.active_battle && battleMeta ? (() => {
+          const ab = gameState.active_battle!;
+          const attacker = resolveCard(ab.attacker_uuid, gameState);
+          const target = resolveCard(ab.target_uuid, gameState);
+          return (
+            <BattleDecisionPanel
+              meta={battleMeta}
+              info={{
+                attackerName: attacker?.name ?? '攻撃',
+                attackerPower: attacker?.power ?? 0,
+                targetName: target?.name ?? '対象',
+                targetBasePower: target?.power ?? 0,
+                counterBuff: ab.counter_buff ?? 0,
+              }}
+            />
+          );
+        })() : null;
+
         return (
           <PromptBanner
             pointerThrough
-            accentDot
-            message={`${decisionNote}${pendingRequest!.message}`}
+            accentDot={!battleMeta}
+            accentColor={battleMeta?.color}
+            message={battleMeta
+              ? <BattleDecisionHeader meta={battleMeta} defenderLabel={isDefendingDecision ? (pendingRequest!.player_id?.toUpperCase() ?? null) : null} />
+              : `${decisionNote}${pendingRequest!.message}`}
             subText={subText}
             actions={actions}
           >
-            {gameState?.active_battle && (() => {
+            {battleMeta ? battlePanel : (gameState?.active_battle && (() => {
               const ab = gameState.active_battle;
               const attacker = resolveCard(ab.attacker_uuid, gameState);
               const target = resolveCard(ab.target_uuid, gameState);
@@ -1922,7 +1952,7 @@ export const RealGame = ({
                   </div>
                 </div>
               );
-            })()}
+            })())}
           </PromptBanner>
         );
       })()}
