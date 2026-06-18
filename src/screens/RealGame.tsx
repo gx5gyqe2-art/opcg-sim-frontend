@@ -26,6 +26,7 @@ import { attachTweenTicker, detachTweenTicker, clearTweens, tween, easeOutCubic,
 import { snapshotPositions, type PositionMap } from '../ui/anim/positionTracker';
 import { createBoardReconciler, type BoardReconciler } from '../ui/anim/boardReconciler';
 import { RECONCILE_BOARD } from '../ui/anim/reconcileFlag';
+import { createBoardBackground, type ActiveSide } from '../ui/boardBackground';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
@@ -218,7 +219,7 @@ export const RealGame = ({
   const toastIdRef = useRef(0);
 
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { Z_INDEX, ALPHA, MODAL } = LAYOUT_PARAMS;
+  const { Z_INDEX, MODAL } = LAYOUT_PARAMS;
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
@@ -848,19 +849,15 @@ export const RealGame = ({
       const coords = calculateCoordinates(W, H);
       const midY = H / 2;
 
-      const bg = new PIXI.Graphics();
-      bg.beginFill(LAYOUT_CONSTANTS.COLORS.OPPONENT_BG).drawRect(0, 0, W, midY).endFill();
-      bg.beginFill(LAYOUT_CONSTANTS.COLORS.PLAYER_BG).drawRect(0, midY, W, H - midY).endFill();
-      app.stage.addChild(bg);
-
-      const border = new PIXI.Graphics();
-      border.lineStyle(2, COLORS.BORDER_LINE, ALPHA.BORDER_LINE);
-      border.moveTo(0, midY);
-      border.lineTo(W, midY);
-      app.stage.addChild(border);
-
       // 盤面の下側は常に viewerId。オンライン/CPU は自陣、ソロは手番(または判断要求中の判断者)。
       const bottomIsP2 = viewerId === 'p2';
+
+      // ダークプレイマット背景（グラデ＋ビネット＋区画パネル＋発光ディバイダ＋手番グロー）。
+      // 手番側ハーフ: active_player_id が下側(viewerId)なら bottom、相手なら top。
+      const activeSide: ActiveSide = activePlayerId
+        ? (activePlayerId === viewerId ? 'bottom' : 'top')
+        : null;
+      app.stage.addChild(createBoardBackground(W, H, coords, { activeSide }));
       const bottomPlayer = bottomIsP2 ? gameState.players.p2 : gameState.players.p1;
       const topPlayer = bottomIsP2 ? gameState.players.p1 : gameState.players.p2;
 
