@@ -54,7 +54,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             <ModalButton variant="secondary" disabled={donAmount >= activeDonCount} onClick={() => setDonAmount(Math.min(activeDonCount, donAmount + 1))} style={{ width: '48px' }}>＋</ModalButton>
           </div>
           <div style={{ fontSize: '12px', color: MODAL.TEXT_MUTED }}>可能: {activeDonCount}枚</div>
-          <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', width: '100%' }}>
             <ModalButton variant="secondary" fullWidth onClick={() => setDonMode(false)}>キャンセル</ModalButton>
             <ModalButton variant="warning" fullWidth onClick={handleAttachDonBatch}>決定</ModalButton>
           </div>

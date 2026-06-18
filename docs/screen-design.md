@@ -237,6 +237,20 @@ flowchart LR
 **盤面ゾーン**：リーダー／ステージ／キャラ場（最大 5）／手札／ライフ／デッキ／トラッシュ／ドン!!
 （アクティブ・レスト・デッキ）。カードタップで `CardActionMenu` または `CardDetailSheet`。
 
+**ドラッグ&ドロップ操作（タップ／ボタン操作に追加。自手番のメインフェイズのみ有効）**：
+ドロップ可能な領域／対象は金枠でハイライトする。移動量が `TAP_THRESHOLD`(10px) 以下はタップ扱いで
+従来の `CardActionMenu` が開くため、両操作が共存する。
+
+| ジェスチャ | 効果 | 送信アクション |
+|---|---|---|
+| 手札カード → 自陣エリア（手札行より上）へドロップ | 登場／プレイ | `PLAY` |
+| 自陣のキャラ／リーダー → 相手のカードへドロップ | 攻撃（1 ジェスチャで対象確定） | `ATTACK_CONFIRM` |
+| 自陣アクティブドン!! → 自陣のリーダー／キャラへドロップ | ドン!! を 1 枚付与 | `ATTACH_DON` |
+
+> 実装：`CardRenderer` の `onDragStart`（reconcile 安全に `__onDragStart` を保持）→ `BoardSide` が
+> 自陣側のみ配線 → `RealGame` が `window` の pointermove/pointerup でゴースト追従・ドロップ判定する。
+> 攻撃/付与の対象は実描画位置（`getGlobalPosition`）で最近接ヒット判定する。
+
 **オーバーレイ（固定配置）**：
 
 | オーバーレイ | 表示条件 | 内容 |
@@ -244,6 +258,7 @@ flowchart LR
 | ターン終了ボタン | 常時 | `layoutCoords` で配置。非自手番／処理待ち／CPU 思考中は無効 |
 | アタック対象選択 | アタック宣言中 | 相手カードをハイライト |
 | 盤面選択モード | 場から選択時 | 候補カードをハイライト＋「タップで選択」バナー |
+| ブロック／カウンター選択 | 防御側の選択時 | 盤面選択バナーを種別ごとに色分け表示（`ui/banners/BattleDecisionInfo.tsx`）。ブロック=🛡青／カウンター=🔼金。アイコン・タイトル・効果説明・パワー計算・「パス」文言（ブロックしない／カウンターしない）で明確に区別 |
 | マリガンボタン | MULLIGAN フェーズ | MULLIGAN / KEEP_HAND |
 | アクションログ | ログボタン | `ui/ActionLog.tsx`（§10.5） |
 | エラートースト | エラー時 | 上部中央。5 秒で自動消去（×で手動クローズも可。§10.10） |
@@ -253,7 +268,9 @@ flowchart LR
 **対局中の操作（共通）**：
 - 盤面ゾーン操作、カードアクション（登場／攻撃／ドン!!付与／効果起動／詳細）。
 - 戦闘フロー：アタック宣言 → ブロック → カウンター → ダメージ。
-- ドン!!付与：①対象タップ→「ドン!!付与」→枚数選択、②自陣アクティブドン!!タップ→対象選択→枚数選択。
+- ドン!!付与：①対象タップ→「ドン!!付与」→枚数選択、②自陣アクティブドン!!タップ→対象選択→枚数選択、
+  ③自陣アクティブドン!!を対象へドラッグ&ドロップ（1 枚付与）。
+- ドラッグ&ドロップ：手札→自陣で登場、キャラ/リーダー→相手で攻撃（上記「ドラッグ&ドロップ操作」表）。
 - 効果処理：対象選択・任意確認・トリガー解決のオーバーレイ／`CardSelectModal`。
 
 ### 2.4 対戦形態ごとの条件分岐
@@ -412,8 +429,9 @@ RoomLobby とほぼ同一構成。差分のみ示す：
 | 部品 | 役割 | 利用例 |
 |---|---|---|
 | `ModalShell` | 全画面 scrim ＋ blur ＋ ダークパネルの土台（`align='center'\|'bottom'`、タイトル／×クローズ、背景タップ） | CardSelect／CardDetail／DeckSelect／各確認ダイアログ |
-| `ModalButton` | variant ベースの統一ボタン（`primary/danger/success/warning/secondary/ghost`、`disabled`、`fullWidth`） | 全モーダルのボタン |
-| `PromptBanner` | 上部中央の細バナー（メッセージ＋カウンタ＋アクション、`Z_INDEX.BANNER`） | 対象選択・盤面選択・Generic Pending |
+| `ModalButton` | variant ベースの統一ボタン（`primary/danger/success/warning/secondary/ghost`、`disabled`、`fullWidth`）。横並び時はラベルが途中で 2 行に折れないよう非 `fullWidth` は `white-space:nowrap`＋`flex-shrink:0`（`fullWidth` は従来どおり折返し許容） | 全モーダルのボタン |
+| `PromptBanner` | 上部中央の細バナー（メッセージ＋カウンタ＋アクション、`Z_INDEX.BANNER`、`accentColor` で枠＋外周グローを着色し種別を区別）。アクション行は `flexWrap` で「ボタン単位」に折り返す | 対象選択・盤面選択・Generic Pending・ブロック／カウンター選択 |
+| `BattleDecisionInfo` | ブロック／カウンター選択の見出し（`BattleDecisionHeader`）＋数値パネル（`BattleDecisionPanel`）。メタは `battleDecision.ts`（`getBattleDecisionMeta`） | 防御側の選択バナー内 |
 | `toastStyles` | トースト presentation（位置・配色・rise）の共通スタイル | 効果トースト・エラートースト |
 
 ### 10.1 カード操作メニュー（CardActionMenu）

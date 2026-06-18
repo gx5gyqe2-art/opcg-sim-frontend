@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide, buildBoardItems, type MovableDescriptor } from '../ui/BoardSide';
+import { createCardContainer } from '../ui/CardRenderer';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardActionMenu } from '../ui/CardActionMenu';
@@ -18,6 +19,8 @@ import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { CoinFlip } from '../ui/CoinFlip';
 import { PhaseBanner } from '../ui/banners/PhaseBanner';
+import { getBattleDecisionMeta } from '../ui/banners/battleDecision';
+import { BattleDecisionHeader, BattleDecisionPanel } from '../ui/banners/BattleDecisionInfo';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
@@ -197,6 +200,18 @@ export const RealGame = ({
   // ドン!!付与の対象選択モード（自分のアクティブドン!!をタップして開始）。
   const [isDonTargeting, setIsDonTargeting] = useState(false);
   const [boardSelected, setBoardSelected] = useState<string[]>([]);
+
+  // ドラッグ&ドロップ操作（タップ/ボタン操作はそのまま残し、追加のジェスチャとして提供）。
+  //  - 手札カード → 自陣エリアへドロップ = PLAY（登場/プレイ）
+  //  - 自陣のキャラ/リーダー → 相手のカードへドロップ = ATTACK（攻撃）
+  //  - アクティブなドン!! → 自陣のリーダー/キャラへドロップ = ATTACH_DON（1枚付与）
+  // 状態更新で盤面が再構築されるとゴーストが破棄されるため、ドラッグ中（盤面変化なし）に限り
+  // app.stage 直下へゴースト/ハイライトを置く。値は ref 管理で再レンダーを誘発しない。
+  type DragKind = 'play' | 'attack' | 'don';
+  const pendingDragRef = useRef<{ card: CardInstance; kind: DragKind; x: number; y: number } | null>(null);
+  const dragInfoRef = useRef<{ card: CardInstance; kind: DragKind } | null>(null);
+  const dragGhostRef = useRef<PIXI.Container | null>(null);
+  const dropHighlightRef = useRef<PIXI.Graphics | null>(null);
 
   // 先行プレイヤー選択（ソロ専用。CPU/対戦はランダム）。既定は P1 先攻。
   const [firstChoice, setFirstChoice] = useState<'p1' | 'p2'>('p1');
@@ -753,7 +768,39 @@ export const RealGame = ({
     });
     setIsDetailMode(true);
   };
-  
+
+  // ドラッグ開始候補の登録（pointerdown 時）。実際のドラッグ開始は移動量が閾値を超えた時点
+  // （window pointermove）で行う。ここでは「このカードがどの種類のドラッグになるか」を判定する。
+  // タップ（小移動）の場合は pendingDrag が解消され、従来どおり onCardClick（ミニメニュー）が動く。
+  const onCardDragStart = (card: CardInstance, pos: { x: number; y: number }) => {
+    if (isPending || !gameState || !isMyTurn) return;
+    // 攻撃対象選択・ドン付与対象選択・盤面選択モード中はドラッグを開始しない（既存導線を優先）。
+    if (isAttackTargeting || isDonTargeting || isBoardSelectMode) return;
+    // メインフェイズ以外の選択要求中はドラッグ無効（MAIN_ACTION/ACTIVATE_MAIN は通常のメイン操作）。
+    const A = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
+    if (pendingRequest && pendingRequest.action !== 'MAIN_ACTION' && pendingRequest.action !== A.ACTIVATE_MAIN) return;
+
+    const me = gameState.players[viewerId];
+    if (!me) return;
+
+    let kind: DragKind | null = null;
+    if (card.uuid === `donactive-${viewerId}`) {
+      const donCount = me.don_active?.length ?? 0;
+      if (donCount > 0) kind = 'don';
+    } else if (me.zones.hand.some(c => c.uuid === card.uuid)) {
+      kind = 'play';
+    } else if (me.leader && me.leader.uuid === card.uuid) {
+      const t = normalizeCardType(me.leader.type);
+      if (t === 'LEADER' || t === 'CHARACTER') kind = 'attack';
+    } else {
+      const fc = me.zones.field.find(c => c.uuid === card.uuid);
+      if (fc && normalizeCardType(fc.type) === 'CHARACTER') kind = 'attack';
+    }
+    if (!kind) return;
+
+    pendingDragRef.current = { card, kind, x: pos.x, y: pos.y };
+  };
+
   useEffect(() => {
     setBoardSelected([]);
     // 新しい選択要求が来たら攻撃ターゲティング状態を解除する（ターゲティングと
@@ -870,7 +917,7 @@ export const RealGame = ({
       if (RECONCILE_BOARD && reconcilerRef.current) {
         // 固定パイル等は従来どおり再構築、可動実カードは reconcile で使い回す。
         const topItems = buildBoardItems(topPlayer, true, W, coords, onCardClick, highlightUuids, selectedSet, fixedViewer);
-        const bottomItems = buildBoardItems(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false);
+        const bottomItems = buildBoardItems(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false, onCardDragStart);
 
         const topVirtual = new PIXI.Container();
         topVirtual.y = 0;
@@ -894,7 +941,7 @@ export const RealGame = ({
         // オンライン/CPU 対戦では相手(上側)の手札の中身を伏せて描画する。
         const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, highlightUuids, selectedSet, fixedViewer);
         topSide.y = 0;
-        const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false);
+        const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false, onCardDragStart);
         bottomSide.y = midY;
         app.stage.addChild(topSide, bottomSide);
       }
@@ -970,6 +1017,204 @@ export const RealGame = ({
     renderScene();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した盤面状態の変化時のみ再実行する意図。定数/コールバックは最新を本体で参照
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected, isDonTargeting]);
+
+  // ドラッグ&ドロップの実体（window pointermove/pointerup）。onCardDragStart が登録した
+  // pendingDrag を起点に、移動量が閾値を超えたらゴーストを生成して追従させ、ドロップ先を
+  // 判定して対応アクションを送る。盤面再構築でゴーストが破棄された場合は安全に中断する。
+  useEffect(() => {
+    const app = appRef.current;
+    if (!app || !gameState) return;
+
+    const A = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
+    const DRAG_THRESHOLD = LAYOUT_PARAMS.PHYSICS.TAP_THRESHOLD;
+
+    // 攻撃ドロップ先候補（相手のリーダー/フィールド/ステージ）。
+    const opp = gameState.players[opponentId];
+    const attackUuids: string[] = opp
+      ? [
+          ...(opp.leader ? [opp.leader.uuid] : []),
+          ...opp.zones.field.map(c => c.uuid),
+          ...(opp.stage ? [opp.stage.uuid] : []),
+        ]
+      : [];
+    // ドン!!付与ドロップ先候補（自陣のリーダー/フィールドのキャラクター）。
+    const me = gameState.players[viewerId];
+    const donUuids: string[] = me
+      ? [
+          ...(me.leader ? [me.leader.uuid] : []),
+          ...me.zones.field
+            .filter(c => normalizeCardType(c.type) === 'CHARACTER')
+            .map(c => c.uuid),
+        ]
+      : [];
+
+    const removeGhost = () => {
+      const g = dragGhostRef.current;
+      if (g) {
+        if (!g.destroyed) {
+          if (g.parent) g.parent.removeChild(g);
+          g.destroy({ children: true });
+        }
+        dragGhostRef.current = null;
+      }
+    };
+    const clearHighlight = () => {
+      const h = dropHighlightRef.current;
+      if (h) {
+        if (!h.destroyed) h.destroy();
+        dropHighlightRef.current = null;
+      }
+    };
+    // 盤面再構築でゴースト/ハイライトが破棄されたらドラッグを中断する。
+    const ghostAlive = () => !!dragGhostRef.current && !dragGhostRef.current.destroyed;
+
+    // uuid 群の中からドロップ点に最も近いカードを返す（実描画位置で判定）。
+    const hitCandidate = (
+      pos: { x: number; y: number },
+      uuids: string[],
+      hw: number,
+      hh: number,
+    ): { uuid: string; x: number; y: number } | null => {
+      let best: { uuid: string; x: number; y: number } | null = null;
+      let bestD = Infinity;
+      for (const uuid of uuids) {
+        const c = findCardContainer(app, uuid);
+        if (!c || c.destroyed) continue;
+        const gp = c.getGlobalPosition();
+        const dx = pos.x - gp.x;
+        const dy = pos.y - gp.y;
+        if (Math.abs(dx) < hw / 2 && Math.abs(dy) < hh / 2) {
+          const d = dx * dx + dy * dy;
+          if (d < bestD) { bestD = d; best = { uuid, x: gp.x, y: gp.y }; }
+        }
+      }
+      return best;
+    };
+
+    // PLAY 有効領域: 自陣（下半分）かつ手札行より上。盤面（フィールド）バンドを示す。
+    const playRectAndValid = (pos: { x: number; y: number }) => {
+      const W = app.screen.width;
+      const H = app.screen.height;
+      const coords = calculateCoordinates(W, H);
+      const midY = H / 2;
+      const handY = midY + coords.getY(4) + coords.CH / 2;
+      const valid = pos.y > midY && pos.y < handY - coords.CH * 0.5;
+      const rect = { x: W / 2, y: midY + coords.getY(1) + coords.CH / 2, w: W * 0.9, h: coords.CH };
+      return { valid, rect };
+    };
+
+    const startGhost = (card: CardInstance, kind: DragKind, pos: { x: number; y: number }) => {
+      const coords = calculateCoordinates(app.screen.width, app.screen.height);
+      const isDon = kind === 'don';
+      const cw = isDon ? coords.CW * 0.7 : coords.CW;
+      const ch = isDon ? coords.CH * 0.7 : coords.CH;
+      const ghostCard = isDon
+        ? ({ uuid: card.uuid, name: 'Don!! Active', card_id: 'DON' } as CardInstance)
+        : card;
+      const ghost = createCardContainer(ghostCard, cw, ch, { onClick: () => {}, isOpponent: false });
+      ghost.eventMode = 'none';
+      ghost.position.set(pos.x, pos.y);
+      ghost.alpha = 0.85;
+      ghost.scale.set(1.08);
+      app.stage.addChild(ghost);
+      dragGhostRef.current = ghost;
+      dragInfoRef.current = { card, kind };
+    };
+
+    const drawHighlight = (rect: { x: number; y: number; w: number; h: number } | null) => {
+      if (!rect) { clearHighlight(); return; }
+      let g = dropHighlightRef.current;
+      if (!g || g.destroyed) {
+        g = new PIXI.Graphics();
+        g.eventMode = 'none';
+        app.stage.addChild(g);
+        dropHighlightRef.current = g;
+      }
+      g.clear();
+      g.lineStyle(3, 0xffd700, 1);
+      g.beginFill(0xffd700, 0.18);
+      g.drawRoundedRect(rect.x - rect.w / 2, rect.y - rect.h / 2, rect.w, rect.h, 8);
+      g.endFill();
+      // ゴーストを常に最前面へ。
+      if (ghostAlive() && dragGhostRef.current!.parent === app.stage) {
+        app.stage.setChildIndex(dragGhostRef.current!, app.stage.children.length - 1);
+      }
+    };
+
+    const cancelDrag = () => {
+      removeGhost();
+      clearHighlight();
+      dragInfoRef.current = null;
+      pendingDragRef.current = null;
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      const pos = { x: e.clientX, y: e.clientY };
+
+      // 閾値を超えたらゴーストを生成してドラッグ開始。
+      if (pendingDragRef.current && !dragInfoRef.current) {
+        const dx = pos.x - pendingDragRef.current.x;
+        const dy = pos.y - pendingDragRef.current.y;
+        if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+          startGhost(pendingDragRef.current.card, pendingDragRef.current.kind, pos);
+          pendingDragRef.current = null;
+        }
+      }
+
+      if (!dragInfoRef.current) return;
+      // 盤面が再構築されゴーストが消えた場合は中断。
+      if (!ghostAlive()) { cancelDrag(); return; }
+
+      dragGhostRef.current!.position.set(pos.x, pos.y);
+
+      const coords = calculateCoordinates(app.screen.width, app.screen.height);
+      const { kind } = dragInfoRef.current;
+      let rect: { x: number; y: number; w: number; h: number } | null = null;
+      if (kind === 'attack') {
+        const best = hitCandidate(pos, attackUuids, coords.CW, coords.CH);
+        if (best) rect = { x: best.x, y: best.y, w: coords.CW, h: coords.CH };
+      } else if (kind === 'don') {
+        const best = hitCandidate(pos, donUuids, coords.CW, coords.CH);
+        if (best) rect = { x: best.x, y: best.y, w: coords.CW, h: coords.CH };
+      } else {
+        const { valid, rect: pr } = playRectAndValid(pos);
+        if (valid) rect = pr;
+      }
+      drawHighlight(rect);
+    };
+
+    const onPointerUp = async (e: PointerEvent) => {
+      // ドラッグ未開始（タップ）の場合は何もしない（onCardClick が従来どおり処理する）。
+      if (!dragInfoRef.current) { pendingDragRef.current = null; return; }
+
+      const pos = { x: e.clientX, y: e.clientY };
+      const info = dragInfoRef.current;
+      cancelDrag();
+
+      const coords = calculateCoordinates(app.screen.width, app.screen.height);
+      if (info.kind === 'attack') {
+        const best = hitCandidate(pos, attackUuids, coords.CW, coords.CH);
+        if (best) {
+          await handleAction(A.ATTACK_CONFIRM, { uuid: info.card.uuid, target_ids: [best.uuid] });
+        }
+      } else if (info.kind === 'don') {
+        const best = hitCandidate(pos, donUuids, coords.CW, coords.CH);
+        // ATTACH_DON は「付与先カード」を card_id として送る（ミニメニューと同じ）。
+        if (best) await handleAction(A.ATTACH_DON, { uuid: best.uuid });
+      } else {
+        const { valid } = playRectAndValid(pos);
+        if (valid) await handleAction(A.PLAY, { uuid: info.card.uuid });
+      }
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ドラッグ系ハンドラは列挙状態の変化時のみ再登録。handleAction は最新を本体で参照
+  }, [gameState, viewerId, opponentId, isMyTurn, isPending, pendingRequest, isAttackTargeting, isDonTargeting]);
 
   // 攻撃演出（Phase2）: active_battle の攻撃者/対象が確定したら、攻撃者の位置から
   // 対象へ ghost トークンを突進させ、最接近時に着弾フラッシュ＋対象シェイク。
@@ -1455,7 +1700,7 @@ export const RealGame = ({
           {cpuThinking && (
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f1c40f', display: 'inline-block', flexShrink: 0, animation: 'pulse 1s infinite' }} />
           )}
-          <span style={{ color: 'white', fontSize: '11px' }}>
+          <span style={{ color: 'white', fontSize: '11px', whiteSpace: 'nowrap' }}>
             {gameState?.turn_info?.winner
               ? (gameState.turn_info.winner === selfId ? '🏆 勝利' : '敗北')
               : cpuThinking
@@ -1471,7 +1716,7 @@ export const RealGame = ({
       {isOnline && (
         <div style={{ position: 'absolute', top: '8px', right: '10px', zIndex: Z_INDEX.OVERLAY + 20, display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.6)', border: '1px solid #555', borderRadius: '4px', padding: '4px 10px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsConnected ? '#2ecc71' : '#e74c3c', display: 'inline-block', flexShrink: 0 }} />
-          <span style={{ color: 'white', fontSize: '11px' }}>
+          <span style={{ color: 'white', fontSize: '11px', whiteSpace: 'nowrap' }}>
             {!wsConnected
               ? `再接続中... (${reconnectAttemptRef.current}回目)`
               : gameState?.turn_info?.winner
@@ -1508,7 +1753,7 @@ export const RealGame = ({
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: '14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '14px' }}>
               <ModalButton variant="warning" disabled={isPending} onClick={handleMulligan} style={{ padding: '11px 28px', fontSize: '15px' }}>
                 マリガン（全交換）
               </ModalButton>
@@ -1544,7 +1789,7 @@ export const RealGame = ({
               <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center', maxWidth: '260px' }}>
                 {pendingRequest.message}
               </p>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
                 <ModalButton variant="success" disabled={isPending} onClick={() => handleOptionalConfirm(true)}>
                   発動する
                 </ModalButton>
@@ -1621,6 +1866,8 @@ export const RealGame = ({
       {isBoardSelectMode && (() => {
         // 盤面に覆い被さらず最上部中央へスリムに配置する（PromptBanner が背後タップを透過、
         // ボタンのみ有効化）。選択候補はカードのハイライトで示す。
+        // ブロック/カウンターは専用の見出し・配色・効果説明で明確に区別する。
+        const battleMeta = getBattleDecisionMeta(pendingRequest!.action);
         const actions: PromptBannerAction[] = [];
         if (maxSelect > 1) {
           actions.push({
@@ -1634,20 +1881,46 @@ export const RealGame = ({
           actions.push({ label: '選ばない', variant: 'ghost', disabled: isPending, onClick: () => handleSelectionResolve([]) });
         }
         if (pendingRequest!.can_skip) {
-          actions.push({ label: 'パス', variant: 'danger', disabled: isPending, onClick: handlePass });
+          // バトル選択時は「パス」の意味（ブロックしない／カウンターしない）を明示する。
+          actions.push({ label: battleMeta?.passLabel ?? 'パス', variant: 'danger', disabled: isPending, onClick: handlePass });
         }
-        const subText = maxSelect > 1
+        const baseHint = maxSelect > 1
           ? `${boardSelected.length} / ${maxSelect} 枚選択中（最小 ${minSelect}）`
           : (minSelect === 0 ? 'カードをタップ、または「選ばない」' : 'カードをタップして選択');
+        const subText = battleMeta
+          ? (maxSelect > 1 ? `${battleMeta.selectHint}（${boardSelected.length}/${maxSelect}）` : battleMeta.selectHint)
+          : baseHint;
+
+        const battlePanel = gameState?.active_battle && battleMeta ? (() => {
+          const ab = gameState.active_battle!;
+          const attacker = resolveCard(ab.attacker_uuid, gameState);
+          const target = resolveCard(ab.target_uuid, gameState);
+          return (
+            <BattleDecisionPanel
+              meta={battleMeta}
+              info={{
+                attackerName: attacker?.name ?? '攻撃',
+                attackerPower: attacker?.power ?? 0,
+                targetName: target?.name ?? '対象',
+                targetBasePower: target?.power ?? 0,
+                counterBuff: ab.counter_buff ?? 0,
+              }}
+            />
+          );
+        })() : null;
+
         return (
           <PromptBanner
             pointerThrough
-            accentDot
-            message={`${decisionNote}${pendingRequest!.message}`}
+            accentDot={!battleMeta}
+            accentColor={battleMeta?.color}
+            message={battleMeta
+              ? <BattleDecisionHeader meta={battleMeta} defenderLabel={isDefendingDecision ? (pendingRequest!.player_id?.toUpperCase() ?? null) : null} />
+              : `${decisionNote}${pendingRequest!.message}`}
             subText={subText}
             actions={actions}
           >
-            {gameState?.active_battle && (() => {
+            {battleMeta ? battlePanel : (gameState?.active_battle && (() => {
               const ab = gameState.active_battle;
               const attacker = resolveCard(ab.attacker_uuid, gameState);
               const target = resolveCard(ab.target_uuid, gameState);
@@ -1679,7 +1952,7 @@ export const RealGame = ({
                   </div>
                 </div>
               );
-            })()}
+            })())}
           </PromptBanner>
         );
       })()}
@@ -1725,7 +1998,8 @@ export const RealGame = ({
             padding: '10px 20px',
             backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
             color: 'white', border: 'none', borderRadius: '5px',
-            cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold'
+            cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold',
+            whiteSpace: 'nowrap'
           }}
         >
           {isPending ? '送信中...' : 'ターン終了'}

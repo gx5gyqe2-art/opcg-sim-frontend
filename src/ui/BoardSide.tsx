@@ -33,6 +33,8 @@ export const buildBoardItems = (
   selectableUuids?: Set<string>,
   selectedUuids?: Set<string>,
   hideHand: boolean = false,
+  // 指定時、各カードにドラッグ開始ハンドラを配線する（自陣側のみ渡す想定）。
+  onCardDragStart?: (card: CardInstance, pos: { x: number; y: number }) => void,
 ): BoardItem[] => {
   const items: BoardItem[] = [];
   const z = p.zones;
@@ -54,6 +56,9 @@ export const buildBoardItems = (
 
   const getCardOpts = (c: VirtualZoneCard): CardRenderOptions => ({
     onClick: (pos: { x: number; y: number }) => onCardClick(c as CardInstance, pos),
+    onDragStart: onCardDragStart
+      ? (pos: { x: number; y: number }) => onCardDragStart(c as CardInstance, pos)
+      : undefined,
     isOpponent: isOpponent,
     isSelectable: selectableUuids?.has(c.uuid || '') ?? false,
     isSelected: selectedUuids?.has(c.uuid || '') ?? false,
@@ -289,9 +294,10 @@ export const createBoardSide = (
   selectableUuids?: Set<string>,
   selectedUuids?: Set<string>,
   hideHand: boolean = false,
+  onCardDragStart?: (card: CardInstance, pos: { x: number; y: number }) => void,
 ) => {
   const side = new PIXI.Container();
-  const items = buildBoardItems(p, isOpponent, W, coords, onCardClick, selectableUuids, selectedUuids, hideHand);
+  const items = buildBoardItems(p, isOpponent, W, coords, onCardClick, selectableUuids, selectedUuids, hideHand, onCardDragStart);
   for (const item of items) {
     if (item.kind === 'virtual') {
       side.addChild(item.display);
