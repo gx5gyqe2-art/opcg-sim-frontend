@@ -1334,12 +1334,24 @@ export const RealGame = ({
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
       const { kind } = dragInfoRef.current;
 
+      // 対象カードがレスト（90°横向き）なら、枠の縦横を入れ替えて footprint に合わせる
+      // （アクティブ向きの縦長枠のままだとレストのカードと向きが合わず不恰好になる）。
+      const targetRect = (best: { uuid: string; x: number; y: number }) => {
+        const rested = resolveCard(best.uuid, gameState)?.is_rest === true;
+        return {
+          x: best.x,
+          y: best.y,
+          w: rested ? coords.CH : coords.CW,
+          h: rested ? coords.CW : coords.CH,
+        };
+      };
+
       // 攻撃: ゴーストではなく線の終点を更新する（描画は ticker が毎フレーム行う）。
       // 対象に重なれば終点をカード中心へスナップ。
       if (kind === 'attack') {
         const best = hitCandidate(pos, attackUuids, coords.CW, coords.CH);
         attackToRef.current = best ? { x: best.x, y: best.y } : pos;
-        drawHighlight(best ? { x: best.x, y: best.y, w: coords.CW, h: coords.CH } : null);
+        drawHighlight(best ? targetRect(best) : null);
         return;
       }
 
@@ -1348,7 +1360,7 @@ export const RealGame = ({
       let rect: { x: number; y: number; w: number; h: number } | null = null;
       if (kind === 'don') {
         const best = hitCandidate(pos, donUuids, coords.CW, coords.CH);
-        if (best) rect = { x: best.x, y: best.y, w: coords.CW, h: coords.CH };
+        if (best) rect = targetRect(best);
       } else {
         const { valid, rect: pr } = playRectAndValid(pos);
         if (valid) rect = pr;
