@@ -23,6 +23,14 @@ export const useGameAction = (
     apiClient.checkHealth().catch(e => setErrorToast(`サーバー接続エラー: ${e.message}`));
   }, []);
 
+  // エラートーストは 5 秒で自動的に消す（× での手動クローズも引き続き可能）。
+  // 新しいエラーが来るたびにタイマーを張り直す。
+  useEffect(() => {
+    if (!errorToast) return;
+    const t = setTimeout(() => setErrorToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [errorToast]);
+
   // 外部 game_id（オンライン対戦のルーム）が後から確定した場合に同期する。
   useEffect(() => {
     if (externalGameId) setGameId(externalGameId);
