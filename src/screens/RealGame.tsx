@@ -1872,72 +1872,62 @@ export const RealGame = ({
         />
       )}
 
-      <button
-        onClick={handleBackToTitle}
+      {/* 中央ライン上のユーティリティ・ツールバー（TOP / ログ）。半透明だと中央ラインや
+          手番枠が透けて貫通し不恰好なため、不透明チップ＋影で手前に立たせるセグメント型。
+          「採取」はログと同系統のためログポップアップ内へ移設（ActionLog の onCapture）。 */}
+      <div
         style={{
           position: 'absolute',
           top: layoutCoords ? `${layoutCoords.y}px` : '50%',
           left: '10px',
           transform: 'translateY(-50%)',
           zIndex: Z_INDEX.OVERLAY + 20,
-          background: 'rgba(0, 0, 0, 0.6)',
-          color: '#aaa',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontSize: '11px',
+          display: 'flex',
+          alignItems: 'stretch',
+          background: 'rgba(22,24,30,0.96)',
+          border: '1px solid #5f6273',
+          borderRadius: '10px',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.55)',
+          overflow: 'hidden',
         }}
       >
-        TOP
-      </button>
-
-      <button
-        onClick={() => setShowLog(p => !p)}
-        style={{
-          position: 'absolute',
-          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
-          left: '55px',
-          transform: 'translateY(-50%)',
-          zIndex: Z_INDEX.OVERLAY + 20,
-          background: showLog ? 'rgba(41,128,185,0.7)' : 'rgba(0, 0, 0, 0.6)',
-          color: showLog ? '#fff' : '#aaa',
-          border: showLog ? '1px solid #2980b9' : '1px solid #444',
-          borderRadius: '4px',
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontSize: '11px',
-        }}
-      >
-        ログ
-      </button>
-
-      <button
-        onClick={handleCaptureLogs}
-        title="ログ（イベント履歴＋CPU思考トレース）をクリップボードにコピー"
-        style={{
-          position: 'absolute',
-          top: layoutCoords ? `${layoutCoords.y}px` : '50%',
-          left: '100px',
-          transform: 'translateY(-50%)',
-          zIndex: Z_INDEX.OVERLAY + 20,
-          background: 'rgba(0, 0, 0, 0.6)',
-          color: '#aaa',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          padding: '4px 9px',
-          cursor: 'pointer',
-          fontSize: '11px',
-        }}
-      >
-        採取
-      </button>
+        <button
+          onClick={handleBackToTitle}
+          style={{
+            background: 'transparent',
+            color: '#cdd2da',
+            border: 'none',
+            padding: '5px 12px',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: 'bold',
+          }}
+        >
+          TOP
+        </button>
+        <div style={{ width: '1px', background: '#484c5a' }} />
+        <button
+          onClick={() => setShowLog(p => !p)}
+          style={{
+            background: showLog ? 'rgba(41,128,185,0.92)' : 'transparent',
+            color: showLog ? '#fff' : '#cdd2da',
+            border: 'none',
+            padding: '5px 12px',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: 'bold',
+          }}
+        >
+          ログ
+        </button>
+      </div>
 
       {showLog && layoutCoords && (
         <ActionLog
           events={eventLog}
           anchorY={layoutCoords.y}
           onClose={() => setShowLog(false)}
+          onCapture={handleCaptureLogs}
         />
       )}
 

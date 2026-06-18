@@ -59,9 +59,11 @@ interface ActionLogProps {
   events: ActionEvent[];
   anchorY: number;
   onClose: () => void;
+  /** 「採取」: ログ（イベント履歴＋CPU思考トレース）をクリップボードにコピーする。 */
+  onCapture?: () => void;
 }
 
-export const ActionLog: React.FC<ActionLogProps> = ({ events, anchorY, onClose }) => {
+export const ActionLog: React.FC<ActionLogProps> = ({ events, anchorY, onClose, onCapture }) => {
   return (
     <>
       {/* 背景クリックで閉じる透明オーバーレイ */}
@@ -86,14 +88,37 @@ export const ActionLog: React.FC<ActionLogProps> = ({ events, anchorY, onClose }
         flexDirection: 'column',
       }}>
         <div style={{
-          padding: '5px 10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
+          padding: '5px 6px 5px 10px',
           borderBottom: '1px solid #333',
-          color: '#bbb',
-          fontWeight: 'bold',
-          fontSize: '11px',
           flexShrink: 0,
         }}>
-          ログ ({events.length})
+          <span style={{ color: '#bbb', fontWeight: 'bold', fontSize: '11px' }}>
+            ログ ({events.length})
+          </span>
+          {onCapture && (
+            <button
+              onClick={onCapture}
+              title="ログ（イベント履歴＋CPU思考トレース）をクリップボードにコピー"
+              style={{
+                background: 'rgba(41,128,185,0.9)',
+                color: '#fff',
+                border: '1px solid #2980b9',
+                borderRadius: '4px',
+                padding: '2px 9px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                flexShrink: 0,
+              }}
+            >
+              採取
+            </button>
+          )}
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {events.length === 0 ? (
