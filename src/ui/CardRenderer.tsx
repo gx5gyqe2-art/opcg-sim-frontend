@@ -52,6 +52,10 @@ export const drawCardVisuals = (
   const isBack = card?.is_face_up === false;
   const isEmpty = options.count !== undefined && options.count <= 0;
 
+  // カードの角丸はサイズに追従させる（固定pxだと小カードで丸くなりすぎ、
+  // アート自体の角丸より大きく削って「四つ角が欠ける」ため）。実カード比 ≈ 幅の4.5%。
+  const cardRadius = cw * SHAPE.CARD_RADIUS_RATIO;
+
   // 再利用時に既定へ戻すべき外側プロパティ。
   container.rotation = isRest ? Math.PI / 2 : 0;
   container.__onClick = options.onClick;
@@ -98,7 +102,7 @@ export const drawCardVisuals = (
     const g = new PIXI.Graphics();
     g.lineStyle(2, 0x666666, 0.5);
     g.beginFill(0x000000, 0.2);
-    g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     g.endFill();
     container.addChild(g);
 
@@ -139,7 +143,7 @@ export const drawCardVisuals = (
 
     const mask = new PIXI.Graphics();
     mask.beginFill(0xFFFFFF);
-    mask.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    mask.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     mask.endFill();
     sprite.mask = mask;
 
@@ -153,7 +157,7 @@ export const drawCardVisuals = (
     const g = new PIXI.Graphics();
     g.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
     g.beginFill(isBack ? COLORS.CARD_BACK : COLORS.ZONE_FILL);
-    g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    g.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     g.endFill();
     container.addChild(g);
   }
@@ -328,7 +332,7 @@ export const drawCardVisuals = (
   if (card?.is_frozen) {
     const overlay = new PIXI.Graphics();
     overlay.beginFill(COLORS.BADGE_FROZEN_BG, 0.3);
-    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     overlay.endFill();
     container.addChild(overlay);
     const labelY = card?.ability_disabled ? -ch * 0.12 : 0;
@@ -338,7 +342,7 @@ export const drawCardVisuals = (
   if (card?.ability_disabled) {
     const overlay = new PIXI.Graphics();
     overlay.beginFill(COLORS.BADGE_NEGATE_BG, 0.3);
-    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     overlay.endFill();
     container.addChild(overlay);
     const labelY = card?.is_frozen ? ch * 0.12 : 0;
@@ -361,7 +365,7 @@ export const drawCardVisuals = (
   if (options.isSelected) {
     const overlay = new PIXI.Graphics();
     overlay.beginFill(COLORS.HIGHLIGHT_SELECTED, 0.45);
-    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     overlay.endFill();
     container.addChild(overlay);
     addText('✓', { fontSize: 22, fill: 0xFFFFFF, fontWeight: 'bold' }, 0, 0, 'screen');

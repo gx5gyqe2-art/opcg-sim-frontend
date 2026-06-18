@@ -20,7 +20,7 @@ export function createSelectableGlow(cw: number, ch: number, color: number): Glo
   const draw = (lineWidth: number, alpha: number): void => {
     glow.clear();
     glow.lineStyle(lineWidth, color, alpha);
-    glow.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
+    glow.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cw * SHAPE.CARD_RADIUS_RATIO);
   };
   draw(3, 1);
 

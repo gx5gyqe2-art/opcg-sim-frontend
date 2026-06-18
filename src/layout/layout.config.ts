@@ -150,7 +150,8 @@ export const LAYOUT_PARAMS = {
 
   // 形状・線のスタイル
   SHAPE: {
-    CORNER_RADIUS_CARD: 6,         // カードの角丸 (px)
+    CORNER_RADIUS_CARD: 6,         // カードの角丸 (px) [後方互換: HTMLサムネ等の固定px用途]
+    CARD_RADIUS_RATIO: 0.045,      // カードの角丸 = カード幅 × この比率（実カード約4.5%。サイズに追従）
     CORNER_RADIUS_BADGE: 9,        // 丸バッジの半径 (px)
     CORNER_RADIUS_BTN: 12,         // ボタンの角丸 (px)
     CORNER_RADIUS_MODAL: '20px 20px 0 0', // モーダル上部の角丸 (CSS形式)
