@@ -3,7 +3,6 @@ import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide, buildBoardItems, type MovableDescriptor } from '../ui/BoardSide';
-import { createCardContainer } from '../ui/CardRenderer';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardActionMenu } from '../ui/CardActionMenu';
@@ -864,6 +863,8 @@ export const RealGame = ({
       const selectedSet = new Set(boardSelected);
       // viewer 反転時は全カードが鏡像移動するため 1 フレーム skip。
       const viewerFlipped = prevViewerRef.current !== null && prevViewerRef.current !== viewerId;
+      // gameState が実際に変化した時だけアニメを動かす（UI のみの再描画で再発火させない）。
+      const gameStateChanged = prevGameStateRef.current !== gameState;
 
       if (RECONCILE_BOARD && reconcilerRef.current) {
         // 固定パイル等は従来どおり再構築、可動実カードは reconcile で使い回す。
@@ -886,7 +887,7 @@ export const RealGame = ({
         }
         app.stage.addChild(topVirtual, bottomVirtual);
 
-        reconcilerRef.current.reconcile(topDescs, bottomDescs, midY, viewerFlipped);
+        reconcilerRef.current.reconcile(topDescs, bottomDescs, midY, viewerFlipped, gameStateChanged);
         if (movableLayer) app.stage.addChild(movableLayer);
       } else {
         // オンライン/CPU 対戦では相手(上側)の手札の中身を伏せて描画する。
@@ -904,7 +905,7 @@ export const RealGame = ({
       // 前回位置→今回位置を uuid で突き合わせ、移動カードを旧位置から滑らせる。
       const prevPos = prevPositionsRef.current;
       const newPos = snapshotPositions(app);
-      if (!viewerFlipped && prevPos.size > 0) {
+      if (gameStateChanged && !viewerFlipped && prevPos.size > 0) {
         for (const [uuid, np] of newPos) {
           const cont = findCardContainer(app, uuid);
           if (!cont || cont.destroyed) continue;
@@ -958,43 +959,9 @@ export const RealGame = ({
             );
           }
         }
-
-        // 退場: 消えた uuid は実体が破棄済みなので、前状態からゴーストを再生成して
-        // 永続レイヤ上でフェードアウトさせる。一括変化（リセット等）では出さない。
-        // reconcile ON 時は実コンテナを直接アウトさせるためここはスキップ。
-        const prevGs = prevGameStateRef.current;
-        const exiting: string[] = [];
-        for (const uuid of prevPos.keys()) {
-          if (!newPos.has(uuid)) exiting.push(uuid);
-        }
-        if (!RECONCILE_BOARD && prevGs && effectsContainer && exiting.length > 0 && exiting.length <= 6) {
-          for (const uuid of exiting) {
-            const card = resolveCard(uuid, prevGs);
-            const op = prevPos.get(uuid);
-            if (!card || !op) continue;
-            const ghost = createCardContainer(card, coords.CW * 0.7, coords.CH * 0.7, {
-              onClick: () => {},
-            });
-            ghost.position.set(op.x, op.y);
-            effectsContainer.addChild(ghost);
-            const by = op.y;
-            tween({
-              durationMs: 320,
-              ease: easeOutCubic,
-              onUpdate: (k) => {
-                if (ghost.destroyed) return;
-                ghost.alpha = 1 - k;
-                ghost.y = by - 14 * k;
-                ghost.scale.set(1 - 0.1 * k);
-              },
-              onComplete: () => {
-                if (!ghost.destroyed) ghost.destroy({ children: true });
-              },
-            });
-          }
-        }
       }
-      prevPositionsRef.current = newPos;
+      // 進行中トゥイーンの中間位置で prevPos を汚さないよう、実変化時のみ保存。
+      if (gameStateChanged) prevPositionsRef.current = newPos;
       prevGameStateRef.current = gameState;
       prevViewerRef.current = viewerId;
     };
