@@ -126,6 +126,12 @@ const resolveUuidByName = (name: string | undefined | null, gs: GameState): stri
 // 除去・喪失系（赤フラッシュ＋煙）。
 const REMOVAL_ACTIONS = new Set(['KO', 'TRASH', 'DISCARD', 'BOUNCE', 'MOVE_TO_HAND', 'DECK_BOTTOM']);
 
+// 攻撃エフェクトのサイド配色（盤面の枠色＝boardBackground の手番グローに対応）。
+// 自分＝緑系（0x34e0a6）／相手＝赤系（0xe74c3c）。攻撃元のサイドで色を切り替える。
+type FxPalette = { core: number; glow: number; glow2: number; ring: number; spark: number; flash: number };
+const FX_SELF: FxPalette = { core: 0xeafff8, glow: 0x21d99a, glow2: 0x4fe6b6, ring: 0x6cf0c8, spark: 0x8affda, flash: 0xeafff8 };
+const FX_OPP: FxPalette = { core: 0xffe9e4, glow: 0xe74c3c, glow2: 0xff7d6c, ring: 0xff9e8e, spark: 0xffc2b6, flash: 0xffeee9 };
+
 const resolveCardName = (uuid: string, gs: GameState): string => {
   return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
@@ -1168,14 +1174,16 @@ export const RealGame = ({
       const pulse = 0.85 + 0.15 * Math.sin(phase * 0.006);
       const ROUND = PIXI.LINE_CAP.ROUND;
       const JROUND = PIXI.LINE_JOIN.ROUND;
-      // 外側グロー（紅・太）と中間グローは単一ストロークで滑らかに。
-      g.lineStyle({ width: 20, color: 0xff5566, alpha: 0.12 * pulse, cap: ROUND, join: JROUND });
+      // 自分の攻撃ターゲティングなので自陣カラー（緑系）。
+      const pal = FX_SELF;
+      // 外側グロー（太）と中間グローは単一ストロークで滑らかに。
+      g.lineStyle({ width: 20, color: pal.glow, alpha: 0.12 * pulse, cap: ROUND, join: JROUND });
       g.moveTo(from.x, from.y);
       g.quadraticCurveTo(cx, cy, to.x, to.y);
-      g.lineStyle({ width: 11, color: 0xff7a88, alpha: 0.22 * pulse, cap: ROUND, join: JROUND });
+      g.lineStyle({ width: 11, color: pal.glow2, alpha: 0.22 * pulse, cap: ROUND, join: JROUND });
       g.moveTo(from.x, from.y);
       g.quadraticCurveTo(cx, cy, to.x, to.y);
-      // 芯（白金・テーパー: 根元太→先端細）。短いセグメントで線幅を補間し、丸キャップで連続に。
+      // 芯（明・テーパー: 根元太→先端細）。短いセグメントで線幅を補間し、丸キャップで連続に。
       const N = 40;
       for (let i = 0; i < N; i++) {
         const t0 = i / N;
@@ -1183,23 +1191,23 @@ export const RealGame = ({
         const p0 = bez(t0);
         const p1 = bez(t1);
         const w = (6.5 * (1 - (t0 + t1) / 2) + 2.2) * pulse;
-        g.lineStyle({ width: w, color: 0xfff6d6, alpha: 0.96, cap: ROUND, join: JROUND });
+        g.lineStyle({ width: w, color: pal.core, alpha: 0.96, cap: ROUND, join: JROUND });
         g.moveTo(p0.x, p0.y);
         g.lineTo(p1.x, p1.y);
       }
-      // 起点ノード（リング＋紅ドット）。
-      g.lineStyle(2.5, 0xfff6d6, 0.9);
+      // 起点ノード（リング＋ドット）。
+      g.lineStyle(2.5, pal.core, 0.9);
       g.drawCircle(from.x, from.y, 8);
       g.lineStyle(0);
-      g.beginFill(0xff5566, 0.9);
+      g.beginFill(pal.glow, 0.9);
       g.drawCircle(from.x, from.y, 3.6);
       g.endFill();
       // 終点の回転照準リング＋十字。
       const ang = phase * 0.0016;
       const R = 15 + Math.sin(phase * 0.006) * 1.5;
-      g.lineStyle(1.5, 0xffe08a, 0.6);
+      g.lineStyle(1.5, pal.ring, 0.6);
       g.drawCircle(to.x, to.y, R + 5);
-      g.lineStyle(2.5, 0xfff6d6, 0.95);
+      g.lineStyle(2.5, pal.core, 0.95);
       g.drawCircle(to.x, to.y, R);
       for (let k = 0; k < 4; k++) {
         const a = ang + (k * Math.PI) / 2;
@@ -1415,23 +1423,97 @@ export const RealGame = ({
     const to = cardGlobalPos(app, battleTarget);
     if (!from || !to) return;
 
-    const coords = calculateCoordinates(app.screen.width, app.screen.height);
-    const w = coords.CW * 0.7;
-    const h = coords.CH * 0.7;
-    const ghost = new PIXI.Container();
-    const g = new PIXI.Graphics();
-    g.beginFill(0xff5555, 0.18);
-    g.lineStyle(2.5, 0xff9a9a, 0.95);
-    g.drawRoundedRect(-w / 2, -h / 2, w, h, 8);
-    g.endFill();
-    ghost.addChild(g);
+    // 攻撃元のサイドで配色（自分の攻撃＝緑 / 相手の攻撃＝赤）。盤面の枠色に対応。
+    const me = gameState?.players[viewerId];
+    const isMyAttack = !!me && (
+      me.leader?.uuid === battleAttacker ||
+      me.zones.field.some(c => c.uuid === battleAttacker) ||
+      me.stage?.uuid === battleAttacker
+    );
+    const pal: FxPalette = isMyAttack ? FX_SELF : FX_OPP;
 
-    fx.lunge(ghost, from.x, from.y, to.x, to.y, () => {
-      const to2 = cardGlobalPos(app, battleTarget) ?? to;
-      fx.impactFlash(to2.x, to2.y, 0xffd0d0);
-      const tc = findCardContainer(app, battleTarget);
-      if (tc) fx.shake(tc, 7, 260);
-    });
+    const ROUND = PIXI.LINE_CAP.ROUND;
+    const JROUND = PIXI.LINE_JOIN.ROUND;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const bow = Math.min(len * 0.16, 70);
+    const cx = (from.x + to.x) / 2 + nx * bow;
+    const cy = (from.y + to.y) / 2 + ny * bow;
+    const bez = (t: number) => {
+      const u = 1 - t;
+      return { x: u * u * from.x + 2 * u * t * cx + t * t * to.x, y: u * u * from.y + 2 * u * t * cy + t * t * to.y };
+    };
+
+    const teth = new PIXI.Graphics(); teth.eventMode = 'none'; fx.container.addChild(teth);
+    const bolt = new PIXI.Graphics(); bolt.eventMode = 'none'; fx.container.addChild(bolt);
+
+    const drawTether = (alpha: number) => {
+      teth.clear();
+      teth.lineStyle({ width: 14, color: pal.glow, alpha: 0.12 * alpha, cap: ROUND, join: JROUND });
+      teth.moveTo(from.x, from.y); teth.quadraticCurveTo(cx, cy, to.x, to.y);
+      teth.lineStyle({ width: 8, color: pal.glow2, alpha: 0.22 * alpha, cap: ROUND, join: JROUND });
+      teth.moveTo(from.x, from.y); teth.quadraticCurveTo(cx, cy, to.x, to.y);
+      const N = 34;
+      for (let i = 0; i < N; i++) {
+        const t0 = i / N;
+        const t1 = (i + 1) / N;
+        const p0 = bez(t0);
+        const p1 = bez(t1);
+        teth.lineStyle({ width: 4 * (1 - (t0 + t1) / 2) + 1.4, color: pal.core, alpha: 0.9 * alpha, cap: ROUND, join: JROUND });
+        teth.moveTo(p0.x, p0.y); teth.lineTo(p1.x, p1.y);
+      }
+    };
+    const drawBolt = (p: { x: number; y: number }, r: number) => {
+      bolt.clear();
+      bolt.beginFill(pal.glow, 0.18); bolt.drawCircle(p.x, p.y, r * 2.3); bolt.endFill();
+      bolt.beginFill(pal.glow2, 0.30); bolt.drawCircle(p.x, p.y, r * 1.4); bolt.endFill();
+      bolt.beginFill(pal.core, 0.98); bolt.drawCircle(p.x, p.y, r); bolt.endFill();
+    };
+    const shockwave = (p: { x: number; y: number }) => {
+      const r = new PIXI.Graphics(); r.eventMode = 'none'; fx.container.addChild(r);
+      tween({ durationMs: 440, ease: easeOutCubic, onUpdate: (k) => {
+        if (r.destroyed) return;
+        r.clear();
+        const rad = 8 + k * 48;
+        r.lineStyle(3 * (1 - k) + 0.5, pal.ring, 0.9 * (1 - k));
+        r.drawCircle(p.x, p.y, rad);
+        r.lineStyle(2 * (1 - k), pal.glow, 0.5 * (1 - k));
+        r.drawCircle(p.x, p.y, rad * 0.66);
+      }, onComplete: () => { if (!r.destroyed) r.destroy(); } });
+    };
+
+    // ① チャージ: テザーが伸び、弾が攻撃元で溜まる。
+    tween({ durationMs: 140, ease: easeOutCubic, onUpdate: (k) => {
+      if (teth.destroyed) return;
+      drawTether(0.9 * k);
+      drawBolt(from, 5 + 2 * k);
+    }, onComplete: () => {
+      // ② ストライク: 弾がテザーを走って対象へ。
+      tween({ durationMs: 200, ease: easeOutCubic, onUpdate: (k) => {
+        if (bolt.destroyed) return;
+        drawTether(0.9);
+        drawBolt(bez(k), 8);
+      }, onComplete: () => {
+        // ③ 着弾: フラッシュ＋衝撃波リング＋火花＋対象シェイク。テザー/弾はフェードアウト。
+        const t2 = cardGlobalPos(app, battleTarget) ?? to;
+        fx.impactFlash(t2.x, t2.y, pal.flash);
+        shockwave(t2);
+        fx.puff(t2.x, t2.y, pal.spark);
+        const tc = findCardContainer(app, battleTarget);
+        if (tc) fx.shake(tc, 7, 260);
+        tween({ durationMs: 160, ease: easeOutCubic, onUpdate: (k) => {
+          if (!teth.destroyed) teth.alpha = 1 - k;
+          if (!bolt.destroyed) bolt.alpha = 1 - k;
+        }, onComplete: () => {
+          if (!teth.destroyed) teth.destroy();
+          if (!bolt.destroyed) bolt.destroy();
+        } });
+      } });
+    } });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 攻撃確定時のみ発火。viewerId/gameState は最新を本体参照
   }, [battleAttacker, battleTarget]);
 
   // CPU 思考中はアニメを高速化し、cpu/step ポーリングを詰まらせない（Phase5）。
