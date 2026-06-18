@@ -117,11 +117,35 @@ export const LAYOUT_PARAMS = {
   },
 
   // 重なり順 (Z-Index)
+  // 統一ポップアップ基盤の階層（昇順に意味を固定）:
+  //   BANNER(100) < MINI_MENU(1500) < MODAL(3000) < SPOTLIGHT(6000) < TOAST(9000)
+  // NOTIFICATION/OVERLAY/SHEET は旧コードの参照を壊さないための互換エイリアス。
   Z_INDEX: {
-    NOTIFICATION: 100,  // 通知メッセージ、ターン終了ボタン
-    OVERLAY: 110,       // 攻撃対象選択オーバーレイ
+    NOTIFICATION: 100,  // [互換] 通知メッセージ、ターン終了ボタン → BANNER 相当
+    OVERLAY: 110,       // [互換] 攻撃対象選択オーバーレイ
+    BANNER: 100,        // 盤面バナー・対象選択・Generic Pending（最前面ではない通知帯）
     MINI_MENU: 1500,    // カードタップ時のミニアクションメニュー
-    SHEET: 2000,        // カード詳細シート (最前面)
+    SHEET: 2000,        // [互換] カード詳細シート → MODAL 相当
+    MODAL: 3000,        // 中央モーダル全般（カード選択/詳細/デッキ/各確認ダイアログ）
+    SPOTLIGHT: 6000,    // 全画面トランジション（コイントス・ターンバナー）
+    TOAST: 9000,        // トースト（効果フィードバック・エラー）= 常に最前面
+  },
+
+  // 統一ポップアップ基盤のデザイントークン（ダーク・グラスモーフィズム）。
+  // ModalShell / ModalButton / PromptBanner / Toast が参照する正本。
+  MODAL: {
+    SCRIM: 'rgba(8,10,14,0.62)',        // 全モーダル共通の暗幕
+    BACKDROP_BLUR: 'blur(6px)',         // 暗幕のぼかし
+    PANEL_BG: 'linear-gradient(180deg, rgba(28,32,40,0.97), rgba(18,20,28,0.97))',
+    PANEL_BORDER: '1px solid rgba(255,255,255,0.12)',
+    PANEL_RADIUS: 16,                   // パネル角丸 (px)
+    PANEL_SHADOW: '0 12px 40px rgba(0,0,0,0.5)',
+    TEXT_PRIMARY: '#f2f4f8',            // パネル内の主要テキスト
+    TEXT_MUTED: '#9aa6b5',              // 補助テキスト
+    ACCENT: '#ffd54d',                  // 見出し・強調（ゴールド）
+    BANNER_BG: 'rgba(18,22,31,0.82)',   // 細バナー背景（Board バナー値を正とする）
+    BANNER_BLUR: 'blur(10px)',
+    BANNER_BORDER: '1px solid rgba(241,196,15,0.4)',
   },
 
   // 形状・線のスタイル

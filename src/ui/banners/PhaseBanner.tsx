@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LAYOUT_PARAMS } from '../../layout/layout.config';
 
 export interface PhaseBannerData {
   id: number;
@@ -35,15 +36,15 @@ export function PhaseBanner({ banner }: { banner: PhaseBannerData | null }) {
         display: 'flex',
         justifyContent: 'center',
         pointerEvents: 'none',
-        zIndex: 6500,
+        zIndex: LAYOUT_PARAMS.Z_INDEX.SPOTLIGHT,
       }}
     >
       <div
         style={{
           padding: '10px 30px',
           borderRadius: 999,
-          background: 'linear-gradient(180deg, rgba(28,32,40,0.95), rgba(16,18,26,0.95))',
-          border: '1px solid rgba(255,213,77,0.5)',
+          background: LAYOUT_PARAMS.MODAL.PANEL_BG,
+          border: LAYOUT_PARAMS.MODAL.BANNER_BORDER,
           color: '#ffe9b0',
           fontSize: 20,
           fontWeight: 700,

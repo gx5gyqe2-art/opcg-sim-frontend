@@ -3,6 +3,8 @@ import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
 // ▼ 変更: imageAssetsから関数をインポート
 import { getCardImageUrl } from '../utils/imageAssets';
+import { ModalShell } from './common/ModalShell';
+import { ModalButton } from './common/ModalButton';
 
 interface CardSelectModalProps {
   candidates: CardInstance[];
@@ -20,7 +22,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
   candidates, message, minSelect, maxSelect, onConfirm, onCancel, selectableUuids, allowPosition
 }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { SHAPE, SHADOWS } = LAYOUT_PARAMS;
+  const { SHAPE, MODAL } = LAYOUT_PARAMS;
 
   const selectableSet = selectableUuids ? new Set(selectableUuids) : null;
   const isSelectable = (uuid: string) => !selectableSet || selectableSet.has(uuid);
@@ -115,24 +117,6 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
     ? selected.length === selectableCards.length
     : selected.length >= minSelect && selected.length <= effMax;
 
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: COLORS.OVERLAY_MODAL_BG,
-    zIndex: 3000,
-    display: 'flex', justifyContent: 'center', alignItems: 'center'
-  };
-
-  const modalStyle: React.CSSProperties = {
-    backgroundColor: 'white',
-    padding: '24px',
-    borderRadius: '8px',
-    maxWidth: '800px',
-    width: '90%',
-    maxHeight: '80vh',
-    display: 'flex', flexDirection: 'column',
-    boxShadow: SHADOWS.MODAL
-  };
-
   const gridStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', 
@@ -143,11 +127,10 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
   };
 
   return (
-    <div style={overlayStyle}>
-      <div style={modalStyle}>
-        <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-          <h3 style={{ margin: '0 0 8px 0' }}>{message}</h3>
-          <div style={{ fontSize: '0.9rem', color: '#666' }}>
+    <ModalShell width="800px" onBackdropClick={null}>
+        <div style={{ marginBottom: '16px', textAlign: 'center', flexShrink: 0 }}>
+          <h3 style={{ margin: '0 0 8px 0', color: MODAL.TEXT_PRIMARY }}>{message}</h3>
+          <div style={{ fontSize: '0.9rem', color: MODAL.TEXT_MUTED }}>
             {isOrderMode
               ? `配置順をドラッグで並び替えてください（${selected.length}枚を①から順に配置）`
               : `選択中: ${selected.length} / ${effMax}枚 (最小 ${minSelect}枚)`}
@@ -239,60 +222,26 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
           })}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', flexShrink: 0 }}>
           {onCancel && (
-            <button 
-              onClick={onCancel}
-              style={{
-                padding: '10px 20px', borderRadius: '4px', border: 'none',
-                backgroundColor: COLORS.BTN_SECONDARY, color: 'white', cursor: 'pointer'
-              }}
-            >
-              キャンセル
-            </button>
+            <ModalButton variant="secondary" onClick={onCancel}>キャンセル</ModalButton>
           )}
           {allowPosition ? (
             // ARRANGE_DECK: デッキの上/下を選んで確定する。
             <>
-              <button
-                onClick={() => isValid && onConfirm(selected, 'TOP')}
-                disabled={!isValid}
-                style={{
-                  padding: '10px 20px', borderRadius: '4px', border: 'none',
-                  backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
-                  color: 'white', cursor: isValid ? 'pointer' : 'not-allowed', fontWeight: 'bold'
-                }}
-              >
+              <ModalButton variant="primary" disabled={!isValid} onClick={() => isValid && onConfirm(selected, 'TOP')}>
                 デッキの上へ
-              </button>
-              <button
-                onClick={() => isValid && onConfirm(selected, 'BOTTOM')}
-                disabled={!isValid}
-                style={{
-                  padding: '10px 20px', borderRadius: '4px', border: 'none',
-                  backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
-                  color: 'white', cursor: isValid ? 'pointer' : 'not-allowed', fontWeight: 'bold'
-                }}
-              >
+              </ModalButton>
+              <ModalButton variant="primary" disabled={!isValid} onClick={() => isValid && onConfirm(selected, 'BOTTOM')}>
                 デッキの下へ
-              </button>
+              </ModalButton>
             </>
           ) : (
-            <button
-              onClick={() => isValid && onConfirm(selected)}
-              disabled={!isValid}
-              style={{
-                padding: '10px 20px', borderRadius: '4px', border: 'none',
-                backgroundColor: isValid ? COLORS.BTN_PRIMARY : COLORS.BTN_DISABLED,
-                color: 'white', cursor: isValid ? 'pointer' : 'not-allowed',
-                fontWeight: 'bold'
-              }}
-            >
+            <ModalButton variant="primary" disabled={!isValid} onClick={() => isValid && onConfirm(selected)}>
               決定する
-            </button>
+            </ModalButton>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

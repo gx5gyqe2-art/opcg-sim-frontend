@@ -7,6 +7,10 @@ import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardActionMenu } from '../ui/CardActionMenu';
 import { CardSelectModal } from '../ui/CardSelectModal';
+import { ModalShell } from '../ui/common/ModalShell';
+import { ModalButton } from '../ui/common/ModalButton';
+import { PromptBanner, type PromptBannerAction } from '../ui/common/PromptBanner';
+import { toastPillStyle, TOAST_Z_INDEX } from '../ui/common/toastStyles';
 import { getAvailableActions } from '../game/cardActions';
 import { normalizeCardType } from '../game/cardTypes';
 import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
@@ -214,7 +218,7 @@ export const RealGame = ({
   const toastIdRef = useRef(0);
 
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { Z_INDEX, ALPHA } = LAYOUT_PARAMS;
+  const { Z_INDEX, ALPHA, MODAL } = LAYOUT_PARAMS;
 
   const activePlayerId = gameState?.turn_info?.active_player_id as "p1" | "p2" | undefined;
 
@@ -1427,16 +1431,8 @@ export const RealGame = ({
       )}
 
       {captureText !== null && (
-        <div
-          onClick={() => setCaptureText(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: Z_INDEX.OVERLAY + 60,
-            background: 'rgba(0,0,0,0.7)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', padding: '20px',
-          }}
-        >
-          <div onClick={e => e.stopPropagation()} style={{ width: 'min(680px, 92vw)', background: '#1b1b1b', border: '1px solid #444', borderRadius: '8px', padding: '12px' }}>
-            <div style={{ color: '#ddd', fontSize: '12px', marginBottom: '8px' }}>
+        <ModalShell width="min(680px, 92vw)" padding="14px" onClose={() => setCaptureText(null)}>
+            <div style={{ color: MODAL.TEXT_MUTED, fontSize: '12px', marginBottom: '8px' }}>
               クリップボードに自動コピーできませんでした。下のテキストを選択してコピーしてください。
             </div>
             <textarea
@@ -1444,13 +1440,12 @@ export const RealGame = ({
               autoFocus
               onFocus={e => e.currentTarget.select()}
               value={captureText}
-              style={{ width: '100%', height: '50vh', fontFamily: 'monospace', fontSize: '11px', background: '#111', color: '#ccc', border: '1px solid #333', borderRadius: '4px', padding: '8px', boxSizing: 'border-box' }}
+              style={{ width: '100%', height: '50vh', fontFamily: 'monospace', fontSize: '11px', background: 'rgba(0,0,0,0.4)', color: '#ccc', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', padding: '8px', boxSizing: 'border-box' }}
             />
             <div style={{ textAlign: 'right', marginTop: '8px' }}>
-              <button onClick={() => setCaptureText(null)} style={{ background: 'rgba(41,128,185,0.8)', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 14px', cursor: 'pointer', fontSize: '12px' }}>閉じる</button>
+              <ModalButton variant="primary" onClick={() => setCaptureText(null)} style={{ padding: '7px 16px', fontSize: '12px' }}>閉じる</ModalButton>
             </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
 
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
@@ -1492,64 +1487,43 @@ export const RealGame = ({
       )}
 
       {isMyDecision && pendingRequest?.action === 'MULLIGAN' && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
-          background: 'rgba(0,0,0,0.90)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: '16px', padding: '20px', boxSizing: 'border-box',
-        }}>
-          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '22px' }}>マリガン</h2>
-          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center' }}>
-            手札を確認してください。マリガンを選ぶと<br />手札5枚を全てデッキに戻し、引き直します。
-          </p>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '500px' }}>
-            {(pendingRequest.candidates || []).map((card: CardInstance) => (
-              <div
-                key={card.uuid}
-                style={{
-                  width: '72px', height: '100px', borderRadius: '5px',
-                  border: '2px solid #555', overflow: 'hidden',
-                }}
-              >
-                <img
-                  src={getCardImageUrl(card.card_id)}
-                  alt={card.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              </div>
-            ))}
+        <ModalShell width="540px" onBackdropClick={null}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+            <h2 style={{ color: MODAL.ACCENT, margin: 0, fontSize: '22px' }}>マリガン</h2>
+            <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center' }}>
+              手札を確認してください。マリガンを選ぶと<br />手札5枚を全てデッキに戻し、引き直します。
+            </p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '500px' }}>
+              {(pendingRequest.candidates || []).map((card: CardInstance) => (
+                <div
+                  key={card.uuid}
+                  style={{
+                    width: '72px', height: '100px', borderRadius: '5px',
+                    border: '2px solid rgba(255,255,255,0.2)', overflow: 'hidden',
+                  }}
+                >
+                  <img
+                    src={getCardImageUrl(card.card_id)}
+                    alt={card.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '14px' }}>
+              <ModalButton variant="warning" disabled={isPending} onClick={handleMulligan} style={{ padding: '11px 28px', fontSize: '15px' }}>
+                マリガン（全交換）
+              </ModalButton>
+              <ModalButton variant="success" disabled={isPending} onClick={handleKeepHand} style={{ padding: '11px 28px', fontSize: '15px' }}>
+                キープ
+              </ModalButton>
+            </div>
+            <p style={{ color: MODAL.TEXT_MUTED, fontSize: '11px', margin: 0 }}>
+              ※マリガンは1回のみ・全枚交換です。新しい手札はそのまま確定します。
+            </p>
           </div>
-          <div style={{ display: 'flex', gap: '14px' }}>
-            <button
-              onClick={handleMulligan}
-              disabled={isPending}
-              style={{
-                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
-                background: isPending ? '#555' : '#e67e22',
-                color: 'white', border: 'none',
-                cursor: isPending ? 'not-allowed' : 'pointer',
-              }}
-            >
-              マリガン（全交換）
-            </button>
-            <button
-              onClick={handleKeepHand}
-              disabled={isPending}
-              style={{
-                padding: '11px 30px', borderRadius: '6px', fontWeight: 'bold', fontSize: '15px',
-                background: isPending ? '#555' : '#27ae60',
-                color: 'white', border: 'none',
-                cursor: isPending ? 'not-allowed' : 'pointer',
-              }}
-            >
-              キープ
-            </button>
-          </div>
-          <p style={{ color: '#7f8c8d', fontSize: '11px', margin: 0 }}>
-            ※マリガンは1回のみ・全枚交換です。新しい手札はそのまま確定します。
-          </p>
-        </div>
+        </ModalShell>
       )}
 
       {isMyDecision && (pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (() => {
@@ -1557,19 +1531,9 @@ export const RealGame = ({
         const sourceCard = gameState ? resolveCard(pendingRequest.source_card_uuid, gameState) : null;
         const sourceImg = sourceCard?.card_id ? getCardImageUrl(sourceCard.card_id) : null;
         return (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            pointerEvents: 'none',
-          }}>
-            <div style={{
-              pointerEvents: 'auto',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
-              padding: '16px 20px', borderRadius: '12px',
-              background: 'rgba(20,24,33,0.78)', border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}`,
-              boxShadow: '0 6px 24px rgba(0,0,0,0.5)', maxWidth: '90%',
-            }}>
-              <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '17px' }}>
+          <ModalShell width="320px" transparentScrim onBackdropClick={null}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <h2 style={{ color: MODAL.ACCENT, margin: 0, fontSize: '17px' }}>
                 {pendingRequest?.action === 'CONFIRM_TRIGGER' ? '【トリガー】' : '任意効果'}
               </h2>
               {sourceImg && (
@@ -1580,78 +1544,56 @@ export const RealGame = ({
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               )}
-              <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center', maxWidth: '260px' }}>
+              <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center', maxWidth: '260px' }}>
                 {pendingRequest.message}
               </p>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  onClick={() => handleOptionalConfirm(true)}
-                  disabled={isPending}
-                  style={{
-                    padding: '9px 26px', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px',
-                    background: isPending ? '#555' : '#27ae60', color: 'white', border: 'none',
-                    cursor: isPending ? 'not-allowed' : 'pointer',
-                  }}
-                >
+                <ModalButton variant="success" disabled={isPending} onClick={() => handleOptionalConfirm(true)}>
                   発動する
-                </button>
-                <button
-                  onClick={() => handleOptionalConfirm(false)}
-                  disabled={isPending}
-                  style={{
-                    padding: '9px 26px', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px',
-                    background: isPending ? '#555' : '#7f8c8d', color: 'white', border: 'none',
-                    cursor: isPending ? 'not-allowed' : 'pointer',
-                  }}
-                >
+                </ModalButton>
+                <ModalButton variant="secondary" disabled={isPending} onClick={() => handleOptionalConfirm(false)}>
                   発動しない
-                </button>
+                </ModalButton>
               </div>
             </div>
-          </div>
+          </ModalShell>
         );
       })()}
 
       {isMyDecision && pendingRequest?.action === 'DECLARE_COST' && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: Z_INDEX.OVERLAY + 50,
-          background: 'rgba(0,0,0,0.90)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: '16px', padding: '20px', boxSizing: 'border-box',
-        }}>
-          <h2 style={{ color: '#f1c40f', margin: 0, fontSize: '22px' }}>コスト宣言</h2>
-          <p style={{ color: '#ecf0f1', margin: 0, fontSize: '13px', textAlign: 'center' }}>
-            {pendingRequest.message}<br />
-            コストを宣言します。相手のデッキトップが宣言コストと一致すると効果が発動します。
-          </p>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '440px' }}>
-            {Array.from(
-              { length: (pendingRequest.constraints?.max ?? 10) - (pendingRequest.constraints?.min ?? 0) + 1 },
-              (_, i) => (pendingRequest.constraints?.min ?? 0) + i
-            ).map((n) => (
-              <button
-                key={n}
-                onClick={() => handleDeclareCost(n)}
-                disabled={isPending}
-                style={{
-                  width: '48px', height: '48px', borderRadius: '8px', fontWeight: 'bold', fontSize: '18px',
-                  background: isPending ? '#555' : '#2980b9', color: 'white', border: '1px solid #fff',
-                  cursor: isPending ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {n}
-              </button>
-            ))}
+        <ModalShell width="480px" onBackdropClick={null}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+            <h2 style={{ color: MODAL.ACCENT, margin: 0, fontSize: '22px' }}>コスト宣言</h2>
+            <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center' }}>
+              {pendingRequest.message}<br />
+              コストを宣言します。相手のデッキトップが宣言コストと一致すると効果が発動します。
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '440px' }}>
+              {Array.from(
+                { length: (pendingRequest.constraints?.max ?? 10) - (pendingRequest.constraints?.min ?? 0) + 1 },
+                (_, i) => (pendingRequest.constraints?.min ?? 0) + i
+              ).map((n) => (
+                <ModalButton
+                  key={n}
+                  variant="primary"
+                  disabled={isPending}
+                  onClick={() => handleDeclareCost(n)}
+                  style={{ width: '48px', height: '48px', padding: 0, fontSize: '18px' }}
+                >
+                  {n}
+                </ModalButton>
+              ))}
+            </div>
           </div>
-        </div>
+        </ModalShell>
       )}
 
       {errorToast && (
         <div style={{
+          ...toastPillStyle('error', false),
           position: 'absolute', top: '80px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: Z_INDEX.OVERLAY + 10, backgroundColor: '#e74c3c', color: 'white',
-          padding: '10px 20px', borderRadius: '5px', boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-          display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', border: '1px solid white'
+          zIndex: TOAST_Z_INDEX,
+          display: 'flex', alignItems: 'center', gap: '10px',
         }}>
           <span>⚠️ {errorToast}</span>
           <button onClick={() => setErrorToast(null)} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '16px', cursor: 'pointer', marginLeft: '10px' }}>×</button>
@@ -1659,190 +1601,119 @@ export const RealGame = ({
       )}
 
       {isAttackTargeting && (
-        <div style={{ position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_ATTACK_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', border: '2px solid white' }}>
-          攻撃対象を選択してください
-          <button onClick={() => { setIsAttackTargeting(false); setAttackingCardUuid(null); }} style={{ marginLeft: '15px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
-        </div>
+        <PromptBanner
+          position="center"
+          topPx={layoutCoords?.y}
+          accentDot
+          message="攻撃対象を選択してください"
+          actions={[{ label: 'キャンセル', variant: 'secondary', onClick: () => { setIsAttackTargeting(false); setAttackingCardUuid(null); } }]}
+        />
       )}
 
       {isDonTargeting && (
-        <div style={{ position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: Z_INDEX.OVERLAY, background: COLORS.OVERLAY_INFO_BG, padding: '15px', borderRadius: '8px', color: 'white', fontWeight: 'bold', textAlign: 'center', border: `2px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}` }}>
-          ドン!!を付与する対象を選択してください
-          <div style={{ fontSize: '12px', color: '#ccc', fontWeight: 'normal', marginTop: '4px' }}>アクティブなドン!!: {activeDonCount}枚</div>
-          <button onClick={() => setIsDonTargeting(false)} style={{ marginTop: '8px', padding: '2px 10px', cursor: 'pointer' }}>キャンセル</button>
-        </div>
+        <PromptBanner
+          position="center"
+          topPx={layoutCoords?.y}
+          accentDot
+          message="ドン!!を付与する対象を選択してください"
+          subText={`アクティブなドン!!: ${activeDonCount}枚`}
+          actions={[{ label: 'キャンセル', variant: 'secondary', onClick: () => setIsDonTargeting(false) }]}
+        />
       )}
 
-      {isBoardSelectMode && (
-        <div style={{
-          // 盤面はフィールド(中央寄り)と手札(下端)が密なため、最も干渉の少ない最上部中央へ
-          // スリムに配置する。背後のカードのタップは透過(pointerEvents:none)させ、ボタンだけ
-          // 有効化する。盤面に覆い被さらず、選択候補はカードのハイライトで示す。
-          position: 'absolute',
-          top: 'max(12px, env(safe-area-inset-top, 0px))',
-          left: '50%', transform: 'translateX(-50%)',
-          zIndex: Z_INDEX.NOTIFICATION,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px',
-          padding: '9px 16px 11px', borderRadius: '14px',
-          background: 'rgba(18,22,31,0.82)',
-          backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-          border: `1px solid ${COLORS.HIGHLIGHT_SELECTABLE_CSS}66`,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-          color: '#fff', textAlign: 'center', maxWidth: 'min(92vw, 360px)',
-          pointerEvents: 'none',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '13px', lineHeight: 1.35 }}>
-            <span style={{
-              flex: '0 0 auto', width: '7px', height: '7px', borderRadius: '50%',
-              background: COLORS.HIGHLIGHT_SELECTABLE_CSS, boxShadow: `0 0 8px ${COLORS.HIGHLIGHT_SELECTABLE_CSS}`,
-            }} />
-            <span>{decisionNote}{pendingRequest!.message}</span>
-          </div>
-
-          <div style={{ fontSize: '11px', color: '#9aa4b2' }}>
-            {maxSelect > 1
-              ? `${boardSelected.length} / ${maxSelect} 枚選択中（最小 ${minSelect}）`
-              : (minSelect === 0 ? 'カードをタップ、または「選ばない」' : 'カードをタップして選択')}
-          </div>
-
-          {gameState?.active_battle && (() => {
-            const ab = gameState.active_battle;
-            const attacker = resolveCard(ab.attacker_uuid, gameState);
-            const target = resolveCard(ab.target_uuid, gameState);
-            const counterBuff = ab.counter_buff ?? 0;
-            const attackerPwr = attacker?.power ?? 0;
-            const targetBase = target?.power ?? 0;
-            const targetEff = targetBase + counterBuff;
-            const survives = attackerPwr < targetEff;
-            return (
-              <div style={{
-                margin: '1px 0 2px', padding: '7px 10px', borderRadius: '8px',
-                background: 'rgba(0,0,0,0.3)', fontSize: '12px', lineHeight: 1.6,
-              }}>
-                <div style={{ color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '4px' }}>
-                  ⚔ {attacker?.name ?? '攻撃'}（{attackerPwr}） → {target?.name ?? '対象'}
-                </div>
-                <div>
-                  対象パワー：{targetBase}
+      {isBoardSelectMode && (() => {
+        // 盤面に覆い被さらず最上部中央へスリムに配置する（PromptBanner が背後タップを透過、
+        // ボタンのみ有効化）。選択候補はカードのハイライトで示す。
+        const actions: PromptBannerAction[] = [];
+        if (maxSelect > 1) {
+          actions.push({
+            label: '確定', variant: 'success',
+            disabled: boardSelected.length < minSelect || isPending,
+            onClick: () => handleSelectionResolve(boardSelected),
+          });
+        }
+        // 「〜1枚まで」等の任意対象(min=0,max=1)で0枚を選ぶ導線。空選択で確定する。
+        if (maxSelect === 1 && minSelect === 0) {
+          actions.push({ label: '選ばない', variant: 'ghost', disabled: isPending, onClick: () => handleSelectionResolve([]) });
+        }
+        if (pendingRequest!.can_skip) {
+          actions.push({ label: 'パス', variant: 'danger', disabled: isPending, onClick: handlePass });
+        }
+        const subText = maxSelect > 1
+          ? `${boardSelected.length} / ${maxSelect} 枚選択中（最小 ${minSelect}）`
+          : (minSelect === 0 ? 'カードをタップ、または「選ばない」' : 'カードをタップして選択');
+        return (
+          <PromptBanner
+            pointerThrough
+            accentDot
+            message={`${decisionNote}${pendingRequest!.message}`}
+            subText={subText}
+            actions={actions}
+          >
+            {gameState?.active_battle && (() => {
+              const ab = gameState.active_battle;
+              const attacker = resolveCard(ab.attacker_uuid, gameState);
+              const target = resolveCard(ab.target_uuid, gameState);
+              const counterBuff = ab.counter_buff ?? 0;
+              const attackerPwr = attacker?.power ?? 0;
+              const targetBase = target?.power ?? 0;
+              const targetEff = targetBase + counterBuff;
+              const survives = attackerPwr < targetEff;
+              return (
+                <div style={{
+                  margin: '1px 0 2px', padding: '7px 10px', borderRadius: '8px',
+                  background: 'rgba(0,0,0,0.3)', fontSize: '12px', lineHeight: 1.6,
+                }}>
+                  <div style={{ color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '4px' }}>
+                    ⚔ {attacker?.name ?? '攻撃'}（{attackerPwr}） → {target?.name ?? '対象'}
+                  </div>
+                  <div>
+                    対象パワー：{targetBase}
+                    {counterBuff > 0 && (
+                      <span style={{ color: '#ffff00', fontWeight: 'bold' }}> +{counterBuff}</span>
+                    )}
+                    {' '}= <span style={{ fontWeight: 'bold' }}>{targetEff}</span>
+                  </div>
                   {counterBuff > 0 && (
-                    <span style={{ color: '#ffff00', fontWeight: 'bold' }}> +{counterBuff}</span>
+                    <div style={{ color: '#f1c40f' }}>カウンター累計：+{counterBuff}</div>
                   )}
-                  {' '}= <span style={{ fontWeight: 'bold' }}>{targetEff}</span>
+                  <div style={{ fontWeight: 'bold', color: survives ? '#2ecc71' : '#e74c3c' }}>
+                    {survives ? '✔ このパワーで耐えられます' : '✖ あと ' + (attackerPwr - targetEff + 1) + ' 必要'}
+                  </div>
                 </div>
-                {counterBuff > 0 && (
-                  <div style={{ color: '#f1c40f' }}>カウンター累計：+{counterBuff}</div>
-                )}
-                <div style={{ fontWeight: 'bold', color: survives ? '#2ecc71' : '#e74c3c' }}>
-                  {survives ? '✔ このパワーで耐えられます' : '✖ あと ' + (attackerPwr - targetEff + 1) + ' 必要'}
-                </div>
-              </div>
-            );
-          })()}
-
-          {(maxSelect > 1 || (maxSelect === 1 && minSelect === 0) || pendingRequest!.can_skip) && (
-            <div style={{ display: 'flex', gap: '8px', marginTop: '1px', pointerEvents: 'auto' }}>
-              {maxSelect > 1 && (
-                <button
-                  onClick={() => handleSelectionResolve(boardSelected)}
-                  disabled={boardSelected.length < minSelect || isPending}
-                  style={{
-                    padding: '7px 18px', borderRadius: '999px', border: 'none', fontWeight: 700, fontSize: '13px', color: 'white',
-                    background: boardSelected.length >= minSelect ? COLORS.BTN_SUCCESS : COLORS.BTN_DISABLED,
-                    cursor: boardSelected.length >= minSelect && !isPending ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  確定
-                </button>
-              )}
-              {/* 「〜1枚まで」等の任意対象(min=0,max=1)で0枚を選ぶ導線。空選択で確定する。 */}
-              {maxSelect === 1 && minSelect === 0 && (
-                <button
-                  onClick={() => handleSelectionResolve([])}
-                  disabled={isPending}
-                  style={{
-                    padding: '7px 18px', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '13px', color: 'white',
-                    background: isPending ? COLORS.BTN_DISABLED : 'rgba(127,140,141,0.55)',
-                    cursor: isPending ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  選ばない
-                </button>
-              )}
-              {pendingRequest!.can_skip && (
-                <button
-                  onClick={handlePass}
-                  disabled={isPending}
-                  style={{
-                    padding: '7px 18px', borderRadius: '999px', border: 'none', fontWeight: 700, fontSize: '13px', color: 'white',
-                    background: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER,
-                    cursor: isPending ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  パス
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+              );
+            })()}
+          </PromptBanner>
+        );
+      })()}
 
       {isMyDecision && pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
-        <div style={{
-            position: 'absolute', top: layoutCoords ? `${layoutCoords.y}px` : '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            zIndex: Z_INDEX.NOTIFICATION, background: COLORS.OVERLAY_INFO_BG,
-            padding: '15px', borderRadius: '8px', color: 'white', textAlign: 'center',
-            border: `2px solid ${COLORS.OVERLAY_BORDER_HIGHLIGHT}`,
-            maxWidth: '320px', minWidth: '220px',
-        }}>
-          <div style={{ fontSize: '11px', color: '#aaa', marginBottom: '4px' }}>
-            {PENDING_ACTION_LABELS[pendingRequest.action] || pendingRequest.action}
-          </div>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '13px' }}>
-            {decisionNote}{pendingRequest.message}
-          </div>
+        <PromptBanner
+          position="center"
+          topPx={layoutCoords?.y}
+          message={`${decisionNote}${pendingRequest.message}`}
+          subText={PENDING_ACTION_LABELS[pendingRequest.action] || pendingRequest.action}
+          actions={pendingRequest.can_skip
+            ? [{ label: isPending ? '送信中...' : 'パス', variant: 'danger', disabled: isPending, onClick: handlePass }]
+            : undefined}
+        >
           {gameState?.active_battle && (
-            <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT, marginBottom: '10px' }}>
+            <div style={{ fontSize: '12px', color: COLORS.OVERLAY_BORDER_HIGHLIGHT }}>
               ⚔ 「{resolveCardName(gameState.active_battle.attacker_uuid, gameState)}」
               →「{resolveCardName(gameState.active_battle.target_uuid, gameState)}」
             </div>
           )}
 
           {pendingRequest.options && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', pointerEvents: 'auto' }}>
               {(pendingRequest.options as unknown as string[]).map((label: string, idx: number) => (
-                <button
-                  key={idx}
-                  onClick={() => handleOptionSelect(idx)}
-                  disabled={isPending}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: COLORS.BTN_PRIMARY,
-                    color: 'white',
-                    border: '1px solid white',
-                    borderRadius: '4px',
-                    cursor: isPending ? 'not-allowed' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold'
-                  }}
-                >
+                <ModalButton key={idx} variant="primary" fullWidth disabled={isPending} onClick={() => handleOptionSelect(idx)}>
                   {label}
-                </button>
+                </ModalButton>
               ))}
             </div>
           )}
-
-          {pendingRequest.can_skip && (
-            <button 
-              onClick={handlePass} disabled={isPending}
-              style={{ 
-                padding: '8px 24px', backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_DANGER, 
-                color: 'white', border: 'none', borderRadius: '4px', cursor: isPending ? 'not-allowed' : 'pointer', fontWeight: 'bold' 
-              }}
-            >
-              {isPending ? '送信中...' : 'パス'}
-            </button>
-          )}
-        </div>
+        </PromptBanner>
       )}
 
       {isMyDecision && isMyTurn && (pendingRequest?.action === CONST.c_to_s_interface.GAME_ACTIONS.TYPES.ACTIVATE_MAIN || pendingRequest?.action === 'MAIN_ACTION') && (
