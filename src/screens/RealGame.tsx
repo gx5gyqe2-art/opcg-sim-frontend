@@ -212,9 +212,11 @@ export const RealGame = ({
   const dragInfoRef = useRef<{ card: CardInstance; kind: DragKind } | null>(null);
   const dragGhostRef = useRef<PIXI.Container | null>(null);
   const dropHighlightRef = useRef<PIXI.Graphics | null>(null);
-  // 攻撃ドラッグはカード本体を動かさず、攻撃元→ポインタを結ぶ線（弧＋矢じり）で示す。
+  // 攻撃ドラッグはカード本体を動かさず、攻撃元→ポインタを結ぶネオン・テザー（発光弦＋照準）で示す。
   const attackLineRef = useRef<PIXI.Graphics | null>(null);
   const attackOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const attackToRef = useRef<{ x: number; y: number } | null>(null);
+  const attackTickRef = useRef<(() => void) | null>(null);
 
   // 先行プレイヤー選択（ソロ専用。CPU/対戦はランダム）。既定は P1 先攻。
   const [firstChoice, setFirstChoice] = useState<'p1' | 'p2'>('p1');
@@ -1120,6 +1122,10 @@ export const RealGame = ({
       }
     };
     const removeAttackLine = () => {
+      if (attackTickRef.current) {
+        app.ticker.remove(attackTickRef.current);
+        attackTickRef.current = null;
+      }
       const l = attackLineRef.current;
       if (l) {
         if (!l.destroyed) {
@@ -1129,6 +1135,7 @@ export const RealGame = ({
         attackLineRef.current = null;
       }
       attackOriginRef.current = null;
+      attackToRef.current = null;
     };
     // 盤面再構築でゴースト/ハイライトが破棄されたらドラッグを中断する。
     const ghostAlive = () => !!dragGhostRef.current && !dragGhostRef.current.destroyed;
@@ -1136,8 +1143,9 @@ export const RealGame = ({
     const dragVisualAlive = () =>
       ghostAlive() || (!!attackLineRef.current && !attackLineRef.current.destroyed);
 
-    // 攻撃元→終点を結ぶ線を描く。中点を進行方向の垂直へ膨らませた緩やかな弧＋矢じり。
-    const drawAttackLine = (to: { x: number; y: number }) => {
+    // 攻撃元→終点を結ぶ「ネオン・テザー」。根元太→先端細のテーパー発光弦（紅グロー＋白金芯）に、
+    // 終点は矢じりではなく回転する照準リング＋十字。phase で脈動・回転させ“生きてる”線にする。
+    const drawAttackLine = (to: { x: number; y: number }, phase: number) => {
       const g = attackLineRef.current;
       const from = attackOriginRef.current;
       if (!g || g.destroyed || !from) return;
@@ -1147,36 +1155,68 @@ export const RealGame = ({
       const len = Math.hypot(dx, dy) || 1;
       const nx = -dy / len;
       const ny = dx / len;
-      const bow = Math.min(len * 0.16, 54);
+      const bow = Math.min(len * 0.16, 70);
       const cx = (from.x + to.x) / 2 + nx * bow;
       const cy = (from.y + to.y) / 2 + ny * bow;
-      // 外側グロー（太・淡）→ 芯（細・明）の二層で立体感を出す。
-      g.lineStyle({ width: 10, color: 0xff5566, alpha: 0.16, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      const bez = (t: number) => {
+        const u = 1 - t;
+        return {
+          x: u * u * from.x + 2 * u * t * cx + t * t * to.x,
+          y: u * u * from.y + 2 * u * t * cy + t * t * to.y,
+        };
+      };
+      const pulse = 0.85 + 0.15 * Math.sin(phase * 0.006);
+      const ROUND = PIXI.LINE_CAP.ROUND;
+      const JROUND = PIXI.LINE_JOIN.ROUND;
+      // 外側グロー（紅・太）と中間グローは単一ストロークで滑らかに。
+      g.lineStyle({ width: 20, color: 0xff5566, alpha: 0.12 * pulse, cap: ROUND, join: JROUND });
       g.moveTo(from.x, from.y);
       g.quadraticCurveTo(cx, cy, to.x, to.y);
-      g.lineStyle({ width: 3.5, color: 0xffe08a, alpha: 0.95, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.lineStyle({ width: 11, color: 0xff7a88, alpha: 0.22 * pulse, cap: ROUND, join: JROUND });
       g.moveTo(from.x, from.y);
       g.quadraticCurveTo(cx, cy, to.x, to.y);
-      // 起点リング。
-      g.lineStyle(2.5, 0xffe08a, 0.9);
-      g.beginFill(0xff5566, 0.18);
-      g.drawCircle(from.x, from.y, 9);
-      g.endFill();
-      // 矢じり（終点での接線方向＝制御点→終点）。
-      const ang = Math.atan2(to.y - cy, to.x - cx);
-      const ah = 15;
-      const a1 = ang + Math.PI - 0.42;
-      const a2 = ang + Math.PI + 0.42;
+      // 芯（白金・テーパー: 根元太→先端細）。短いセグメントで線幅を補間し、丸キャップで連続に。
+      const N = 40;
+      for (let i = 0; i < N; i++) {
+        const t0 = i / N;
+        const t1 = (i + 1) / N;
+        const p0 = bez(t0);
+        const p1 = bez(t1);
+        const w = (6.5 * (1 - (t0 + t1) / 2) + 2.2) * pulse;
+        g.lineStyle({ width: w, color: 0xfff6d6, alpha: 0.96, cap: ROUND, join: JROUND });
+        g.moveTo(p0.x, p0.y);
+        g.lineTo(p1.x, p1.y);
+      }
+      // 起点ノード（リング＋紅ドット）。
+      g.lineStyle(2.5, 0xfff6d6, 0.9);
+      g.drawCircle(from.x, from.y, 8);
       g.lineStyle(0);
-      g.beginFill(0xffe08a, 0.98);
-      g.moveTo(to.x, to.y);
-      g.lineTo(to.x + Math.cos(a1) * ah, to.y + Math.sin(a1) * ah);
-      g.lineTo(to.x + Math.cos(a2) * ah, to.y + Math.sin(a2) * ah);
-      g.closePath();
+      g.beginFill(0xff5566, 0.9);
+      g.drawCircle(from.x, from.y, 3.6);
       g.endFill();
-      // 線・矢じりを最前面へ。
+      // 終点の回転照準リング＋十字。
+      const ang = phase * 0.0016;
+      const R = 15 + Math.sin(phase * 0.006) * 1.5;
+      g.lineStyle(1.5, 0xffe08a, 0.6);
+      g.drawCircle(to.x, to.y, R + 5);
+      g.lineStyle(2.5, 0xfff6d6, 0.95);
+      g.drawCircle(to.x, to.y, R);
+      for (let k = 0; k < 4; k++) {
+        const a = ang + (k * Math.PI) / 2;
+        g.moveTo(to.x + Math.cos(a) * (R - 4), to.y + Math.sin(a) * (R - 4));
+        g.lineTo(to.x + Math.cos(a) * (R + 8), to.y + Math.sin(a) * (R + 8));
+      }
+      g.lineStyle(0);
+      // 線・照準を最前面へ。
       if (g.parent === app.stage) app.stage.setChildIndex(g, app.stage.children.length - 1);
     };
+
+    // 攻撃線を毎フレーム再描画（脈動・回転のため）。終点は onPointerMove が更新する attackToRef。
+    const tickAttackLine = () => {
+      if (!attackToRef.current) return;
+      drawAttackLine(attackToRef.current, performance.now());
+    };
+
 
     // uuid 群の中からドロップ点に最も近いカードを返す（実描画位置で判定）。
     const hitCandidate = (
@@ -1214,16 +1254,19 @@ export const RealGame = ({
     };
 
     const startGhost = (card: CardInstance, kind: DragKind, pos: { x: number; y: number }) => {
-      // 攻撃: カード本体は動かさず、攻撃元から伸びる線で示す。
+      // 攻撃: カード本体は動かさず、攻撃元から伸びるネオン・テザーで示す（ticker で脈動・回転）。
       if (kind === 'attack') {
         const origin = cardGlobalPos(app, card.uuid) ?? pos;
         attackOriginRef.current = origin;
+        attackToRef.current = pos;
         const line = new PIXI.Graphics();
         line.eventMode = 'none';
         app.stage.addChild(line);
         attackLineRef.current = line;
         dragInfoRef.current = { card, kind };
-        drawAttackLine(pos);
+        drawAttackLine(pos, performance.now());
+        attackTickRef.current = tickAttackLine;
+        app.ticker.add(tickAttackLine);
         return;
       }
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
@@ -1291,11 +1334,11 @@ export const RealGame = ({
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
       const { kind } = dragInfoRef.current;
 
-      // 攻撃: ゴーストではなく線を更新する。対象に重なれば終点をカード中心へスナップ。
+      // 攻撃: ゴーストではなく線の終点を更新する（描画は ticker が毎フレーム行う）。
+      // 対象に重なれば終点をカード中心へスナップ。
       if (kind === 'attack') {
         const best = hitCandidate(pos, attackUuids, coords.CW, coords.CH);
-        const to = best ? { x: best.x, y: best.y } : pos;
-        drawAttackLine(to);
+        attackToRef.current = best ? { x: best.x, y: best.y } : pos;
         drawHighlight(best ? { x: best.x, y: best.y, w: coords.CW, h: coords.CH } : null);
         return;
       }
