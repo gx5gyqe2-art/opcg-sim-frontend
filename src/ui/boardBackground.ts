@@ -69,28 +69,12 @@ const drawSidePanel = (
   // プレイマットパネル（ハーフ全体を角丸で囲む）
   const panelY = isTop ? insetY : midY + insetY;
   const panelH = midY - insetY * 2;
-  g.lineStyle(1.5, 0xffffff, 0.10);
-  g.beginFill(0xffffff, 0.025);
+  // プレイマットの区画は塗りで示し、白枠は極細・低不透明のヘアライン1本のみ。
+  g.beginFill(0xffffff, 0.022);
   g.drawRoundedRect(insetX, panelY, W - insetX * 2, panelH, 18);
   g.endFill();
-
-  // キャラ行バンド（Row1 = 主戦場の区画を強調）
-  const CH = coords.CH;
-  const CW = coords.CW;
-  const left = coords.getFieldX(0, W, CW, 5) - CW / 2;
-  const right = coords.getFieldX(4, W, CW, 5) + CW / 2;
-  const bandPad = CH * 0.12;
-  const bandX = left - bandPad;
-  const bandW = (right - left) + bandPad * 2;
-  const rowYCenter = isTop
-    ? midY - coords.getY(1) - CH / 2
-    : midY + coords.getY(1) + CH / 2;
-  const bandY = rowYCenter - CH / 2 - bandPad;
-  const bandH = CH + bandPad * 2;
-  g.lineStyle(1, 0xffffff, 0.07);
-  g.beginFill(0xffffff, 0.03);
-  g.drawRoundedRect(bandX, bandY, bandW, bandH, 12);
-  g.endFill();
+  g.lineStyle(1, 0xffffff, 0.05);
+  g.drawRoundedRect(insetX, panelY, W - insetX * 2, panelH, 18);
 };
 
 // 手番側ハーフのパネル外周にカラーグローを足す（自陣=ティール／相手=赤）。
