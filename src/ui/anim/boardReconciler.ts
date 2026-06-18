@@ -1,7 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { createCardContainer, drawCardVisuals, type CardContainer } from '../CardRenderer';
 import type { MovableDescriptor } from '../BoardSide';
-import { tween, easeOutCubic } from './tween';
 
 // 可動実カード（field/leader/stage/life/hand）の永続レイヤを保持し、
 // 毎 render で uuid 突合により**同じコンテナを使い回す**（Phase4）。
@@ -14,6 +13,7 @@ export interface BoardReconciler {
     bottom: MovableDescriptor[],
     midY: number,
     viewerFlipped: boolean,
+    gameStateChanged: boolean,
   ) => void;
 }
 
@@ -27,35 +27,22 @@ export function createBoardReconciler(): BoardReconciler {
 
   const live = new Map<string, CardContainer>();
 
-  const applyDesc = (c: CardContainer, d: MovableDescriptor, parent: PIXI.Container): void => {
+  const applyDesc = (
+    c: CardContainer,
+    d: MovableDescriptor,
+    parent: PIXI.Container,
+    setPosition: boolean,
+  ): void => {
     // inner を最新カードで再描画（古い表示を残さない）。
     drawCardVisuals(c, d.card, d.cw, d.ch, d.opts);
     c.eventMode = d.interactive ? 'static' : 'none';
     c.cursor = d.interactive ? 'pointer' : 'default';
     if (c.parent !== parent) parent.addChild(c); // 別サイドへ移動（viewer 反転等）
-    c.x = d.x;
-    c.y = d.y;
-  };
-
-  const animateExit = (c: CardContainer): void => {
-    // snapshotPositions（name=uuid で走査）から除外し、glide と干渉させない。
-    c.name = '';
-    const by = c.y;
-    const sx = c.scale.x;
-    const sy = c.scale.y;
-    tween({
-      durationMs: 320,
-      ease: easeOutCubic,
-      onUpdate: (k) => {
-        if (c.destroyed) return;
-        c.alpha = 1 - k;
-        c.y = by - 14 * k;
-        c.scale.set(sx * (1 - 0.1 * k), sy * (1 - 0.1 * k));
-      },
-      onComplete: () => {
-        if (!c.destroyed) c.destroy({ children: true });
-      },
-    });
+    // UI のみの再描画では位置を触らない（進行中のグライドをスナップしない）。
+    if (setPosition) {
+      c.x = d.x;
+      c.y = d.y;
+    }
   };
 
   const reconcile = (
@@ -63,6 +50,7 @@ export function createBoardReconciler(): BoardReconciler {
     bottom: MovableDescriptor[],
     midY: number,
     viewerFlipped: boolean,
+    gameStateChanged: boolean,
   ): void => {
     topSub.y = 0;
     bottomSub.y = midY;
@@ -71,28 +59,23 @@ export function createBoardReconciler(): BoardReconciler {
     for (const d of top) desired.set(d.uuid, { d, sub: topSub });
     for (const d of bottom) desired.set(d.uuid, { d, sub: bottomSub });
 
-    // 退場（消えた uuid）: 実コンテナをそのままアウト。一括（>6）/反転時は即破棄。
-    const exiting: string[] = [];
+    // 退場（消えた uuid）: 居残りフェードはせず即時破棄。
+    // KO/除去のフィードバックは Phase2 の赤フラッシュ＋煙（effectsLayer）に一本化。
     for (const uuid of live.keys()) {
-      if (!desired.has(uuid)) exiting.push(uuid);
-    }
-    const immediate = viewerFlipped || exiting.length > 6;
-    for (const uuid of exiting) {
+      if (desired.has(uuid)) continue;
       const c = live.get(uuid);
       live.delete(uuid);
-      if (!c) continue;
-      if (immediate || c.destroyed) {
-        if (!c.destroyed) c.destroy({ children: true });
-      } else {
-        animateExit(c);
-      }
+      if (c && !c.destroyed) c.destroy({ children: true });
     }
+
+    // 位置を更新するのは実変化時 or viewer 反転時のみ。
+    const setPos = gameStateChanged || viewerFlipped;
 
     // 再利用 / 新規生成。
     for (const [uuid, { d, sub }] of desired) {
       const existing = live.get(uuid);
       if (existing && !existing.destroyed) {
-        applyDesc(existing, d, sub);
+        applyDesc(existing, d, sub, setPos);
       } else {
         const c = createCardContainer(d.card, d.cw, d.ch, d.opts);
         if (!d.interactive) {
