@@ -212,6 +212,9 @@ export const RealGame = ({
   const dragInfoRef = useRef<{ card: CardInstance; kind: DragKind } | null>(null);
   const dragGhostRef = useRef<PIXI.Container | null>(null);
   const dropHighlightRef = useRef<PIXI.Graphics | null>(null);
+  // 攻撃ドラッグはカード本体を動かさず、攻撃元→ポインタを結ぶ線（弧＋矢じり）で示す。
+  const attackLineRef = useRef<PIXI.Graphics | null>(null);
+  const attackOriginRef = useRef<{ x: number; y: number } | null>(null);
 
   // 先行プレイヤー選択（ソロ専用。CPU/対戦はランダム）。既定は P1 先攻。
   const [firstChoice, setFirstChoice] = useState<'p1' | 'p2'>('p1');
@@ -635,8 +638,37 @@ export const RealGame = ({
           .map(c => c.uuid)),
       ])
     : new Set<string>();
-  // 盤面のハイライト集合: ドン!!付与中はその対象候補、それ以外は選択要求の候補。
-  const highlightUuids = isDonTargeting ? donTargetUuids : selectableUuids;
+  // ドン!!返却(RETURN_DON)の対象選択。候補がすべてドン!!（アクティブ/レスト/付与）の場合、
+  // モーダルでは「どれがレスト/アクティブ/付与か」を区別しにくいので、盤面のドン!!パイル
+  // （アクティブ/レスト）と付与先キャラを直接タップして選ばせる。
+  type DonCand = CardInstance & { attached_to?: string | null; is_rest?: boolean };
+  const donReturnCandidates: DonCand[] =
+    isMyDecision &&
+    pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SELECT_RESOURCE &&
+    (pendingRequest.candidates?.length ?? 0) > 0 &&
+    pendingRequest.candidates!.every(c => c.card_id === 'DON' || (c as DonCand).type === 'DON')
+      ? (pendingRequest.candidates as DonCand[])
+      : [];
+  const isDonReturnMode = donReturnCandidates.length > 0;
+  // 付与中ドン!!の付与先キャラ uuid（盤面でハイライト/タップ可能にする）。
+  const donAttachTargets = new Set<string>(
+    donReturnCandidates.filter(d => d.attached_to).map(d => d.attached_to as string),
+  );
+  const donReturnHighlight = isDonReturnMode
+    ? new Set<string>([
+        ...(donReturnCandidates.some(d => !d.attached_to && !d.is_rest) ? [`donactive-${viewerId}`] : []),
+        ...(donReturnCandidates.some(d => !d.attached_to && d.is_rest) ? [`donrest-${viewerId}`] : []),
+        ...donAttachTargets,
+      ])
+    : new Set<string>();
+
+  // 盤面のハイライト集合: ドン!!付与中はその対象候補、ドン!!返却中は返却可能なドン!!、
+  // それ以外は選択要求の候補。
+  const highlightUuids = isDonTargeting
+    ? donTargetUuids
+    : isDonReturnMode
+      ? donReturnHighlight
+      : selectableUuids;
 
   const minSelect = pendingRequest?.constraints?.min ?? 1;
   const maxSelect = pendingRequest?.constraints?.max ?? 1;
@@ -684,6 +716,28 @@ export const RealGame = ({
         setIsDonTargeting(false);
       }
       // 対象外のタップはターゲティングを継続（無視）。
+      return;
+    }
+
+    // ドン!!返却: 盤面のドン!!パイル（アクティブ/レスト）・付与先キャラをタップして
+    // 戻すドン!!を1枚ずつ選ぶ。種別から候補 uuid を引き当て、必要枚数に達したら確定。
+    if (isDonReturnMode) {
+      let pick: string | null = null;
+      if (card.uuid === `donactive-${viewerId}`) {
+        pick = donReturnCandidates.find(d => !d.attached_to && !d.is_rest && !boardSelected.includes(d.uuid))?.uuid ?? null;
+      } else if (card.uuid === `donrest-${viewerId}`) {
+        pick = donReturnCandidates.find(d => !d.attached_to && d.is_rest && !boardSelected.includes(d.uuid))?.uuid ?? null;
+      } else if (donAttachTargets.has(card.uuid)) {
+        pick = donReturnCandidates.find(d => d.attached_to === card.uuid && !boardSelected.includes(d.uuid))?.uuid ?? null;
+      }
+      if (!pick) return;
+      const next = [...boardSelected, pick];
+      if (next.length >= maxSelect) {
+        setBoardSelected([]);
+        handleSelectionResolve(next);
+      } else {
+        setBoardSelected(next);
+      }
       return;
     }
 
@@ -775,7 +829,7 @@ export const RealGame = ({
   const onCardDragStart = (card: CardInstance, pos: { x: number; y: number }) => {
     if (isPending || !gameState || !isMyTurn) return;
     // 攻撃対象選択・ドン付与対象選択・盤面選択モード中はドラッグを開始しない（既存導線を優先）。
-    if (isAttackTargeting || isDonTargeting || isBoardSelectMode) return;
+    if (isAttackTargeting || isDonTargeting || isBoardSelectMode || isDonReturnMode) return;
     // メインフェイズ以外の選択要求中はドラッグ無効（MAIN_ACTION/ACTIVATE_MAIN は通常のメイン操作）。
     const A = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
     if (pendingRequest && pendingRequest.action !== 'MAIN_ACTION' && pendingRequest.action !== A.ACTIVATE_MAIN) return;
@@ -1065,8 +1119,64 @@ export const RealGame = ({
         dropHighlightRef.current = null;
       }
     };
+    const removeAttackLine = () => {
+      const l = attackLineRef.current;
+      if (l) {
+        if (!l.destroyed) {
+          if (l.parent) l.parent.removeChild(l);
+          l.destroy();
+        }
+        attackLineRef.current = null;
+      }
+      attackOriginRef.current = null;
+    };
     // 盤面再構築でゴースト/ハイライトが破棄されたらドラッグを中断する。
     const ghostAlive = () => !!dragGhostRef.current && !dragGhostRef.current.destroyed;
+    // ドラッグ中の視覚要素（ゴースト or 攻撃線）がまだ生きているか。
+    const dragVisualAlive = () =>
+      ghostAlive() || (!!attackLineRef.current && !attackLineRef.current.destroyed);
+
+    // 攻撃元→終点を結ぶ線を描く。中点を進行方向の垂直へ膨らませた緩やかな弧＋矢じり。
+    const drawAttackLine = (to: { x: number; y: number }) => {
+      const g = attackLineRef.current;
+      const from = attackOriginRef.current;
+      if (!g || g.destroyed || !from) return;
+      g.clear();
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const bow = Math.min(len * 0.16, 54);
+      const cx = (from.x + to.x) / 2 + nx * bow;
+      const cy = (from.y + to.y) / 2 + ny * bow;
+      // 外側グロー（太・淡）→ 芯（細・明）の二層で立体感を出す。
+      g.lineStyle({ width: 10, color: 0xff5566, alpha: 0.16, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.moveTo(from.x, from.y);
+      g.quadraticCurveTo(cx, cy, to.x, to.y);
+      g.lineStyle({ width: 3.5, color: 0xffe08a, alpha: 0.95, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.moveTo(from.x, from.y);
+      g.quadraticCurveTo(cx, cy, to.x, to.y);
+      // 起点リング。
+      g.lineStyle(2.5, 0xffe08a, 0.9);
+      g.beginFill(0xff5566, 0.18);
+      g.drawCircle(from.x, from.y, 9);
+      g.endFill();
+      // 矢じり（終点での接線方向＝制御点→終点）。
+      const ang = Math.atan2(to.y - cy, to.x - cx);
+      const ah = 15;
+      const a1 = ang + Math.PI - 0.42;
+      const a2 = ang + Math.PI + 0.42;
+      g.lineStyle(0);
+      g.beginFill(0xffe08a, 0.98);
+      g.moveTo(to.x, to.y);
+      g.lineTo(to.x + Math.cos(a1) * ah, to.y + Math.sin(a1) * ah);
+      g.lineTo(to.x + Math.cos(a2) * ah, to.y + Math.sin(a2) * ah);
+      g.closePath();
+      g.endFill();
+      // 線・矢じりを最前面へ。
+      if (g.parent === app.stage) app.stage.setChildIndex(g, app.stage.children.length - 1);
+    };
 
     // uuid 群の中からドロップ点に最も近いカードを返す（実描画位置で判定）。
     const hitCandidate = (
@@ -1104,6 +1214,18 @@ export const RealGame = ({
     };
 
     const startGhost = (card: CardInstance, kind: DragKind, pos: { x: number; y: number }) => {
+      // 攻撃: カード本体は動かさず、攻撃元から伸びる線で示す。
+      if (kind === 'attack') {
+        const origin = cardGlobalPos(app, card.uuid) ?? pos;
+        attackOriginRef.current = origin;
+        const line = new PIXI.Graphics();
+        line.eventMode = 'none';
+        app.stage.addChild(line);
+        attackLineRef.current = line;
+        dragInfoRef.current = { card, kind };
+        drawAttackLine(pos);
+        return;
+      }
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
       const isDon = kind === 'don';
       const cw = isDon ? coords.CW * 0.7 : coords.CW;
@@ -1143,6 +1265,7 @@ export const RealGame = ({
 
     const cancelDrag = () => {
       removeGhost();
+      removeAttackLine();
       clearHighlight();
       dragInfoRef.current = null;
       pendingDragRef.current = null;
@@ -1162,18 +1285,25 @@ export const RealGame = ({
       }
 
       if (!dragInfoRef.current) return;
-      // 盤面が再構築されゴーストが消えた場合は中断。
-      if (!ghostAlive()) { cancelDrag(); return; }
-
-      dragGhostRef.current!.position.set(pos.x, pos.y);
+      // 盤面が再構築され視覚要素（ゴースト/線）が消えた場合は中断。
+      if (!dragVisualAlive()) { cancelDrag(); return; }
 
       const coords = calculateCoordinates(app.screen.width, app.screen.height);
       const { kind } = dragInfoRef.current;
-      let rect: { x: number; y: number; w: number; h: number } | null = null;
+
+      // 攻撃: ゴーストではなく線を更新する。対象に重なれば終点をカード中心へスナップ。
       if (kind === 'attack') {
         const best = hitCandidate(pos, attackUuids, coords.CW, coords.CH);
-        if (best) rect = { x: best.x, y: best.y, w: coords.CW, h: coords.CH };
-      } else if (kind === 'don') {
+        const to = best ? { x: best.x, y: best.y } : pos;
+        drawAttackLine(to);
+        drawHighlight(best ? { x: best.x, y: best.y, w: coords.CW, h: coords.CH } : null);
+        return;
+      }
+
+      dragGhostRef.current!.position.set(pos.x, pos.y);
+
+      let rect: { x: number; y: number; w: number; h: number } | null = null;
+      if (kind === 'don') {
         const best = hitCandidate(pos, donUuids, coords.CW, coords.CH);
         if (best) rect = { x: best.x, y: best.y, w: coords.CW, h: coords.CH };
       } else {
@@ -1552,10 +1682,12 @@ export const RealGame = ({
 
   const showSearchModal =
     isMyDecision &&
-    !isBoardSelectMode && (
+    !isBoardSelectMode &&
+    !isDonReturnMode && (
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SEARCH_AND_SELECT ||
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.ARRANGE_DECK ||
-      // ドン!!返却(RETURN_DON)の対象選択。場のドン!!（候補）からモーダルで選ばせる。
+      // ドン!!返却(RETURN_DON)で候補が盤面外/混在のとき等はモーダルにフォールバック。
+      // 候補がすべてドン!!なら isDonReturnMode により盤面から直接選ばせる。
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SELECT_RESOURCE ||
       pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
     );
@@ -1957,7 +2089,25 @@ export const RealGame = ({
         );
       })()}
 
-      {isMyDecision && pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && pendingRequest.action !== 'MAIN_ACTION' && (
+      {/* ドン!!返却: 盤面のドン!!（アクティブ/レスト）・付与先キャラを直接タップして選ぶ。 */}
+      {isDonReturnMode && (() => {
+        const remaining = Math.max(0, maxSelect - boardSelected.length);
+        const actions: PromptBannerAction[] = [];
+        if (boardSelected.length > 0) {
+          actions.push({ label: 'やり直す', variant: 'ghost', disabled: isPending, onClick: () => setBoardSelected([]) });
+        }
+        return (
+          <PromptBanner
+            pointerThrough
+            accentDot
+            message={pendingRequest!.message || 'デッキに戻すドン!!を選んでください'}
+            subText={`盤面のドン!!（アクティブ／レスト）か、付与先のキャラをタップ — あと ${remaining} 枚`}
+            actions={actions}
+          />
+        );
+      })()}
+
+      {isMyDecision && pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && !isDonReturnMode && pendingRequest.action !== 'MAIN_ACTION' && (
         <PromptBanner
           position="center"
           topPx={layoutCoords?.y}

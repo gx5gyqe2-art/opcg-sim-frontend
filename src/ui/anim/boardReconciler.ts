@@ -23,6 +23,12 @@ export function createBoardReconciler(): BoardReconciler {
   // 「グローバル差分＝ローカル差分」を保つため平行移動のみ。
   const topSub = new PIXI.Container();
   const bottomSub = new PIXI.Container();
+  // 描画順（z）を「記述子配列の順序」に常に一致させる。再利用コンテナは addChild 時の
+  // 子インデックスを保つため、ライフ→手札のように領域をまたいで使い回されると古い z 位置
+  // （ライフは手札より先に積むので奥）に取り残され、手札が奥側に表示されてしまう。
+  // zIndex を毎回振り直し sortableChildren で並べ替えることで配列順＝右側のカードが手前。
+  topSub.sortableChildren = true;
+  bottomSub.sortableChildren = true;
   layer.addChild(topSub, bottomSub);
 
   const live = new Map<string, CardContainer>();
@@ -55,9 +61,9 @@ export function createBoardReconciler(): BoardReconciler {
     topSub.y = 0;
     bottomSub.y = midY;
 
-    const desired = new Map<string, { d: MovableDescriptor; sub: PIXI.Container }>();
-    for (const d of top) desired.set(d.uuid, { d, sub: topSub });
-    for (const d of bottom) desired.set(d.uuid, { d, sub: bottomSub });
+    const desired = new Map<string, { d: MovableDescriptor; sub: PIXI.Container; z: number }>();
+    top.forEach((d, i) => desired.set(d.uuid, { d, sub: topSub, z: i }));
+    bottom.forEach((d, i) => desired.set(d.uuid, { d, sub: bottomSub, z: i }));
 
     // 退場（消えた uuid）: 居残りフェードはせず即時破棄。
     // KO/除去のフィードバックは Phase2 の赤フラッシュ＋煙（effectsLayer）に一本化。
@@ -72,10 +78,11 @@ export function createBoardReconciler(): BoardReconciler {
     const setPos = gameStateChanged || viewerFlipped;
 
     // 再利用 / 新規生成。
-    for (const [uuid, { d, sub }] of desired) {
+    for (const [uuid, { d, sub, z }] of desired) {
       const existing = live.get(uuid);
       if (existing && !existing.destroyed) {
         applyDesc(existing, d, sub, setPos);
+        existing.zIndex = z; // 配列順どおりに z を維持（再利用コンテナの取り残し防止）。
       } else {
         const c = createCardContainer(d.card, d.cw, d.ch, d.opts);
         if (!d.interactive) {
@@ -84,6 +91,7 @@ export function createBoardReconciler(): BoardReconciler {
         }
         c.x = d.x;
         c.y = d.y;
+        c.zIndex = z;
         sub.addChild(c);
         live.set(uuid, c);
       }
