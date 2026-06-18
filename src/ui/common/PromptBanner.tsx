@@ -60,7 +60,7 @@ export const PromptBanner: React.FC<PromptBannerProps> = ({
     boxShadow: accentColor
       ? `0 0 0 1px ${accentColor}55, 0 0 18px ${accentColor}40, 0 8px 24px rgba(0,0,0,0.45)`
       : '0 8px 24px rgba(0,0,0,0.45)',
-    color: '#fff', textAlign: 'center', maxWidth: 'min(92vw, 360px)',
+    color: '#fff', textAlign: 'center', maxWidth: 'min(94vw, 380px)',
     pointerEvents: pointerThrough ? 'none' : 'auto',
   };
 
@@ -83,7 +83,7 @@ export const PromptBanner: React.FC<PromptBannerProps> = ({
       {children}
 
       {actions && actions.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px', marginTop: '1px', pointerEvents: 'auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', marginTop: '1px', pointerEvents: 'auto' }}>
           {actions.map((a, i) => (
             <ModalButton
               key={i}

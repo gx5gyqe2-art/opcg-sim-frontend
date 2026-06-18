@@ -222,7 +222,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
           })}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', flexShrink: 0 }}>
           {onCancel && (
             <ModalButton variant="secondary" onClick={onCancel}>キャンセル</ModalButton>
           )}

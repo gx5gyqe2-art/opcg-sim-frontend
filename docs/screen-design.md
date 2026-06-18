@@ -429,8 +429,8 @@ RoomLobby とほぼ同一構成。差分のみ示す：
 | 部品 | 役割 | 利用例 |
 |---|---|---|
 | `ModalShell` | 全画面 scrim ＋ blur ＋ ダークパネルの土台（`align='center'\|'bottom'`、タイトル／×クローズ、背景タップ） | CardSelect／CardDetail／DeckSelect／各確認ダイアログ |
-| `ModalButton` | variant ベースの統一ボタン（`primary/danger/success/warning/secondary/ghost`、`disabled`、`fullWidth`） | 全モーダルのボタン |
-| `PromptBanner` | 上部中央の細バナー（メッセージ＋カウンタ＋アクション、`Z_INDEX.BANNER`、`accentColor` で枠＋外周グローを着色し種別を区別） | 対象選択・盤面選択・Generic Pending・ブロック／カウンター選択 |
+| `ModalButton` | variant ベースの統一ボタン（`primary/danger/success/warning/secondary/ghost`、`disabled`、`fullWidth`）。横並び時はラベルが途中で 2 行に折れないよう非 `fullWidth` は `white-space:nowrap`＋`flex-shrink:0`（`fullWidth` は従来どおり折返し許容） | 全モーダルのボタン |
+| `PromptBanner` | 上部中央の細バナー（メッセージ＋カウンタ＋アクション、`Z_INDEX.BANNER`、`accentColor` で枠＋外周グローを着色し種別を区別）。アクション行は `flexWrap` で「ボタン単位」に折り返す | 対象選択・盤面選択・Generic Pending・ブロック／カウンター選択 |
 | `BattleDecisionInfo` | ブロック／カウンター選択の見出し（`BattleDecisionHeader`）＋数値パネル（`BattleDecisionPanel`）。メタは `battleDecision.ts`（`getBattleDecisionMeta`） | 防御側の選択バナー内 |
 | `toastStyles` | トースト presentation（位置・配色・rise）の共通スタイル | 効果トースト・エラートースト |
 

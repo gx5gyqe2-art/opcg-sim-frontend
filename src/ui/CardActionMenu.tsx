@@ -95,6 +95,7 @@ export const CardActionMenu: React.FC<CardActionMenuProps> = ({
     fontSize: '0.95rem',
     cursor: 'pointer',
     width: '100%',
+    whiteSpace: 'nowrap',
   });
 
   const actionBg: Record<CardActionKey, string> = {

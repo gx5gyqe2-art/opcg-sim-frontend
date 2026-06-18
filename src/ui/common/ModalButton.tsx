@@ -52,6 +52,11 @@ export const ModalButton: React.FC<ModalButtonProps> = ({
     fontSize: '0.95rem',
     cursor: disabled ? 'not-allowed' : 'pointer',
     width: fullWidth ? '100%' : undefined,
+    // 横並び（auto 幅）のボタンは flex で縮むとラベルが途中で 2 行に折り返して不格好になる。
+    // nowrap で 1 行を保ち、収まらない場合は行側の flexWrap で「ボタン単位」に折る。
+    // fullWidth は元々横幅いっぱいなので、長文は従来どおり折り返しを許容する。
+    whiteSpace: fullWidth ? undefined : 'nowrap',
+    flexShrink: fullWidth ? undefined : 0,
     transition: 'filter 120ms ease, transform 80ms ease',
     ...style,
   };

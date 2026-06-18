@@ -1700,7 +1700,7 @@ export const RealGame = ({
           {cpuThinking && (
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f1c40f', display: 'inline-block', flexShrink: 0, animation: 'pulse 1s infinite' }} />
           )}
-          <span style={{ color: 'white', fontSize: '11px' }}>
+          <span style={{ color: 'white', fontSize: '11px', whiteSpace: 'nowrap' }}>
             {gameState?.turn_info?.winner
               ? (gameState.turn_info.winner === selfId ? '🏆 勝利' : '敗北')
               : cpuThinking
@@ -1716,7 +1716,7 @@ export const RealGame = ({
       {isOnline && (
         <div style={{ position: 'absolute', top: '8px', right: '10px', zIndex: Z_INDEX.OVERLAY + 20, display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.6)', border: '1px solid #555', borderRadius: '4px', padding: '4px 10px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: wsConnected ? '#2ecc71' : '#e74c3c', display: 'inline-block', flexShrink: 0 }} />
-          <span style={{ color: 'white', fontSize: '11px' }}>
+          <span style={{ color: 'white', fontSize: '11px', whiteSpace: 'nowrap' }}>
             {!wsConnected
               ? `再接続中... (${reconnectAttemptRef.current}回目)`
               : gameState?.turn_info?.winner
@@ -1753,7 +1753,7 @@ export const RealGame = ({
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: '14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '14px' }}>
               <ModalButton variant="warning" disabled={isPending} onClick={handleMulligan} style={{ padding: '11px 28px', fontSize: '15px' }}>
                 マリガン（全交換）
               </ModalButton>
@@ -1789,7 +1789,7 @@ export const RealGame = ({
               <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center', maxWidth: '260px' }}>
                 {pendingRequest.message}
               </p>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
                 <ModalButton variant="success" disabled={isPending} onClick={() => handleOptionalConfirm(true)}>
                   発動する
                 </ModalButton>
@@ -1998,7 +1998,8 @@ export const RealGame = ({
             padding: '10px 20px',
             backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
             color: 'white', border: 'none', borderRadius: '5px',
-            cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold'
+            cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold',
+            whiteSpace: 'nowrap'
           }}
         >
           {isPending ? '送信中...' : 'ターン終了'}
