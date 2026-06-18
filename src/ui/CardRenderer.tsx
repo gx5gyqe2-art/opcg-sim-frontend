@@ -146,10 +146,8 @@ export const drawCardVisuals = (
     container.addChild(sprite);
     container.addChild(mask);
 
-    const border = new PIXI.Graphics();
-    border.lineStyle(SHAPE.STROKE_WIDTH_ZONE, COLORS.ZONE_BORDER);
-    border.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, SHAPE.CORNER_RADIUS_CARD);
-    container.addChild(border);
+    // 画像カードはアート自体に枠があるため、上描きの白枠は付けない。
+    // 空スロット/リソース等の枠は else 側（プレースホルダ描画）で維持する。
 
   } else {
     const g = new PIXI.Graphics();

@@ -55,29 +55,7 @@ const buildBackdropTexture = (W: number, H: number): PIXI.Texture => {
   return tex;
 };
 
-// サイド（top/bottom）ごとのプレイマットパネル＋キャラ行バンドを描画する。
-const drawSidePanel = (
-  g: PIXI.Graphics,
-  isTop: boolean,
-  W: number,
-  coords: LayoutCoords,
-) => {
-  const midY = coords.midY;
-  const insetX = Math.max(10, W * 0.015);
-  const insetY = 8;
-
-  // プレイマットパネル（ハーフ全体を角丸で囲む）
-  const panelY = isTop ? insetY : midY + insetY;
-  const panelH = midY - insetY * 2;
-  // プレイマットの区画は塗りで示し、白枠は極細・低不透明のヘアライン1本のみ。
-  g.beginFill(0xffffff, 0.022);
-  g.drawRoundedRect(insetX, panelY, W - insetX * 2, panelH, 18);
-  g.endFill();
-  g.lineStyle(1, 0xffffff, 0.05);
-  g.drawRoundedRect(insetX, panelY, W - insetX * 2, panelH, 18);
-};
-
-// 手番側ハーフのパネル外周にカラーグローを足す（自陣=ティール／相手=赤）。
+// 手番側ハーフの外周にカラーグローを足す（自陣=ティール／相手=赤）。
 const drawTurnGlow = (
   g: PIXI.Graphics,
   side: 'top' | 'bottom',
@@ -112,20 +90,14 @@ export const createBoardBackground = (
   backdrop.height = H;
   container.addChild(backdrop);
 
-  // ② プレイマットパネル＋キャラ行バンド（上下）
-  const panels = new PIXI.Graphics();
-  drawSidePanel(panels, true, W, coords);
-  drawSidePanel(panels, false, W, coords);
-  container.addChild(panels);
-
-  // ④ 手番グロー
+  // ② 手番グロー
   if (opts.activeSide) {
     const glow = new PIXI.Graphics();
     drawTurnGlow(glow, opts.activeSide, W, coords);
     container.addChild(glow);
   }
 
-  // ③ 発光ディバイダ（中央の戦闘ライン）
+  // ③ 発光ディバイダ（中央の戦闘ライン）。区画パネル(C)は被るため非採用。
   const divider = new PIXI.Graphics();
   const midY = coords.midY;
   divider.lineStyle(6, 0xffd54d, 0.06).moveTo(0, midY).lineTo(W, midY);
