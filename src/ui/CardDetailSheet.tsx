@@ -5,6 +5,8 @@ import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { getCardImageUrl } from '../utils/imageAssets';
 import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 import { getAvailableActions, type CardActionKey } from '../game/cardActions';
+import { ModalShell } from './common/ModalShell';
+import { ModalButton, type ModalButtonVariant } from './common/ModalButton';
 
 interface CardDetailSheetProps {
   card: CardInstance & { cards?: CardInstance[] };
@@ -17,7 +19,7 @@ interface CardDetailSheetProps {
 
 export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, activeDonCount = 0, onAction, onClose }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { UI_DETAILS, Z_INDEX, SHAPE, SHADOWS } = LAYOUT_PARAMS;
+  const { UI_DETAILS, SHAPE, MODAL } = LAYOUT_PARAMS;
 
   // ドン付与モード用ステート
   const [donMode, setDonMode] = useState(false);
@@ -44,24 +46,17 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   const renderButtons = () => {
     if (donMode) {
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: '#f0f0f0', padding: '10px', borderRadius: '8px' }}>
-          <div style={{ fontWeight: 'bold' }}>ドン!!を付与する枚数</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.06)', padding: '12px', borderRadius: '10px' }}>
+          <div style={{ fontWeight: 'bold', color: MODAL.TEXT_PRIMARY }}>ドン!!を付与する枚数</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <button 
-              onClick={() => setDonAmount(Math.max(1, donAmount - 1))}
-              style={btnStyle(COLORS.BTN_SECONDARY, 'white')}
-            >-</button>
-            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{donAmount}</div>
-            <button 
-              onClick={() => setDonAmount(Math.min(activeDonCount, donAmount + 1))}
-              disabled={donAmount >= activeDonCount}
-              style={btnStyle(donAmount >= activeDonCount ? COLORS.BTN_DISABLED : COLORS.BTN_SECONDARY, 'white')}
-            >+</button>
+            <ModalButton variant="secondary" onClick={() => setDonAmount(Math.max(1, donAmount - 1))} style={{ width: '48px' }}>−</ModalButton>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: MODAL.TEXT_PRIMARY }}>{donAmount}</div>
+            <ModalButton variant="secondary" disabled={donAmount >= activeDonCount} onClick={() => setDonAmount(Math.min(activeDonCount, donAmount + 1))} style={{ width: '48px' }}>＋</ModalButton>
           </div>
-          <div style={{ fontSize: '12px', color: '#666' }}>可能: {activeDonCount}枚</div>
+          <div style={{ fontSize: '12px', color: MODAL.TEXT_MUTED }}>可能: {activeDonCount}枚</div>
           <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-            <button onClick={() => setDonMode(false)} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>キャンセル</button>
-            <button onClick={handleAttachDonBatch} style={btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT)}>決定</button>
+            <ModalButton variant="secondary" fullWidth onClick={() => setDonMode(false)}>キャンセル</ModalButton>
+            <ModalButton variant="warning" fullWidth onClick={handleAttachDonBatch}>決定</ModalButton>
           </div>
         </div>
       );
@@ -69,11 +64,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
     // ボタンの表示可否はカード種別・ロケーションに基づき getAvailableActions に一元化。
     // ステージカードに攻撃/ドン付与が出るバグはこのヘルパー側で防いでいる。
-    const actionStyles: Record<CardActionKey, React.CSSProperties> = {
-      play: btnStyle(COLORS.BTN_SUCCESS, COLORS.TEXT_LIGHT),
-      attack: btnStyle(COLORS.BTN_DANGER, COLORS.TEXT_LIGHT),
-      don: btnStyle(COLORS.BTN_WARNING, COLORS.TEXT_DEFAULT),
-      activate: btnStyle(COLORS.BTN_PRIMARY, COLORS.TEXT_LIGHT),
+    const actionVariants: Record<CardActionKey, ModalButtonVariant> = {
+      play: 'success', attack: 'danger', don: 'warning', activate: 'primary',
     };
     const actionHandlers: Record<CardActionKey, () => void> = {
       play: () => handleExecute(ACTIONS.PLAY),
@@ -83,43 +75,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
     };
 
     return getAvailableActions(card, location, isMyTurn, activeDonCount).map(a => (
-      <button key={a.key} onClick={actionHandlers[a.key]} style={actionStyles[a.key]}>
+      <ModalButton key={a.key} variant={actionVariants[a.key]} fullWidth onClick={actionHandlers[a.key]}>
         {a.label}
-      </button>
+      </ModalButton>
     ));
   };
-
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: COLORS.OVERLAY_MODAL_BG,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    zIndex: Z_INDEX.SHEET
-  };
-
-  const sheetStyle: React.CSSProperties = {
-    backgroundColor: 'white',
-    width: '100%',
-    maxWidth: UI_DETAILS.MODAL_MAX_WIDTH,
-    padding: '24px',
-    borderRadius: SHAPE.CORNER_RADIUS_MODAL,
-    boxShadow: SHADOWS.MODAL,
-    boxSizing: 'border-box'
-  };
-
-  const btnStyle = (bg: string, color: string | number): React.CSSProperties => ({
-    padding: '14px',
-    borderRadius: SHAPE.CORNER_RADIUS_BTN,
-    border: 'none',
-    backgroundColor: bg,
-    color: String(color),
-    fontWeight: 'bold',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    width: '100%'
-  });
 
   const badgeStyle = (bg: string): React.CSSProperties => ({
     backgroundColor: bg,
@@ -135,12 +95,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
 
   if (card.cards && card.cards.length > 0) {
     return (
-      <div style={overlayStyle} onClick={onClose}>
-        <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h2 style={{ margin: 0 }}>{card.name} ({card.cards.length})</h2>
-            <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
-          </div>
+      <ModalShell align="bottom" width={UI_DETAILS.MODAL_MAX_WIDTH} title={`${card.name} (${card.cards.length})`} onClose={onClose}>
           <div style={{ maxHeight: '60vh', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
             {card.cards.map((c, idx) => {
               // ▼ 変更: getCardImageUrlを使用
@@ -169,16 +124,14 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             })}
           </div>
           <div style={{ marginTop: '10px' }}>
-            <button onClick={onClose} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>閉じる</button>
+            <ModalButton variant="secondary" fullWidth onClick={onClose}>閉じる</ModalButton>
           </div>
-        </div>
-      </div>
+      </ModalShell>
     );
   }
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={sheetStyle} onClick={(e) => e.stopPropagation()}>
+    <ModalShell align="bottom" width={UI_DETAILS.MODAL_MAX_WIDTH} onClose={onClose}>
         <div style={{ marginBottom: '20px', textAlign: 'center' }}>
           
           {mainImageUrl && (
@@ -200,8 +153,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', textAlign: 'left' }}>
-            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{card.name || 'Unknown Card'}</h2>
-            <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999' }}>×</button>
+            <h2 style={{ margin: 0, fontSize: '1.4rem', color: MODAL.TEXT_PRIMARY }}>{card.name || 'Unknown Card'}</h2>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px', justifyContent: 'flex-start' }}>
             <span style={badgeStyle(COLORS.BADGE_LOC)}>{location.toUpperCase()}</span>
@@ -212,15 +164,15 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             {card.is_frozen && <span style={badgeStyle(COLORS.BADGE_FROZEN_CSS)}>凍結</span>}
             {card.ability_disabled && <span style={badgeStyle(COLORS.BADGE_NEGATE_CSS)}>効果無効</span>}
           </div>
-          <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left' }}>
+          <p style={{ fontSize: '0.9rem', color: MODAL.TEXT_PRIMARY, lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left' }}>
             {'text' in card ? card.text : ''}
           </p>
           {'trigger_text' in card && card.trigger_text && (
-            <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left', borderTop: '1px solid #eee', paddingTop: '8px', marginTop: '4px' }}>
-              <span style={{ fontWeight: 'bold', color: COLORS.BADGE_ATTR }}>【トリガー】</span> {card.trigger_text}
+            <p style={{ fontSize: '0.9rem', color: MODAL.TEXT_PRIMARY, lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left', borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: '8px', marginTop: '4px' }}>
+              <span style={{ fontWeight: 'bold', color: MODAL.ACCENT }}>【トリガー】</span> {card.trigger_text}
             </p>
           )}
-          <div style={{ marginTop: '15px', fontWeight: 'bold', display: 'flex', gap: '20px', borderTop: '1px solid #eee', paddingTop: '10px', justifyContent: 'center' }}>
+          <div style={{ marginTop: '15px', fontWeight: 'bold', color: MODAL.TEXT_PRIMARY, display: 'flex', gap: '20px', borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: '10px', justifyContent: 'center' }}>
             {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}</span>}
             {'cost' in card && <span>COST: {(card as BoardCard).cost}</span>}
             {'counter' in card && (card as BoardCard).counter !== undefined && (card as BoardCard).counter! > 0 && (
@@ -232,10 +184,9 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {renderButtons()}
           {!donMode && (
-            <button onClick={onClose} style={btnStyle(COLORS.BTN_SECONDARY, COLORS.TEXT_LIGHT)}>閉じる</button>
+            <ModalButton variant="secondary" fullWidth onClick={onClose}>閉じる</ModalButton>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

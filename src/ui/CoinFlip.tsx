@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { LAYOUT_PARAMS } from '../layout/layout.config';
 
 /**
  * 先行/後攻決定のリビール演出（CPU・対戦モード用／ミニマル・モダン版）。
@@ -78,7 +79,7 @@ export const CoinFlip: React.FC<{
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 6000,
+      position: 'fixed', inset: 0, zIndex: LAYOUT_PARAMS.Z_INDEX.SPOTLIGHT,
       background: 'radial-gradient(circle at 50% 38%, rgba(17,22,31,0.9) 0%, rgba(5,7,11,0.96) 100%)',
       backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '30px',

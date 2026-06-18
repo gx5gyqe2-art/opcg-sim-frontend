@@ -24,7 +24,7 @@ export const CardActionMenu: React.FC<CardActionMenuProps> = ({
   card, location, activeDonCount, anchor, onAction, onShowDetail, onClose, initialDonMode = false,
 }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { Z_INDEX, SHAPE } = LAYOUT_PARAMS;
+  const { Z_INDEX, SHAPE, MODAL } = LAYOUT_PARAMS;
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
 
   // ドン付与は枚数選択のためパネル内をステッパー表示に切り替える。
@@ -73,10 +73,10 @@ export const CardActionMenu: React.FC<CardActionMenuProps> = ({
     left,
     ...verticalStyle,
     width: PANEL_WIDTH,
-    background: 'rgba(28, 32, 40, 0.97)',
-    border: '1px solid #4a5360',
-    borderRadius: '10px',
-    boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+    background: MODAL.PANEL_BG,
+    border: MODAL.PANEL_BORDER,
+    borderRadius: '12px',
+    boxShadow: MODAL.PANEL_SHADOW,
     padding: '8px',
     display: 'flex',
     flexDirection: 'column',
