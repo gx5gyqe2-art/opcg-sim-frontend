@@ -3,6 +3,7 @@ import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
 import { createBoardSide } from '../ui/BoardSide';
+import { createCardContainer } from '../ui/CardRenderer';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
 import { CardActionMenu } from '../ui/CardActionMenu';
@@ -13,9 +14,13 @@ import { DeckSelectModal, type DeckOption } from '../ui/DeckSelectModal';
 import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { CoinFlip } from '../ui/CoinFlip';
+import { PhaseBanner } from '../ui/banners/PhaseBanner';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
+import { createEffectsLayer, type EffectsLayer } from '../ui/anim/effectsLayer';
+import { attachTweenTicker, detachTweenTicker, clearTweens, tween, easeOutCubic, setAnimSpeed } from '../ui/anim/tween';
+import { snapshotPositions, type PositionMap } from '../ui/anim/positionTracker';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
@@ -70,6 +75,48 @@ const resolveCard = (uuid: string | undefined | null, gs: GameState): CardInstan
   return null;
 };
 
+// 演出（Phase2）用ヘルパー: 盤面上のカードコンテナを uuid で探し、画面座標を得る。
+// カードコンテナは createCardContainer で name=uuid が設定されている。
+const findCardContainer = (app: PIXI.Application, uuid: string): PIXI.Container | null => {
+  let found: PIXI.Container | null = null;
+  const walk = (c: PIXI.Container) => {
+    if (found || c.destroyed) return;
+    if (c.name === uuid) { found = c; return; }
+    for (const k of c.children) {
+      if (k instanceof PIXI.Container) walk(k);
+    }
+  };
+  walk(app.stage);
+  return found;
+};
+
+const cardGlobalPos = (app: PIXI.Application, uuid: string): { x: number; y: number } | null => {
+  const c = findCardContainer(app, uuid);
+  if (!c || c.destroyed) return null;
+  const p = c.getGlobalPosition();
+  return { x: p.x, y: p.y };
+};
+
+// ActionEvent は uuid を持たず card_name のみ。現状態から名前→uuid を引く（先頭一致）。
+const resolveUuidByName = (name: string | undefined | null, gs: GameState): string | null => {
+  if (!name) return null;
+  for (const pid of ['p1', 'p2'] as const) {
+    const p = gs.players[pid];
+    if (!p) continue;
+    if (p.leader?.name === name) return p.leader.uuid;
+    if (p.stage?.name === name) return p.stage.uuid;
+    const z = p.zones;
+    for (const zone of [z.field, z.hand, z.life, z.trash, z.deck]) {
+      const c = zone?.find(c => c.name === name);
+      if (c?.uuid) return c.uuid;
+    }
+  }
+  return null;
+};
+
+// 除去・喪失系（赤フラッシュ＋煙）。
+const REMOVAL_ACTIONS = new Set(['KO', 'TRASH', 'DISCARD', 'BOUNCE', 'MOVE_TO_HAND', 'DECK_BOTTOM']);
+
 const resolveCardName = (uuid: string, gs: GameState): string => {
   return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
@@ -105,6 +152,11 @@ export const RealGame = ({
 
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
+  const effectsRef = useRef<EffectsLayer | null>(null);
+  // カード移動グライド（Phase3）用の前回状態。
+  const prevPositionsRef = useRef<PositionMap>(new Map());
+  const prevGameStateRef = useRef<GameState | null>(null);
+  const prevViewerRef = useRef<'p1' | 'p2' | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   // オンライン対戦のルーム状態（WAITING 中はセットアップ画面を表示）
   const [roomStatus, setRoomStatus] = useState<'WAITING' | 'PLAYING' | 'FINISHED'>('WAITING');
@@ -184,9 +236,38 @@ export const RealGame = ({
   // CPU 対戦はソロと同じく createGame 完了（isSetupComplete）後。
   const boardReady = isOnline ? roomStatus === 'PLAYING' : isSetupComplete;
 
+  // 最新 gameState を ref で参照（addEventLog 等の安定コールバックから読む用）。
+  const gameStateRef = useRef<GameState | null>(null);
+  gameStateRef.current = gameState;
+
   const MAX_LOG = 50;
   const addEventLog = useCallback((newEvents: ActionEvent[]) => {
     setEventLog(prev => [...newEvents, ...prev].slice(0, MAX_LOG));
+
+    // イベント駆動の盤面フラッシュ（Phase2）。状態適用前（盤面はまだ旧配置）に
+    // カード位置を引けるので、除去対象も消える直前の場所で演出できる。演出は
+    // 永続レイヤ上に出るため、この後の全再構築でも残る。状態は一切変更しない。
+    const app = appRef.current;
+    const fx = effectsRef.current;
+    const gs = gameStateRef.current;
+    if (app && fx && gs) {
+      for (const ev of newEvents) {
+        if (ev.success === false || !ev.action) continue;
+        const uuid = resolveUuidByName(ev.card_name, gs);
+        const pos = uuid ? cardGlobalPos(app, uuid) : null;
+        if (!pos) continue;
+        if (REMOVAL_ACTIONS.has(ev.action)) {
+          fx.impactFlash(pos.x, pos.y, 0xff6b6b);
+          fx.puff(pos.x, pos.y, 0xff8a8a);
+        } else if (ev.action === 'ATTACH_DON') {
+          fx.glowPulse(pos.x, pos.y, 30, 0xffd34d);
+        } else if (ev.action === 'BUFF') {
+          fx.glowPulse(pos.x, pos.y, 30, 0x5fd0ff);
+        } else if (ev.action === 'HEAL' || ev.action === 'LIFE_RECOVER') {
+          fx.glowPulse(pos.x, pos.y, 34, 0x6bff8c);
+        }
+      }
+    }
 
     // 主要効果は一時トーストで視覚フィードバックする（失敗/対象なし/no-op は除外）。
     const fresh = newEvents.filter(
@@ -702,6 +783,10 @@ export const RealGame = ({
     pixiContainerRef.current.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
 
+    // 演出レイヤ（全再構築から独立した永続オーバーレイ）と共有 ticker を初期化。
+    effectsRef.current = createEffectsLayer();
+    attachTweenTicker(app);
+
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
     setLayoutCoords(coords.turnEndPos);
 
@@ -726,6 +811,9 @@ export const RealGame = ({
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      detachTweenTicker();
+      clearTweens();
+      effectsRef.current = null;
       app.destroy(true, { children: true });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化は盤面準備完了時に1回のみ。startGame等の再実行は不要
@@ -736,6 +824,12 @@ export const RealGame = ({
     if (!app || !gameState) return;
 
     const renderScene = () => {
+      // 永続演出レイヤは破棄せず退避し、再構築後に最前面へ戻す。
+      const effectsContainer = effectsRef.current?.container ?? null;
+      if (effectsContainer?.parent) {
+        effectsContainer.parent.removeChild(effectsContainer);
+      }
+
       while (app.stage.children.length > 0) {
         const child = app.stage.children[0];
         app.stage.removeChild(child);
@@ -771,11 +865,173 @@ export const RealGame = ({
       bottomSide.y = midY;
 
       app.stage.addChild(topSide, bottomSide);
+
+      // 演出レイヤを最前面へ再アタッチ（飛行中の演出を維持）。
+      if (effectsContainer) app.stage.addChild(effectsContainer);
+
+      // --- カード移動グライド（Phase3）---
+      // 前回位置→今回位置を uuid で突き合わせ、移動カードを旧位置から滑らせる。
+      // viewer 反転時は全カードが鏡像移動するため 1 フレーム skip。
+      const prevPos = prevPositionsRef.current;
+      const viewerFlipped = prevViewerRef.current !== null && prevViewerRef.current !== viewerId;
+      const newPos = snapshotPositions(app);
+      if (!viewerFlipped && prevPos.size > 0) {
+        for (const [uuid, np] of newPos) {
+          const cont = findCardContainer(app, uuid);
+          if (!cont || cont.destroyed) continue;
+          const op = prevPos.get(uuid);
+          if (op) {
+            // 移動: 旧位置（グローバル差分＝ローカル差分; 各サイドは平行移動のみ）から新位置へ。
+            const dx = op.x - np.x;
+            const dy = op.y - np.y;
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+              const baseX = cont.x;
+              const baseY = cont.y;
+              cont.x = baseX + dx;
+              cont.y = baseY + dy;
+              tween(
+                {
+                  durationMs: 220,
+                  ease: easeOutCubic,
+                  onUpdate: (k) => {
+                    if (cont.destroyed) return;
+                    cont.x = baseX + dx * (1 - k);
+                    cont.y = baseY + dy * (1 - k);
+                  },
+                },
+                cont,
+                'glide',
+              );
+            }
+          } else {
+            // 登場: スケール/アルファのフェードイン。
+            const sx = cont.scale.x;
+            const sy = cont.scale.y;
+            cont.alpha = 0;
+            cont.scale.set(sx * 0.85, sy * 0.85);
+            tween(
+              {
+                durationMs: 200,
+                ease: easeOutCubic,
+                onUpdate: (k) => {
+                  if (cont.destroyed) return;
+                  cont.alpha = k;
+                  cont.scale.set(sx * (0.85 + 0.15 * k), sy * (0.85 + 0.15 * k));
+                },
+                onComplete: () => {
+                  if (cont.destroyed) return;
+                  cont.alpha = 1;
+                  cont.scale.set(sx, sy);
+                },
+              },
+              cont,
+              'enter',
+            );
+          }
+        }
+
+        // 退場: 消えた uuid は実体が破棄済みなので、前状態からゴーストを再生成して
+        // 永続レイヤ上でフェードアウトさせる。一括変化（リセット等）では出さない。
+        const prevGs = prevGameStateRef.current;
+        const exiting: string[] = [];
+        for (const uuid of prevPos.keys()) {
+          if (!newPos.has(uuid)) exiting.push(uuid);
+        }
+        if (prevGs && effectsContainer && exiting.length > 0 && exiting.length <= 6) {
+          for (const uuid of exiting) {
+            const card = resolveCard(uuid, prevGs);
+            const op = prevPos.get(uuid);
+            if (!card || !op) continue;
+            const ghost = createCardContainer(card, coords.CW * 0.7, coords.CH * 0.7, {
+              onClick: () => {},
+            });
+            ghost.position.set(op.x, op.y);
+            effectsContainer.addChild(ghost);
+            const by = op.y;
+            tween({
+              durationMs: 320,
+              ease: easeOutCubic,
+              onUpdate: (k) => {
+                if (ghost.destroyed) return;
+                ghost.alpha = 1 - k;
+                ghost.y = by - 14 * k;
+                ghost.scale.set(1 - 0.1 * k);
+              },
+              onComplete: () => {
+                if (!ghost.destroyed) ghost.destroy({ children: true });
+              },
+            });
+          }
+        }
+      }
+      prevPositionsRef.current = newPos;
+      prevGameStateRef.current = gameState;
+      prevViewerRef.current = viewerId;
     };
 
     renderScene();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 描画は列挙した盤面状態の変化時のみ再実行する意図。定数/コールバックは最新を本体で参照
   }, [gameState, activePlayerId, isAttackTargeting, attackingCardUuid, pendingRequest, boardSelected, isDonTargeting]);
+
+  // 攻撃演出（Phase2）: active_battle の攻撃者/対象が確定したら、攻撃者の位置から
+  // 対象へ ghost トークンを突進させ、最接近時に着弾フラッシュ＋対象シェイク。
+  // この effect は renderScene の後に走るため、新盤面のカードを名前ではなく uuid で引ける。
+  const battleAttacker = gameState?.active_battle?.attacker_uuid;
+  const battleTarget = gameState?.active_battle?.target_uuid;
+  useEffect(() => {
+    if (!battleAttacker || !battleTarget) return;
+    const app = appRef.current;
+    const fx = effectsRef.current;
+    if (!app || !fx) return;
+    const from = cardGlobalPos(app, battleAttacker);
+    const to = cardGlobalPos(app, battleTarget);
+    if (!from || !to) return;
+
+    const coords = calculateCoordinates(app.screen.width, app.screen.height);
+    const w = coords.CW * 0.7;
+    const h = coords.CH * 0.7;
+    const ghost = new PIXI.Container();
+    const g = new PIXI.Graphics();
+    g.beginFill(0xff5555, 0.18);
+    g.lineStyle(2.5, 0xff9a9a, 0.95);
+    g.drawRoundedRect(-w / 2, -h / 2, w, h, 8);
+    g.endFill();
+    ghost.addChild(g);
+
+    fx.lunge(ghost, from.x, from.y, to.x, to.y, () => {
+      const to2 = cardGlobalPos(app, battleTarget) ?? to;
+      fx.impactFlash(to2.x, to2.y, 0xffd0d0);
+      const tc = findCardContainer(app, battleTarget);
+      if (tc) fx.shake(tc, 7, 260);
+    });
+  }, [battleAttacker, battleTarget]);
+
+  // CPU 思考中はアニメを高速化し、cpu/step ポーリングを詰まらせない（Phase5）。
+  useEffect(() => {
+    setAnimSpeed(cpuThinking ? 2.6 : 1);
+    return () => setAnimSpeed(1);
+  }, [cpuThinking]);
+
+  // ターン交代バナー（Phase5）。
+  const [phaseBanner, setPhaseBanner] = useState<{ id: number; text: string } | null>(null);
+  const bannerIdRef = useRef(0);
+  const lastTurnRef = useRef<'p1' | 'p2' | null>(null);
+  useEffect(() => {
+    if (!activePlayerId || !boardReady) return;
+    if (lastTurnRef.current === null) {
+      lastTurnRef.current = activePlayerId;
+      return;
+    }
+    if (lastTurnRef.current !== activePlayerId) {
+      lastTurnRef.current = activePlayerId;
+      const text = fixedViewer
+        ? activePlayerId === selfId
+          ? 'あなたのターン'
+          : '相手のターン'
+        : `${activePlayerId.toUpperCase()} のターン`;
+      setPhaseBanner({ id: (bannerIdRef.current += 1), text });
+    }
+  }, [activePlayerId, boardReady, fixedViewer, selfId]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -1202,6 +1458,7 @@ export const RealGame = ({
 
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
       <EffectToast toasts={effectToasts} />
+      <PhaseBanner banner={phaseBanner} />
 
       {/* CPU 対戦: 手番/勝敗の表示と CPU 思考中インジケータ */}
       {vsCpu && (
