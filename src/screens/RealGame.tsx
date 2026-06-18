@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
-import { createBoardSide } from '../ui/BoardSide';
+import { createBoardSide, buildBoardItems, type MovableDescriptor } from '../ui/BoardSide';
 import { createCardContainer } from '../ui/CardRenderer';
 import { useGameAction } from '../game/actions';
 import { CardDetailSheet } from '../ui/CardDetailSheet';
@@ -21,6 +21,8 @@ import { getCardImageUrl } from '../utils/imageAssets';
 import { createEffectsLayer, type EffectsLayer } from '../ui/anim/effectsLayer';
 import { attachTweenTicker, detachTweenTicker, clearTweens, tween, easeOutCubic, setAnimSpeed } from '../ui/anim/tween';
 import { snapshotPositions, type PositionMap } from '../ui/anim/positionTracker';
+import { createBoardReconciler, type BoardReconciler } from '../ui/anim/boardReconciler';
+import { RECONCILE_BOARD } from '../ui/anim/reconcileFlag';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
@@ -153,6 +155,7 @@ export const RealGame = ({
   const pixiContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const effectsRef = useRef<EffectsLayer | null>(null);
+  const reconcilerRef = useRef<BoardReconciler | null>(null);
   // カード移動グライド（Phase3）用の前回状態。
   const prevPositionsRef = useRef<PositionMap>(new Map());
   const prevGameStateRef = useRef<GameState | null>(null);
@@ -785,6 +788,7 @@ export const RealGame = ({
 
     // 演出レイヤ（全再構築から独立した永続オーバーレイ）と共有 ticker を初期化。
     effectsRef.current = createEffectsLayer();
+    if (RECONCILE_BOARD) reconcilerRef.current = createBoardReconciler();
     attachTweenTicker(app);
 
     const coords = calculateCoordinates(window.innerWidth, window.innerHeight);
@@ -814,6 +818,7 @@ export const RealGame = ({
       detachTweenTicker();
       clearTweens();
       effectsRef.current = null;
+      reconcilerRef.current = null;
       app.destroy(true, { children: true });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化は盤面準備完了時に1回のみ。startGame等の再実行は不要
@@ -824,11 +829,11 @@ export const RealGame = ({
     if (!app || !gameState) return;
 
     const renderScene = () => {
-      // 永続演出レイヤは破棄せず退避し、再構築後に最前面へ戻す。
+      // 永続レイヤ（演出・可動カード）は破棄せず退避し、再構築後に最前面へ戻す。
       const effectsContainer = effectsRef.current?.container ?? null;
-      if (effectsContainer?.parent) {
-        effectsContainer.parent.removeChild(effectsContainer);
-      }
+      const movableLayer = reconcilerRef.current?.layer ?? null;
+      if (effectsContainer?.parent) effectsContainer.parent.removeChild(effectsContainer);
+      if (movableLayer?.parent) movableLayer.parent.removeChild(movableLayer);
 
       while (app.stage.children.length > 0) {
         const child = app.stage.children[0];
@@ -857,23 +862,47 @@ export const RealGame = ({
       const topPlayer = bottomIsP2 ? gameState.players.p1 : gameState.players.p2;
 
       const selectedSet = new Set(boardSelected);
-      // オンライン/CPU 対戦では相手(上側)の手札の中身を伏せて描画する。
-      const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, highlightUuids, selectedSet, fixedViewer);
-      topSide.y = 0;
+      // viewer 反転時は全カードが鏡像移動するため 1 フレーム skip。
+      const viewerFlipped = prevViewerRef.current !== null && prevViewerRef.current !== viewerId;
 
-      const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false);
-      bottomSide.y = midY;
+      if (RECONCILE_BOARD && reconcilerRef.current) {
+        // 固定パイル等は従来どおり再構築、可動実カードは reconcile で使い回す。
+        const topItems = buildBoardItems(topPlayer, true, W, coords, onCardClick, highlightUuids, selectedSet, fixedViewer);
+        const bottomItems = buildBoardItems(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false);
 
-      app.stage.addChild(topSide, bottomSide);
+        const topVirtual = new PIXI.Container();
+        topVirtual.y = 0;
+        const topDescs: MovableDescriptor[] = [];
+        for (const it of topItems) {
+          if (it.kind === 'virtual') topVirtual.addChild(it.display);
+          else topDescs.push(it.desc);
+        }
+        const bottomVirtual = new PIXI.Container();
+        bottomVirtual.y = midY;
+        const bottomDescs: MovableDescriptor[] = [];
+        for (const it of bottomItems) {
+          if (it.kind === 'virtual') bottomVirtual.addChild(it.display);
+          else bottomDescs.push(it.desc);
+        }
+        app.stage.addChild(topVirtual, bottomVirtual);
+
+        reconcilerRef.current.reconcile(topDescs, bottomDescs, midY, viewerFlipped);
+        if (movableLayer) app.stage.addChild(movableLayer);
+      } else {
+        // オンライン/CPU 対戦では相手(上側)の手札の中身を伏せて描画する。
+        const topSide = createBoardSide(topPlayer, true, W, coords, onCardClick, highlightUuids, selectedSet, fixedViewer);
+        topSide.y = 0;
+        const bottomSide = createBoardSide(bottomPlayer, false, W, coords, onCardClick, highlightUuids, selectedSet, false);
+        bottomSide.y = midY;
+        app.stage.addChild(topSide, bottomSide);
+      }
 
       // 演出レイヤを最前面へ再アタッチ（飛行中の演出を維持）。
       if (effectsContainer) app.stage.addChild(effectsContainer);
 
       // --- カード移動グライド（Phase3）---
       // 前回位置→今回位置を uuid で突き合わせ、移動カードを旧位置から滑らせる。
-      // viewer 反転時は全カードが鏡像移動するため 1 フレーム skip。
       const prevPos = prevPositionsRef.current;
-      const viewerFlipped = prevViewerRef.current !== null && prevViewerRef.current !== viewerId;
       const newPos = snapshotPositions(app);
       if (!viewerFlipped && prevPos.size > 0) {
         for (const [uuid, np] of newPos) {
@@ -932,12 +961,13 @@ export const RealGame = ({
 
         // 退場: 消えた uuid は実体が破棄済みなので、前状態からゴーストを再生成して
         // 永続レイヤ上でフェードアウトさせる。一括変化（リセット等）では出さない。
+        // reconcile ON 時は実コンテナを直接アウトさせるためここはスキップ。
         const prevGs = prevGameStateRef.current;
         const exiting: string[] = [];
         for (const uuid of prevPos.keys()) {
           if (!newPos.has(uuid)) exiting.push(uuid);
         }
-        if (prevGs && effectsContainer && exiting.length > 0 && exiting.length <= 6) {
+        if (!RECONCILE_BOARD && prevGs && effectsContainer && exiting.length > 0 && exiting.length <= 6) {
           for (const uuid of exiting) {
             const card = resolveCard(uuid, prevGs);
             const op = prevPos.get(uuid);
