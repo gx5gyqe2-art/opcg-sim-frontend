@@ -21,6 +21,7 @@ import { CoinFlip } from '../ui/CoinFlip';
 import { PhaseBanner } from '../ui/banners/PhaseBanner';
 import { getBattleDecisionMeta } from '../ui/banners/battleDecision';
 import { BattleDecisionBar } from '../ui/banners/BattleDecisionBar';
+import { ConfirmActionBar } from '../ui/banners/ConfirmActionBar';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
@@ -1582,12 +1583,12 @@ export const RealGame = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 攻撃確定時のみ発火。viewerId/gameState は最新を本体参照
   }, [battleAttacker, battleTarget]);
 
-  // ブロック/カウンター選択中は、攻撃元→対象に「攻撃の矢印」を常時表示する（盤面を隠す
-  // 数値パネルの代替）。👁長押し中は薄くして背後の盤面を確認できる。
-  const battleDecisionActive =
-    isMyDecision && !!getBattleDecisionMeta(pendingRequest?.action) && !!gameState?.active_battle;
+  // バトル進行中の自分の意思決定（ブロック/カウンター/トリガー・任意効果の確認など）の間は、
+  // 攻撃元→対象に「攻撃の矢印」を常時表示する。👁長押し中は薄くして背後の盤面を確認できる。
+  const attackContext =
+    isMyDecision && !!pendingRequest && !!gameState?.active_battle;
   useEffect(() => {
-    if (!battleDecisionActive) return;
+    if (!attackContext) return;
     const app = appRef.current;
     const fx = effectsRef.current;
     const ab = gameState?.active_battle;
@@ -1617,7 +1618,7 @@ export const RealGame = ({
       if (!g.destroyed) g.destroy();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 選択中のみ。attacker/target/viewer 変化で張り直す
-  }, [battleDecisionActive, battleAttacker, battleTarget, viewerId]);
+  }, [attackContext, battleAttacker, battleTarget, viewerId]);
 
   // CPU 思考中はアニメを高速化し、cpu/step ポーリングを詰まらせない（Phase5）。
   useEffect(() => {
@@ -2131,41 +2132,35 @@ export const RealGame = ({
       )}
 
       {isMyDecision && (pendingRequest?.action === 'CONFIRM_OPTIONAL' || pendingRequest?.action === 'CONFIRM_TRIGGER') && (() => {
-        // 盤面とどのカードの効果かを確認できるよう、背景は透過しコンパクトなパネルで表示する。
+        // 盤面を覆わないスリムバーで提示（発生源の小サムネ＋効果名＋発動可否）。バトル中なら
+        // 攻撃矢印も併せて出るため「相手のアタック時に誘発した自分の効果」も状況が分かる。
         const sourceCard = gameState ? resolveCard(pendingRequest.source_card_uuid, gameState) : null;
         const sourceImg = sourceCard?.card_id ? getCardImageUrl(sourceCard.card_id) : null;
+        const isTrigger = pendingRequest?.action === 'CONFIRM_TRIGGER';
+        const c = calculateCoordinates(window.innerWidth, window.innerHeight);
+        const donRowY = c.midY + c.getY(3) + c.CH / 2;
         return (
-          <ModalShell width="320px" transparentScrim onBackdropClick={null}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <h2 style={{ color: MODAL.ACCENT, margin: 0, fontSize: '17px' }}>
-                {pendingRequest?.action === 'CONFIRM_TRIGGER' ? '【トリガー】' : '任意効果'}
-              </h2>
-              {sourceImg && (
-                <img
-                  src={sourceImg}
-                  alt={sourceCard?.name ?? ''}
-                  style={{ width: '110px', borderRadius: '6px', boxShadow: '0 2px 10px rgba(0,0,0,0.6)' }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              )}
-              <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center', maxWidth: '260px' }}>
-                {pendingRequest.message}
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
-                <ModalButton variant="success" disabled={isPending} onClick={() => handleOptionalConfirm(true)}>
-                  発動する
-                </ModalButton>
-                <ModalButton variant="secondary" disabled={isPending} onClick={() => handleOptionalConfirm(false)}>
-                  発動しない
-                </ModalButton>
-              </div>
-            </div>
-          </ModalShell>
+          <ConfirmActionBar
+            title={isTrigger ? '【トリガー】' : '任意効果'}
+            accentColor={isTrigger ? '#ffd54d' : MODAL.ACCENT}
+            sourceImg={sourceImg}
+            sourceName={sourceCard?.name}
+            message={pendingRequest.message ?? ''}
+            confirmLabel="発動する"
+            cancelLabel="発動しない"
+            onConfirm={() => handleOptionalConfirm(true)}
+            onCancel={() => handleOptionalConfirm(false)}
+            disabled={isPending}
+            topPx={donRowY}
+            peek={battlePeek}
+            onPeekDown={battlePeekDown}
+            onPeekUp={battlePeekUp}
+          />
         );
       })()}
 
       {isMyDecision && pendingRequest?.action === 'DECLARE_COST' && (
-        <ModalShell width="480px" onBackdropClick={null}>
+        <ModalShell width="480px" transparentScrim onBackdropClick={null}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
             <h2 style={{ color: MODAL.ACCENT, margin: 0, fontSize: '22px' }}>コスト宣言</h2>
             <p style={{ color: MODAL.TEXT_PRIMARY, margin: 0, fontSize: '13px', textAlign: 'center' }}>
