@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import * as PIXI from 'pixi.js';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { calculateCoordinates } from '../layout/layoutEngine';
@@ -20,7 +20,7 @@ import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { CoinFlip } from '../ui/CoinFlip';
 import { PhaseBanner } from '../ui/banners/PhaseBanner';
 import { getBattleDecisionMeta } from '../ui/banners/battleDecision';
-import { BattleDecisionHeader, BattleDecisionPanel } from '../ui/banners/BattleDecisionInfo';
+import { BattleDecisionBar } from '../ui/banners/BattleDecisionBar';
 import { API_CONFIG } from '../api/api.config';
 import { apiClient } from '../api/client';
 import { getCardImageUrl } from '../utils/imageAssets';
@@ -132,6 +132,60 @@ type FxPalette = { core: number; glow: number; glow2: number; ring: number; spar
 const FX_SELF: FxPalette = { core: 0xeafff8, glow: 0x21d99a, glow2: 0x4fe6b6, ring: 0x6cf0c8, spark: 0x8affda, flash: 0xeafff8 };
 const FX_OPP: FxPalette = { core: 0xffe9e4, glow: 0xe74c3c, glow2: 0xff7d6c, ring: 0xff9e8e, spark: 0xffc2b6, flash: 0xffeee9 };
 
+// ブロック/カウンター選択中、攻撃元→対象に常時表示する「攻撃の矢印」（テーパー発光＋矢じり）。
+// peek 中は薄く（盤面確認）。攻撃元サイドの配色（自分=緑/相手=赤）。
+function drawBattleArrow(
+  g: PIXI.Graphics,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  pal: FxPalette,
+  phase: number,
+  peek: boolean,
+): void {
+  g.clear();
+  const base = peek ? 0.12 : 1;
+  const pulse = 0.82 + 0.18 * Math.sin(phase * 0.005);
+  const ROUND = PIXI.LINE_CAP.ROUND;
+  const JROUND = PIXI.LINE_JOIN.ROUND;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const bow = Math.min(len * 0.16, 70);
+  const cx = (from.x + to.x) / 2 + nx * bow;
+  const cy = (from.y + to.y) / 2 + ny * bow;
+  const bez = (t: number) => {
+    const u = 1 - t;
+    return { x: u * u * from.x + 2 * u * t * cx + t * t * to.x, y: u * u * from.y + 2 * u * t * cy + t * t * to.y };
+  };
+  g.lineStyle({ width: 14, color: pal.glow, alpha: 0.12 * pulse * base, cap: ROUND, join: JROUND });
+  g.moveTo(from.x, from.y); g.quadraticCurveTo(cx, cy, to.x, to.y);
+  g.lineStyle({ width: 8, color: pal.glow2, alpha: 0.2 * pulse * base, cap: ROUND, join: JROUND });
+  g.moveTo(from.x, from.y); g.quadraticCurveTo(cx, cy, to.x, to.y);
+  const N = 36;
+  for (let i = 0; i < N; i++) {
+    const t0 = i / N;
+    const t1 = (i + 1) / N;
+    const p0 = bez(t0);
+    const p1 = bez(t1);
+    g.lineStyle({ width: 4.2 * (1 - (t0 + t1) / 2) + 1.4, color: pal.core, alpha: 0.92 * base, cap: ROUND, join: JROUND });
+    g.moveTo(p0.x, p0.y); g.lineTo(p1.x, p1.y);
+  }
+  // 起点ノード。
+  g.lineStyle(0);
+  g.beginFill(pal.glow, 0.9 * base); g.drawCircle(from.x, from.y, 4.2); g.endFill();
+  // 矢じり（終点の接線方向）。
+  const ang = Math.atan2(to.y - cy, to.x - cx);
+  const ah = 14;
+  g.beginFill(pal.core, 0.96 * base);
+  g.moveTo(to.x, to.y);
+  g.lineTo(to.x + Math.cos(ang + Math.PI - 0.5) * ah, to.y + Math.sin(ang + Math.PI - 0.5) * ah);
+  g.lineTo(to.x + Math.cos(ang + Math.PI + 0.5) * ah, to.y + Math.sin(ang + Math.PI + 0.5) * ah);
+  g.closePath();
+  g.endFill();
+}
+
 const resolveCardName = (uuid: string, gs: GameState): string => {
   return resolveCard(uuid, gs)?.name ?? uuid.slice(0, 8);
 };
@@ -201,6 +255,18 @@ export const RealGame = ({
     donMode?: boolean;
   } | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
+  // ブロック/カウンターのスリムバー「👁」長押し中だけ、バー＋盤面の攻撃矢印を透過する。
+  const [battlePeek, setBattlePeek] = useState(false);
+  const battlePeekRef = useRef(false);
+  const battlePeekDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    battlePeekRef.current = true;
+    setBattlePeek(true);
+  };
+  const battlePeekUp = () => {
+    battlePeekRef.current = false;
+    setBattlePeek(false);
+  };
   const [isAttackTargeting, setIsAttackTargeting] = useState(false);
   const [attackingCardUuid, setAttackingCardUuid] = useState<string | null>(null);
   // ドン!!付与の対象選択モード（自分のアクティブドン!!をタップして開始）。
@@ -1516,6 +1582,43 @@ export const RealGame = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 攻撃確定時のみ発火。viewerId/gameState は最新を本体参照
   }, [battleAttacker, battleTarget]);
 
+  // ブロック/カウンター選択中は、攻撃元→対象に「攻撃の矢印」を常時表示する（盤面を隠す
+  // 数値パネルの代替）。👁長押し中は薄くして背後の盤面を確認できる。
+  const battleDecisionActive =
+    isMyDecision && !!getBattleDecisionMeta(pendingRequest?.action) && !!gameState?.active_battle;
+  useEffect(() => {
+    if (!battleDecisionActive) return;
+    const app = appRef.current;
+    const fx = effectsRef.current;
+    const ab = gameState?.active_battle;
+    if (!app || !fx || !ab) return;
+    const attUuid = ab.attacker_uuid;
+    const tgtUuid = ab.target_uuid;
+    const me = gameState?.players[viewerId];
+    const isMyAttack = !!me && (
+      me.leader?.uuid === attUuid ||
+      me.zones.field.some(c => c.uuid === attUuid) ||
+      me.stage?.uuid === attUuid
+    );
+    const pal: FxPalette = isMyAttack ? FX_SELF : FX_OPP;
+    const g = new PIXI.Graphics();
+    g.eventMode = 'none';
+    fx.container.addChild(g);
+    const tick = () => {
+      if (g.destroyed) return;
+      const from = cardGlobalPos(app, attUuid);
+      const to = cardGlobalPos(app, tgtUuid);
+      if (!from || !to) { g.clear(); return; }
+      drawBattleArrow(g, from, to, pal, performance.now(), battlePeekRef.current);
+    };
+    app.ticker.add(tick);
+    return () => {
+      app.ticker.remove(tick);
+      if (!g.destroyed) g.destroy();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 選択中のみ。attacker/target/viewer 変化で張り直す
+  }, [battleDecisionActive, battleAttacker, battleTarget, viewerId]);
+
   // CPU 思考中はアニメを高速化し、cpu/step ポーリングを詰まらせない（Phase5）。
   useEffect(() => {
     setAnimSpeed(cpuThinking ? 2.6 : 1);
@@ -2150,36 +2253,37 @@ export const RealGame = ({
           ? (maxSelect > 1 ? `${battleMeta.selectHint}（${boardSelected.length}/${maxSelect}）` : battleMeta.selectHint)
           : baseHint;
 
-        const battlePanel = gameState?.active_battle && battleMeta ? (() => {
-          const ab = gameState.active_battle!;
-          const attacker = resolveCard(ab.attacker_uuid, gameState);
-          const target = resolveCard(ab.target_uuid, gameState);
+        // ブロック/カウンターは盤面を隠さないスリムバー（数値は最小限）。攻撃の向きは
+        // 盤面に常時表示する矢印で示す。👁長押しでバー＋矢印を透過して盤面確認。
+        if (battleMeta) {
+          const ab = gameState?.active_battle;
+          const attacker = ab ? resolveCard(ab.attacker_uuid, gameState!) : null;
+          const target = ab ? resolveCard(ab.target_uuid, gameState!) : null;
           return (
-            <BattleDecisionPanel
+            <BattleDecisionBar
               meta={battleMeta}
-              info={{
-                attackerName: attacker?.name ?? '攻撃',
-                attackerPower: attacker?.power ?? 0,
-                targetName: target?.name ?? '対象',
-                targetBasePower: target?.power ?? 0,
-                counterBuff: ab.counter_buff ?? 0,
-              }}
+              attackerPower={attacker?.power ?? 0}
+              targetBasePower={target?.power ?? 0}
+              counterBuff={ab?.counter_buff ?? 0}
+              hint={battleMeta.selectHint}
+              defenderLabel={isDefendingDecision ? (pendingRequest!.player_id?.toUpperCase() ?? null) : null}
+              actions={actions}
+              peek={battlePeek}
+              onPeekDown={battlePeekDown}
+              onPeekUp={battlePeekUp}
             />
           );
-        })() : null;
+        }
 
         return (
           <PromptBanner
             pointerThrough
-            accentDot={!battleMeta}
-            accentColor={battleMeta?.color}
-            message={battleMeta
-              ? <BattleDecisionHeader meta={battleMeta} defenderLabel={isDefendingDecision ? (pendingRequest!.player_id?.toUpperCase() ?? null) : null} />
-              : `${decisionNote}${pendingRequest!.message}`}
+            accentDot
+            message={`${decisionNote}${pendingRequest!.message}`}
             subText={subText}
             actions={actions}
           >
-            {battleMeta ? battlePanel : (gameState?.active_battle && (() => {
+            {gameState?.active_battle && (() => {
               const ab = gameState.active_battle;
               const attacker = resolveCard(ab.attacker_uuid, gameState);
               const target = resolveCard(ab.target_uuid, gameState);
@@ -2211,7 +2315,7 @@ export const RealGame = ({
                   </div>
                 </div>
               );
-            })())}
+            })()}
           </PromptBanner>
         );
       })()}
