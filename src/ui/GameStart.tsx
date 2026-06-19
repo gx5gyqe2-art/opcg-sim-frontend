@@ -13,12 +13,11 @@ interface GameStartProps {
   onStartCpu: (difficulty: 'easy' | 'normal' | 'hard') => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
-  onCpuTemplate: () => void;
   onLobby: () => void;
   onRuleLobby: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onCpuTemplate, onLobby, onRuleLobby }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onLobby, onRuleLobby }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
   // PLAYメニューの階層ナビ: root → mode(フリー/ルール) → match(ソロ/オンライン対戦)
@@ -238,14 +237,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                       onCardList();
                     }}
                     color="#e67e22"
-                  />
-                  <MenuCard
-                    label="CPU相手モデル"
-                    desc="ふつうの推測に使う相手デッキ"
-                    onClick={() => {
-                      onCpuTemplate();
-                    }}
-                    color="#9b59b6"
                   />
                 </div>
               </div>

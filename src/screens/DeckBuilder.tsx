@@ -469,13 +469,18 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
   );
 };
 
-const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ' }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string }) => {
+const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ', onSwitchView, switchViewLabel }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string, onSwitchView?: () => void, switchViewLabel?: string }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
       <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>← TOP</button>
         <h2 style={{ margin: 0, fontSize: '18px' }}>{entityLabel}一覧</h2>
-        <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px' }}>＋ 新規</button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {onSwitchView && (
+            <button onClick={onSwitchView} style={{ padding: '8px 16px', cursor: 'pointer', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px' }}>{switchViewLabel || '切替'}</button>
+          )}
+          <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px' }}>＋ 新規</button>
+        </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>{entityLabel}がありません</div>}
@@ -967,7 +972,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   );
 };
 
-export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: { onBack: () => void, viewOnly?: boolean, templateMode?: boolean }) => {
+export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false, onSwitchView, switchViewLabel }: { onBack: () => void, viewOnly?: boolean, templateMode?: boolean, onSwitchView?: () => void, switchViewLabel?: string }) => {
   // templateMode: 「CPU相手モデル（テンプレデッキ）」登録（docs SPEC §2.5.4）。保存先を /api/cpu_template に切替。
   const ep = templateMode
     ? { base: '/api/cpu_template', listUrl: '/api/cpu_template/list', listKey: 'templates', saveIdKey: 'template_id', label: 'CPU相手モデル' }
@@ -1137,7 +1142,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
           }
   };
 
-  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} />;
+  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} onSwitchView={onSwitchView} switchViewLabel={switchViewLabel} />;
   if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
   if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
   return <div>Loading...</div>;
