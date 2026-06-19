@@ -39,15 +39,15 @@ export const ConfirmActionBar: React.FC<ConfirmActionBarProps> = ({
       style={{
         position: 'absolute', left: '50%', ...posStyle,
         zIndex: Z_INDEX.BANNER,
-        // 画像を左端に固定し、効果名・メッセージ・ボタンを右へ一列に並べる。折り返しを抑えて
-        // バーの高さを最小化し（手札への被りを防ぐ）、その分ポップアップ幅を横へ伸ばす。
-        display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'flex-start',
-        gap: '10px', padding: '7px 12px', borderRadius: 12,
+        // 画像以外の配置は中央寄せのまま。画像が入った分だけ横へ伸ばせるよう max-width を広げ、
+        // 折り返しによる縦伸び（手札への被り）を避ける。
+        display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center',
+        gap: '8px 10px', padding: '7px 12px', borderRadius: 12,
         background: MODAL.BANNER_BG,
         backdropFilter: MODAL.BANNER_BLUR, WebkitBackdropFilter: MODAL.BANNER_BLUR,
         border: `1.5px solid ${accentColor}`,
         boxShadow: `0 0 0 1px ${accentColor}55, 0 0 16px ${accentColor}40, 0 8px 22px rgba(0,0,0,0.45)`,
-        color: '#fff', maxWidth: 'min(96vw, 600px)',
+        color: '#fff', maxWidth: 'min(98vw, 720px)',
         opacity: peek ? 0.1 : 1, transition: 'opacity 120ms ease',
       }}
     >
@@ -55,16 +55,16 @@ export const ConfirmActionBar: React.FC<ConfirmActionBarProps> = ({
         <img
           src={sourceImg}
           alt={sourceName ?? ''}
-          style={{ width: '34px', borderRadius: '4px', flexShrink: 0, alignSelf: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+          style={{ width: '34px', borderRadius: '4px', flexShrink: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
       )}
-      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 auto' }}>
+      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '230px' }}>
         <span style={{ fontWeight: 800, color: accentColor, fontSize: '13px', whiteSpace: 'nowrap' }}>{title}</span>
         <span style={{ fontSize: '11px', color: MODAL.TEXT_MUTED, lineHeight: 1.3 }}>{message}</span>
       </span>
 
-      <div style={{ display: 'flex', gap: '7px', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
         <ModalButton variant="success" disabled={disabled} onClick={onConfirm} style={{ padding: '6px 13px', borderRadius: 999, fontSize: '12.5px' }}>
           {confirmLabel}
         </ModalButton>
