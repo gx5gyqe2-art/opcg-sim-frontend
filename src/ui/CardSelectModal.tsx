@@ -3,7 +3,6 @@ import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import type { CardInstance } from '../game/types';
 // ▼ 変更: imageAssetsから関数をインポート
 import { getCardImageUrl } from '../utils/imageAssets';
-import { ModalShell } from './common/ModalShell';
 import { ModalButton } from './common/ModalButton';
 
 interface CardSelectModalProps {
@@ -22,7 +21,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
   candidates, message, minSelect, maxSelect, onConfirm, onCancel, selectableUuids, allowPosition
 }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
-  const { SHAPE, MODAL } = LAYOUT_PARAMS;
+  const { SHAPE, MODAL, Z_INDEX } = LAYOUT_PARAMS;
 
   const selectableSet = selectableUuids ? new Set(selectableUuids) : null;
   const isSelectable = (uuid: string) => !selectableSet || selectableSet.has(uuid);
@@ -34,6 +33,8 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
   const effMax = isOrderMode ? selectableCards.length : maxSelect;
 
   const [selected, setSelected] = useState<string[]>([]);
+  // 「👁 盤面」長押し中だけストリップを透過させ、背後の盤面・手札を確認できる。
+  const [peek, setPeek] = useState(false);
 
   // 並び替えモードでは全選択可能カードを初期順序で確定対象にする。
   useEffect(() => {
@@ -117,27 +118,66 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
     ? selected.length === selectableCards.length
     : selected.length >= minSelect && selected.length <= effMax;
 
-  const gridStyle: React.CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', 
-    gap: '10px',
-    overflowY: 'auto',
-    flex: 1,
-    padding: '10px'
+  // 画面中央（中央線と同じ高さ）に置く横長ストリップ。暗幕を張らず盤面・手札を見せたまま
+  // 選べる。背後に重なる中央バンドは「👁 盤面」長押しでストリップを透過して確認する。
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed', inset: 0, zIndex: Z_INDEX.MODAL,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'transparent', padding: '0 8px', boxSizing: 'border-box',
+  };
+  const stripStyle: React.CSSProperties = {
+    width: '100%', maxWidth: '980px', boxSizing: 'border-box',
+    background: MODAL.PANEL_BG, border: MODAL.PANEL_BORDER,
+    borderRadius: MODAL.PANEL_RADIUS, boxShadow: MODAL.PANEL_SHADOW,
+    color: MODAL.TEXT_PRIMARY, padding: '10px 12px',
+    display: 'flex', flexDirection: 'column', gap: '8px',
+    opacity: peek ? 0.1 : 1, transition: 'opacity 120ms ease',
+    pointerEvents: 'auto',
+  };
+  const rowStyle: React.CSSProperties = {
+    display: 'flex', gap: '10px', overflowX: 'auto', overflowY: 'hidden',
+    padding: '4px 2px 6px',
   };
 
+  const peekDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setPeek(true);
+  };
+  const peekUp = () => setPeek(false);
+
   return (
-    <ModalShell width="800px" onBackdropClick={null}>
-        <div style={{ marginBottom: '16px', textAlign: 'center', flexShrink: 0 }}>
-          <h3 style={{ margin: '0 0 8px 0', color: MODAL.TEXT_PRIMARY }}>{message}</h3>
-          <div style={{ fontSize: '0.9rem', color: MODAL.TEXT_MUTED }}>
-            {isOrderMode
-              ? `配置順をドラッグで並び替えてください（${selected.length}枚を①から順に配置）`
-              : `選択中: ${selected.length} / ${effMax}枚 (最小 ${minSelect}枚)`}
+    <div style={overlayStyle}>
+      <div style={stripStyle}>
+        {/* ヘッダー: メッセージ＋選択数 ＋「👁 盤面」長押しのぞき見 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              color: MODAL.TEXT_PRIMARY, fontWeight: 'bold', fontSize: '0.95rem',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{message}</div>
+            <div style={{ fontSize: '0.8rem', color: MODAL.TEXT_MUTED }}>
+              {isOrderMode
+                ? `配置順をドラッグで並び替え（${selected.length}枚を①から順に）`
+                : `選択中: ${selected.length} / ${effMax}枚 (最小 ${minSelect}枚)`}
+            </div>
           </div>
+          <button
+            onPointerDown={peekDown}
+            onPointerUp={peekUp}
+            onPointerCancel={peekUp}
+            onLostPointerCapture={peekUp}
+            title="長押し中だけ透過して盤面・手札を確認"
+            style={{
+              flexShrink: 0, background: 'transparent', color: MODAL.TEXT_MUTED,
+              border: `1px solid ${MODAL.TEXT_MUTED}`, borderRadius: '6px',
+              padding: '6px 11px', fontSize: '0.78rem', cursor: 'pointer',
+              touchAction: 'none', userSelect: 'none', whiteSpace: 'nowrap',
+            }}
+          >👁 盤面</button>
         </div>
 
-        <div style={gridStyle}>
+        {/* 候補（横スクロール） */}
+        <div style={rowStyle}>
           {/* 並び替えモードは selected（配置順）で描画し、それ以外は候補順で描画する */}
           {(isOrderMode
               ? selected.map(uid => candidates.find(c => c.uuid === uid)!).filter(Boolean)
@@ -163,6 +203,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
                 onPointerCancel={isOrderMode ? endDrag : undefined}
                 onLostPointerCapture={isOrderMode ? endDrag : undefined}
                 style={{
+                  width: '96px', flex: '0 0 auto',
                   border: isSelected ? `3px solid ${COLORS.BTN_PRIMARY}` : '1px solid #ccc',
                   borderRadius: SHAPE.CORNER_RADIUS_CARD,
                   cursor: isOrderMode ? (isDragging ? 'grabbing' : 'grab') : (canSelect ? 'pointer' : 'default'),
@@ -222,7 +263,8 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
           })}
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', flexShrink: 0 }}>
+        {/* フッター: キャンセル／確定（または並び替えのデッキ上下） */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
           {onCancel && (
             <ModalButton variant="secondary" onClick={onCancel}>キャンセル</ModalButton>
           )}
@@ -242,6 +284,7 @@ export const CardSelectModal: React.FC<CardSelectModalProps> = ({
             </ModalButton>
           )}
         </div>
-    </ModalShell>
+      </div>
+    </div>
   );
 };
