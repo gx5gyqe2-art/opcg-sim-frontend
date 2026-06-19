@@ -156,7 +156,7 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#1a1a1a', overflow: 'hidden', position: 'fixed', top: 0, left: 0, touchAction: 'none' }}>
       <ErrorBoundary>
         {mode === 'start' && (
-          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onCpuTemplate={() => setMode('cpuTemplate')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
+          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
         )}
         {mode === 'game' && (
           <RealGame
@@ -184,10 +184,20 @@ export default function App() {
           />
         )}
         {(mode === 'deck' || mode === 'cardList') && (
-          <DeckBuilder onBack={() => setMode('start')} viewOnly={mode === 'cardList'} />
+          <DeckBuilder
+            onBack={() => setMode('start')}
+            viewOnly={mode === 'cardList'}
+            onSwitchView={mode === 'deck' ? () => setMode('cpuTemplate') : undefined}
+            switchViewLabel={mode === 'deck' ? 'CPU相手モデル →' : undefined}
+          />
         )}
         {mode === 'cpuTemplate' && (
-          <DeckBuilder onBack={() => setMode('start')} templateMode />
+          <DeckBuilder
+            onBack={() => setMode('start')}
+            templateMode
+            onSwitchView={() => setMode('deck')}
+            switchViewLabel="← デッキ一覧"
+          />
         )}
         {mode === 'lobby' && (
           <RoomLobby

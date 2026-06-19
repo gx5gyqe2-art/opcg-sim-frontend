@@ -469,15 +469,23 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
   );
 };
 
-const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ' }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string }) => {
+const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ', onSwitchView, switchViewLabel, onCopyFromDeck }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string, onSwitchView?: () => void, switchViewLabel?: string, onCopyFromDeck?: () => void }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
-      <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>← TOP</button>
-        <h2 style={{ margin: 0, fontSize: '18px' }}>{entityLabel}一覧</h2>
-        <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px' }}>＋ 新規</button>
+      <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>← TOP</button>
+        <h2 style={{ margin: 0, fontSize: '18px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entityLabel}一覧</h2>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+          {onSwitchView && (
+            <button onClick={onSwitchView} style={{ padding: '8px 12px', cursor: 'pointer', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap' }}>{switchViewLabel || '切替'}</button>
+          )}
+          <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap' }}>＋ 新規</button>
+        </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {onCopyFromDeck && (
+          <button onClick={onCopyFromDeck} style={{ padding: '12px', cursor: 'pointer', background: '#2d6a4f', color: 'white', border: '1px dashed #74c69d', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold' }}>📋 デッキ一覧からコピーして作成</button>
+        )}
         {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>{entityLabel}がありません</div>}
         {decks.map((deck, idx) => (
             <div key={deck.id || idx} onClick={() => onSelectDeck(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer', position: 'relative' }}>
@@ -505,6 +513,38 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, enti
                   🗑️
                 </button>
                 <div style={{ fontSize: '20px', color: '#555', marginLeft: '10px' }}>›</div>
+            </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// コピー元デッキの選択画面（CPU相手モデルのベースに既存デッキを複製する）。
+// 選んだデッキは id を持たない新規テンプレとして複製され、以降は独立して編集される。
+const DeckPickerView = ({ decks, onPick, onBack }: { decks: DeckData[], onPick: (deck: DeckData) => void, onBack: () => void }) => {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
+      <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>← 戻る</button>
+        <h2 style={{ margin: 0, fontSize: '18px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>コピー元のデッキを選択</h2>
+        <div style={{ width: '72px', flexShrink: 0 }} />
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {decks.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>コピーできるデッキがありません</div>}
+        {decks.map((deck, idx) => (
+            <div key={deck.id || idx} onClick={() => onPick(deck)} style={{ display: 'flex', alignItems: 'center', background: '#333', border: '1px solid #444', borderRadius: '8px', padding: '10px', cursor: 'pointer', position: 'relative' }}>
+                <div style={{ width: '50px', height: '70px', background: '#222', border: '1px solid #555', borderRadius: '4px', marginRight: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#aaa', overflow: 'hidden', flexShrink: 0 }}>
+                    {deck.leader_id ? (
+                      <img src={getCardImageUrl(deck.leader_id)} alt="leader" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLElement).style.display = 'none'; e.currentTarget.parentElement!.innerText = deck.leader_id || "Err"; }} />
+                    ) : "No Leader"}
+                </div>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{deck.name}</div>
+                    <div style={{ fontSize: '12px', color: '#888' }}>{deck.card_uuids.length}枚</div>
+                    {deck.id && deck.id.startsWith('local-') && <div style={{ fontSize: '10px', color: '#e67e22' }}>Local Draft</div>}
+                </div>
+                <div style={{ fontSize: '20px', color: '#555', marginLeft: '10px' }}>📋</div>
             </div>
         ))}
       </div>
@@ -967,15 +1007,17 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
   );
 };
 
-export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: { onBack: () => void, viewOnly?: boolean, templateMode?: boolean }) => {
+export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false, onSwitchView, switchViewLabel }: { onBack: () => void, viewOnly?: boolean, templateMode?: boolean, onSwitchView?: () => void, switchViewLabel?: string }) => {
   // templateMode: 「CPU相手モデル（テンプレデッキ）」登録（docs SPEC §2.5.4）。保存先を /api/cpu_template に切替。
   const ep = templateMode
     ? { base: '/api/cpu_template', listUrl: '/api/cpu_template/list', listKey: 'templates', saveIdKey: 'template_id', label: 'CPU相手モデル' }
     : { base: '/api/deck', listUrl: '/api/deck/list', listKey: 'decks', saveIdKey: 'deck_id', label: 'デッキ' };
-  const [mode, setMode] = useState<'list' | 'edit' | 'catalog'>(viewOnly ? 'catalog' : 'list');
+  const [mode, setMode] = useState<'list' | 'edit' | 'catalog' | 'copyPick'>(viewOnly ? 'catalog' : 'list');
   const [catalogMode, setCatalogMode] = useState<'leader' | 'main'>('main');
   const [allCards, setAllCards] = useState<CardData[]>([]);
   const [decks, setDecks] = useState<DeckData[]>([]);
+  // コピー元候補（通常デッキ）。CPU相手モデルのベースに既存デッキを複製する用途（templateMode のみ）。
+  const [copyDecks, setCopyDecks] = useState<DeckData[]>([]);
   const [currentDeck, setCurrentDeck] = useState<DeckData | null>(viewOnly ? { name: 'Catalog', leader_id: null, card_uuids: [], don_uuids: [] } : null);
 
   useEffect(() => {
@@ -1137,7 +1179,35 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false }: 
           }
   };
 
-  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} />;
+  // コピー元の通常デッキ一覧（サーバ + ローカル下書き）を読み込み、選択画面へ遷移する。
+  const openCopyPicker = async () => {
+    let serverDecks: DeckData[] = [];
+    try {
+      const dRes = await fetch(`${API_CONFIG.BASE_URL}/api/deck/list`);
+      const dData = await dRes.json();
+      if (dData.success && Array.isArray(dData.decks)) {
+        serverDecks = dData.decks.filter((d: DeckData) => !d.id || !d.id.endsWith('.json'));
+      }
+    } catch { /* noop */ }
+    const merged = [...serverDecks];
+    getLocalDecks().forEach(ld => { if (!merged.find(md => md.id === ld.id)) merged.push(ld); });
+    setCopyDecks(merged);
+    setMode('copyPick');
+  };
+
+  // 選んだデッキを id なしの新規テンプレとして複製（以降は CPU相手モデル側で独立編集）。
+  const copyDeckToTemplate = (src: DeckData) => {
+    setCurrentDeck({
+      name: `${src.name} (コピー)`,
+      leader_id: src.leader_id,
+      card_uuids: [...src.card_uuids],
+      don_uuids: [...(src.don_uuids || [])],
+    });
+    setMode('edit');
+  };
+
+  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} onSwitchView={onSwitchView} switchViewLabel={switchViewLabel} onCopyFromDeck={templateMode ? openCopyPicker : undefined} />;
+  if (mode === 'copyPick') return <DeckPickerView decks={copyDecks} onPick={copyDeckToTemplate} onBack={() => setMode('list')} />;
   if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
   if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
   return <div>Loading...</div>;
