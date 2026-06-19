@@ -2336,7 +2336,11 @@ export const RealGame = ({
         );
       })()}
 
-      {isMyDecision && pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && !isDonReturnMode && pendingRequest.action !== 'MAIN_ACTION' && (
+      {isMyDecision && pendingRequest && !isAttackTargeting && !showSearchModal && !isBoardSelectMode && !isDonReturnMode
+        && pendingRequest.action !== 'MAIN_ACTION'
+        // 専用UI（確認スリムバー / コスト宣言 / マリガン）を持つアクションは汎用バナーを出さない
+        // （旧モーダルが上に被って隠れていた重複が、UI移設で二重表示として露呈するのを防ぐ）。
+        && !['CONFIRM_OPTIONAL', 'CONFIRM_TRIGGER', 'DECLARE_COST', 'MULLIGAN'].includes(pendingRequest.action) && (
         <PromptBanner
           position="center"
           topPx={layoutCoords?.y}
