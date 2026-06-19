@@ -39,10 +39,11 @@ export const ConfirmActionBar: React.FC<ConfirmActionBarProps> = ({
       style={{
         position: 'absolute', left: '50%', ...posStyle,
         zIndex: Z_INDEX.BANNER,
-        // 画像以外の配置は中央寄せのまま。画像が入った分だけ横へ伸ばせるよう max-width を広げ、
-        // 折り返しによる縦伸び（手札への被り）を避ける。
-        display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center',
-        gap: '8px 10px', padding: '7px 12px', borderRadius: 12,
+        // 画像だけ左端に固定し、効果名・メッセージ・ボタンは残り幅の中央へ寄せる。
+        // 画像が入った分だけ横へ伸ばせるよう max-width を広げ、折り返しによる縦伸び
+        //（手札への被り）を避ける。
+        display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'flex-start',
+        gap: '10px', padding: '7px 12px', borderRadius: 12,
         background: MODAL.BANNER_BG,
         backdropFilter: MODAL.BANNER_BLUR, WebkitBackdropFilter: MODAL.BANNER_BLUR,
         border: `1.5px solid ${accentColor}`,
@@ -55,34 +56,37 @@ export const ConfirmActionBar: React.FC<ConfirmActionBarProps> = ({
         <img
           src={sourceImg}
           alt={sourceName ?? ''}
-          style={{ width: '34px', borderRadius: '4px', flexShrink: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
+          style={{ width: '34px', borderRadius: '4px', flexShrink: 0, alignSelf: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
       )}
-      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '230px' }}>
-        <span style={{ fontWeight: 800, color: accentColor, fontSize: '13px', whiteSpace: 'nowrap' }}>{title}</span>
-        <span style={{ fontSize: '11px', color: MODAL.TEXT_MUTED, lineHeight: 1.3 }}>{message}</span>
-      </span>
+      {/* 画像以外（効果名・メッセージ・ボタン）は残り幅の中央寄せのまま */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 10px', flex: '1 1 auto', minWidth: 0 }}>
+        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '230px' }}>
+          <span style={{ fontWeight: 800, color: accentColor, fontSize: '13px', whiteSpace: 'nowrap' }}>{title}</span>
+          <span style={{ fontSize: '11px', color: MODAL.TEXT_MUTED, lineHeight: 1.3 }}>{message}</span>
+        </span>
 
-      <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
-        <ModalButton variant="success" disabled={disabled} onClick={onConfirm} style={{ padding: '6px 13px', borderRadius: 999, fontSize: '12.5px' }}>
-          {confirmLabel}
-        </ModalButton>
-        <ModalButton variant="secondary" disabled={disabled} onClick={onCancel} style={{ padding: '6px 13px', borderRadius: 999, fontSize: '12.5px' }}>
-          {cancelLabel}
-        </ModalButton>
-        <button
-          onPointerDown={onPeekDown}
-          onPointerUp={onPeekUp}
-          onPointerCancel={onPeekUp}
-          onLostPointerCapture={onPeekUp}
-          title="長押し中だけ透過して盤面を確認"
-          style={{
-            background: 'transparent', color: MODAL.TEXT_MUTED, border: `1px solid ${MODAL.TEXT_MUTED}`,
-            borderRadius: 6, padding: '6px 10px', fontSize: '13px', cursor: 'pointer',
-            touchAction: 'none', userSelect: 'none', lineHeight: 1,
-          }}
-        >👁</button>
+        <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
+          <ModalButton variant="success" disabled={disabled} onClick={onConfirm} style={{ padding: '6px 13px', borderRadius: 999, fontSize: '12.5px' }}>
+            {confirmLabel}
+          </ModalButton>
+          <ModalButton variant="secondary" disabled={disabled} onClick={onCancel} style={{ padding: '6px 13px', borderRadius: 999, fontSize: '12.5px' }}>
+            {cancelLabel}
+          </ModalButton>
+          <button
+            onPointerDown={onPeekDown}
+            onPointerUp={onPeekUp}
+            onPointerCancel={onPeekUp}
+            onLostPointerCapture={onPeekUp}
+            title="長押し中だけ透過して盤面を確認"
+            style={{
+              background: 'transparent', color: MODAL.TEXT_MUTED, border: `1px solid ${MODAL.TEXT_MUTED}`,
+              borderRadius: 6, padding: '6px 10px', fontSize: '13px', cursor: 'pointer',
+              touchAction: 'none', userSelect: 'none', lineHeight: 1,
+            }}
+          >👁</button>
+        </div>
       </div>
     </div>
   );
