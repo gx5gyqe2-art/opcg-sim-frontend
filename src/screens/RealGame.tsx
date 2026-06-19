@@ -2274,7 +2274,10 @@ export const RealGame = ({
             transform: 'translateY(-50%)',
             padding: '10px 20px',
             backgroundColor: isPending ? COLORS.BTN_DISABLED : COLORS.BTN_PRIMARY,
-            color: 'white', border: 'none', borderRadius: '5px',
+            color: 'white',
+            // 中央ライン・手番枠の手前に“浮いたチップ”として立たせる（左ツールバーと統一）。
+            border: '1px solid rgba(150,200,240,0.9)', borderRadius: '10px',
+            boxShadow: '0 3px 10px rgba(0,0,0,0.55)',
             cursor: isPending ? 'not-allowed' : 'pointer', zIndex: Z_INDEX.NOTIFICATION, fontWeight: 'bold',
             whiteSpace: 'nowrap'
           }}
