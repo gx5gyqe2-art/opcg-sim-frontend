@@ -21,9 +21,10 @@ interface BattleDecisionBarProps {
   attackerPower: number;
   targetBasePower: number;
   counterBuff: number;
-  hint: string;
   defenderLabel?: string | null;
   actions: BattleBarAction[];
+  /** 配置Y(px)。指定時はその高さに中央寄せ（ドン!!・トラッシュ行に収める）。未指定は下端寄せ。 */
+  topPx?: number;
   /** 長押し中だけ透過（背後の盤面確認）。 */
   peek: boolean;
   onPeekDown: (e: React.PointerEvent<HTMLButtonElement>) => void;
@@ -31,18 +32,22 @@ interface BattleDecisionBarProps {
 }
 
 export const BattleDecisionBar: React.FC<BattleDecisionBarProps> = ({
-  meta, attackerPower, targetBasePower, counterBuff, hint, defenderLabel, actions,
-  peek, onPeekDown, onPeekUp,
+  meta, attackerPower, targetBasePower, counterBuff, defenderLabel, actions,
+  topPx, peek, onPeekDown, onPeekUp,
 }) => {
   const targetEff = targetBasePower + counterBuff;
   const survives = attackerPower < targetEff;
   const needed = attackerPower - targetEff + 1;
 
+  // topPx 指定時はその高さに中央寄せ（手札に被らないようドン!!・トラッシュ行へ）。
+  const posStyle: React.CSSProperties = topPx !== undefined
+    ? { top: `${topPx}px`, transform: 'translate(-50%, -50%)' }
+    : { bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14vh)', transform: 'translateX(-50%)' };
+
   return (
     <div
       style={{
-        position: 'absolute', left: '50%', transform: 'translateX(-50%)',
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 14vh)',
+        position: 'absolute', left: '50%', ...posStyle,
         zIndex: Z_INDEX.BANNER,
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center',
         gap: '7px 10px', padding: '7px 12px', borderRadius: 12,
@@ -66,10 +71,6 @@ export const BattleDecisionBar: React.FC<BattleDecisionBarProps> = ({
         <span style={{ fontWeight: 'bold', color: survives ? '#2ecc71' : '#e74c3c' }}>
           {survives ? '✔ 耐える' : `✖ あと${needed}`}
         </span>
-      </span>
-
-      <span style={{ fontSize: '10.5px', color: MODAL.TEXT_MUTED, width: '100%', textAlign: 'center', order: 9 }}>
-        {hint}
       </span>
 
       <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>

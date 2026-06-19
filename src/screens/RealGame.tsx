@@ -2259,13 +2259,16 @@ export const RealGame = ({
           const ab = gameState?.active_battle;
           const attacker = ab ? resolveCard(ab.attacker_uuid, gameState!) : null;
           const target = ab ? resolveCard(ab.target_uuid, gameState!) : null;
+          // 手札に被らないよう、自陣のドン!!・トラッシュ行（row3）の高さにバーを収める。
+          const c = calculateCoordinates(window.innerWidth, window.innerHeight);
+          const donRowY = c.midY + c.getY(3) + c.CH / 2;
           return (
             <BattleDecisionBar
               meta={battleMeta}
               attackerPower={attacker?.power ?? 0}
               targetBasePower={target?.power ?? 0}
               counterBuff={ab?.counter_buff ?? 0}
-              hint={battleMeta.selectHint}
+              topPx={donRowY}
               defenderLabel={isDefendingDecision ? (pendingRequest!.player_id?.toUpperCase() ?? null) : null}
               actions={actions}
               peek={battlePeek}
