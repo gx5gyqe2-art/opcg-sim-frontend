@@ -472,14 +472,14 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
 const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ', onSwitchView, switchViewLabel }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string, onSwitchView?: () => void, switchViewLabel?: string }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
-      <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px' }}>← TOP</button>
-        <h2 style={{ margin: 0, fontSize: '18px' }}>{entityLabel}一覧</h2>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>← TOP</button>
+        <h2 style={{ margin: 0, fontSize: '18px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entityLabel}一覧</h2>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
           {onSwitchView && (
-            <button onClick={onSwitchView} style={{ padding: '8px 16px', cursor: 'pointer', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px' }}>{switchViewLabel || '切替'}</button>
+            <button onClick={onSwitchView} style={{ padding: '8px 12px', cursor: 'pointer', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap' }}>{switchViewLabel || '切替'}</button>
           )}
-          <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px' }}>＋ 新規</button>
+          <button onClick={onCreateNew} style={{ padding: '8px 16px', cursor: 'pointer', background: '#e67e22', color: 'white', border: 'none', borderRadius: '4px', whiteSpace: 'nowrap' }}>＋ 新規</button>
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
