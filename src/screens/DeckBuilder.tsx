@@ -469,7 +469,126 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
   );
 };
 
-const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ', onSwitchView, switchViewLabel, onCopyFromDeck }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string, onSwitchView?: () => void, switchViewLabel?: string, onCopyFromDeck?: () => void }) => {
+// デッキへの感想コメント（みんなで残せるチャット風モーダル）。
+// 投稿者名は localStorage に控えて次回以降の既定値にする（認証は無い）。
+interface DeckComment { id: string; name: string; text: string; created_at?: string; }
+
+const DeckCommentsModal = ({ deck, onClose }: { deck: DeckData, onClose: () => void }) => {
+  const [comments, setComments] = useState<DeckComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState(() => localStorage.getItem('opcg_comment_name') || '');
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const baseUrl = `${API_CONFIG.BASE_URL}/api/deck/${deck.id}/comments`;
+
+  const load = async () => {
+    try {
+      const res = await fetch(baseUrl);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.comments)) setComments(data.comments);
+    } catch { /* noop */ }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deck.id]);
+
+  const handleSend = async () => {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
+    const trimmedName = name.trim();
+    localStorage.setItem('opcg_comment_name', trimmedName);
+    try {
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmedName, text: body }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setText('');
+        await load();
+      } else {
+        alert(`コメントを投稿できませんでした: ${data.error || '不明なエラー'}`);
+      }
+    } catch {
+      alert('サーバー通信エラーで投稿できませんでした。');
+    } finally { setSending(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('このコメントを削除しますか？')) return;
+    try {
+      const res = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) setComments(prev => prev.filter(c => c.id !== id));
+    } catch { /* noop */ }
+  };
+
+  const fmtTime = (ts?: string) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ background: '#222', width: '100%', maxWidth: '420px', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
+        <div style={{ padding: '15px', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <h3 style={{ margin: 0, fontSize: '16px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>💬 {deck.name} の感想</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', cursor: 'pointer', flexShrink: 0 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', minHeight: '120px' }}>
+          {loading && <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>読み込み中...</div>}
+          {!loading && comments.length === 0 && <div style={{ textAlign: 'center', color: '#888', padding: '20px' }}>まだコメントはありません。最初の感想を残そう！</div>}
+          {comments.map(c => (
+            <div key={c.id} style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: '8px', padding: '8px 10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#74c69d', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name || '名無し'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <span style={{ fontSize: '11px', color: '#777' }}>{fmtTime(c.created_at)}</span>
+                  <button onClick={() => handleDelete(c.id)} title="削除" style={{ background: 'none', border: 'none', color: '#a55', cursor: 'pointer', fontSize: '12px', padding: 0 }}>🗑️</button>
+                </span>
+              </div>
+              <div style={{ fontSize: '14px', color: '#eee', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.text}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ borderTop: '1px solid #444', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="お名前（未入力なら「名無し」）"
+            maxLength={40}
+            style={{ padding: '8px', borderRadius: '6px', border: '1px solid #555', background: '#1a1a1a', color: '#eee', fontSize: '13px' }}
+          />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="感想を入力..."
+              rows={2}
+              maxLength={1000}
+              style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #555', background: '#1a1a1a', color: '#eee', fontSize: '14px', resize: 'vertical', fontFamily: 'inherit' }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={sending || !text.trim()}
+              style={{ padding: '0 16px', background: text.trim() && !sending ? '#2d6a4f' : '#444', color: 'white', border: 'none', borderRadius: '6px', cursor: text.trim() && !sending ? 'pointer' : 'default', fontWeight: 'bold', whiteSpace: 'nowrap' }}
+            >送信</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ', onSwitchView, switchViewLabel, onCopyFromDeck, onOpenComments }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string, onSwitchView?: () => void, switchViewLabel?: string, onCopyFromDeck?: () => void, onOpenComments?: (deck: DeckData) => void }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
       <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -512,6 +631,19 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, enti
                 >
                   🗑️
                 </button>
+                {onOpenComments && deck.id && !deck.id.startsWith('local-') && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onOpenComments(deck); }}
+                    title="感想コメント"
+                    style={{
+                      padding: '8px 12px', marginLeft: '8px',
+                      background: '#2980b9', border: 'none', borderRadius: '4px',
+                      color: 'white', cursor: 'pointer', fontSize: '14px'
+                    }}
+                  >
+                    💬
+                  </button>
+                )}
                 <div style={{ fontSize: '20px', color: '#555', marginLeft: '10px' }}>›</div>
             </div>
         ))}
@@ -1019,6 +1151,8 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false, on
   // コピー元候補（通常デッキ）。CPU相手モデルのベースに既存デッキを複製する用途（templateMode のみ）。
   const [copyDecks, setCopyDecks] = useState<DeckData[]>([]);
   const [currentDeck, setCurrentDeck] = useState<DeckData | null>(viewOnly ? { name: 'Catalog', leader_id: null, card_uuids: [], don_uuids: [] } : null);
+  // 感想コメントを開いているデッキ（null なら閉じている）。コメントは decks コレクション配下なので通常デッキのみ。
+  const [commentsDeck, setCommentsDeck] = useState<DeckData | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1206,7 +1340,12 @@ export const DeckBuilder = ({ onBack, viewOnly = false, templateMode = false, on
     setMode('edit');
   };
 
-  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} onSwitchView={onSwitchView} switchViewLabel={switchViewLabel} onCopyFromDeck={templateMode ? openCopyPicker : undefined} />;
+  if (mode === 'list') return (
+    <>
+      <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: templateMode ? 'New Template' : 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} onSwitchView={onSwitchView} switchViewLabel={switchViewLabel} onCopyFromDeck={templateMode ? openCopyPicker : undefined} onOpenComments={templateMode ? undefined : setCommentsDeck} />
+      {commentsDeck && <DeckCommentsModal deck={commentsDeck} onClose={() => setCommentsDeck(null)} />}
+    </>
+  );
   if (mode === 'copyPick') return <DeckPickerView decks={copyDecks} onPick={copyDeckToTemplate} onBack={() => setMode('list')} />;
   if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
   if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
