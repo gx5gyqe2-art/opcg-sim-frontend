@@ -3,6 +3,7 @@ import type { GameState } from '../game/types';
 import { API_CONFIG } from './api.config';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
+import { recordApi } from '../utils/perfTrace';
 
 const { BASE_URL, ENDPOINTS } = API_CONFIG;
 
@@ -14,8 +15,18 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
     'Content-Type': 'application/json',
   };
 
-  const res = await fetch(url, { ...options, headers });
-  return res;
+  // 計測（フェーズB）: API 応答時間を採取し、「サーバ応答待ちで進行が止まる」フリーズを切り分ける。
+  // path はクエリを除いたエンドポイントのみ（集計をエンドポイント単位にするため）。
+  const _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const path = url.replace(BASE_URL, '').split('?')[0];
+  try {
+    const res = await fetch(url, { ...options, headers });
+    recordApi({ t: Date.now(), path, ms: +((typeof performance !== 'undefined' ? performance.now() : Date.now()) - _t0).toFixed(1), ok: res.ok });
+    return res;
+  } catch (e) {
+    recordApi({ t: Date.now(), path, ms: +((typeof performance !== 'undefined' ? performance.now() : Date.now()) - _t0).toFixed(1), ok: false });
+    throw e;
+  }
 };
 
 export const apiClient = {
