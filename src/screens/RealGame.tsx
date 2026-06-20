@@ -517,15 +517,22 @@ export const RealGame = ({
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
     (async () => {
       try {
-        await sleep(450); // 初手の思考待ち（演出）
+        // ④ アニメと探索の重ね合わせ（Phase3）: サーバの思考（cpu/step）を演出の裏で先に走らせ、
+        // 演出（思考クッション／1 手の見せ時間）が明けた頃には次手が届いている状態にする。バックエンドの
+        // ポンダリング（①⑥）で多くは即答だが、未ヒット時の待ちもこの重ね合わせで演出の裏に隠れる。
+        // 初手: 思考クッション(450ms)と最初の cpu/step を並走させる。
+        let respPromise = apiClient.cpuStep(gid);
+        await sleep(450);
         for (let i = 0; i < 2000; i++) {
-          const resp = await apiClient.cpuStep(gid);
+          const resp = await respPromise;
           if (!isMountedRef.current) return;
           if (resp.game_state) setGameState(resp.game_state);
           setPendingRequest(resp.pending_request ?? null);
           if (resp.action_events?.length) addEventLog(resp.action_events);
           if (resp.waiting_for !== 'cpu') break;
-          await sleep(700); // 1 手ずつ見せる
+          // 次手の計算を「1 手の見せ時間(700ms)」と並走させる＝思考を演出の裏に隠す（直列の待ちを消す）。
+          respPromise = apiClient.cpuStep(gid);
+          await sleep(700);
         }
       } catch (e) {
         if (isMountedRef.current) setErrorToast(`CPUエラー: ${(e as Error).message}`);
