@@ -33,6 +33,7 @@ import { RECONCILE_BOARD } from '../ui/anim/reconcileFlag';
 import { createBoardBackground, type ActiveSide } from '../ui/boardBackground';
 import CONST from '../../shared_constants.json';
 import { sessionManager } from '../utils/session';
+import { resetWalk, bumpWalk, takeWalk, recordRender, startFreezeMonitor, perfSnapshot } from '../utils/perfTrace';
 import type { GameState, CardInstance, PendingRequest } from '../game/types';
 import type { ActionEvent } from '../api/types';
 
@@ -89,14 +90,17 @@ const resolveCard = (uuid: string | undefined | null, gs: GameState): CardInstan
 // カードコンテナは createCardContainer で name=uuid が設定されている。
 const findCardContainer = (app: PIXI.Application, uuid: string): PIXI.Container | null => {
   let found: PIXI.Container | null = null;
+  let visited = 0; // 計測: この 1 呼び出しで走査したノード数（O(N^2) の実測用）。
   const walk = (c: PIXI.Container) => {
     if (found || c.destroyed) return;
+    visited++;
     if (c.name === uuid) { found = c; return; }
     for (const k of c.children) {
       if (k instanceof PIXI.Container) walk(k);
     }
   };
   walk(app.stage);
+  bumpWalk(visited);
   return found;
 };
 
@@ -1011,11 +1015,17 @@ export const RealGame = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- PIXI app の初期化は盤面準備完了時に1回のみ。startGame等の再実行は不要
   }, [boardReady]);
 
+  // 計測（フェーズA）: メインスレッド停滞（フリーズ）検出をマウント時に一度だけ起動。
+  useEffect(() => { startFreezeMonitor(); }, []);
+
   useEffect(() => {
     const app = appRef.current;
     if (!app || !gameState) return;
 
     const renderScene = () => {
+      // 計測（フェーズA）: renderScene 全体の所要と findCardContainer 全走査量を採取する。
+      const _perfStart = performance.now();
+      resetWalk();
       // 永続レイヤ（演出・可動カード）は破棄せず退避し、再構築後に最前面へ戻す。
       const effectsContainer = effectsRef.current?.container ?? null;
       const movableLayer = reconcilerRef.current?.layer ?? null;
@@ -1148,6 +1158,19 @@ export const RealGame = ({
       if (gameStateChanged) prevPositionsRef.current = newPos;
       prevGameStateRef.current = gameState;
       prevViewerRef.current = viewerId;
+
+      // 計測: 1 描画の所要 ms・盤面カード数・全走査ノード数を記録（ログ採取へ同梱）。
+      const _w = takeWalk();
+      recordRender({
+        t: Date.now(),
+        renderMs: +(performance.now() - _perfStart).toFixed(2),
+        cards: newPos.size,
+        walkNodes: _w.walkNodes,
+        walkCalls: _w.walkCalls,
+        turn: gameState.turn_info?.turn_count ?? null,
+        phase: gameState.turn_info?.current_phase ?? null,
+        mode: isOnline ? 'online' : (vsCpu ? 'cpu' : 'solo'),
+      });
     };
 
     renderScene();
@@ -1680,6 +1703,7 @@ export const RealGame = ({
       turn_info: gameState?.turn_info ?? null,
       winner: gameState?.turn_info?.winner ?? null,
       eventLog,
+      perf: perfSnapshot(), // 描画ms・盤面規模・全走査ノード数・フリーズ区間の実測（フェーズA）。
     };
     if (gid) {
       const replay = await apiClient.getReplay(gid);
