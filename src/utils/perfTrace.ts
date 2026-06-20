@@ -135,21 +135,22 @@ function apiByPath(): Record<string, Record<string, number> | null> {
 
 export function perfSnapshot(): Record<string, unknown> {
   const realFreezes = freezes.filter((f) => !f.background);
+  // ★重要：小さい要約を先頭、巨大配列(worst/recent)を末尾に置く。スマホでコピーが途中で
+  // 切れても、要約（API待ち・フリーズ・描画サマリ）だけは残るようにするため。
   return {
     note:
       'フェーズA(描画)とフェーズB(API応答)の実測。renderSummaryMs が小さく api*/freezesReal が大きければ、' +
       'フリーズの主因は描画ではなく「サーバ応答待ち」。freezes の background=true はアプリ離脱(rAF停止)で本物のフリーズではない。',
-    // フェーズA: 描画
+    // ── 要約（小・最重要。これだけ貼れれば原因が分かる） ──
     renderSummaryMs: summarize(recent.map((r) => r.renderMs)),
-    worstRenders: worst,
-    // フェーズB: API 応答時間
     apiSummaryMsByPath: apiByPath(),
-    worstApiCalls: apiWorst,
-    apiRecent: apiRecent.slice(-40),
-    // フリーズ（バックグラウンドと区別）
+    worstApiCalls: apiWorst.slice(0, 8),
     freezeCountReal: realFreezes.length,
     freezeCountBackground: freezes.length - realFreezes.length,
-    freezesRecent: freezes.slice(-30),
-    recentRenders: recent.slice(-20),
+    freezesReal: realFreezes.slice(-15),
+    // ── 詳細（大・truncate されてもよい） ──
+    worstRenders: worst,
+    apiRecent: apiRecent.slice(-30),
+    recentRenders: recent.slice(-15),
   };
 }
