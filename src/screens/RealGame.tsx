@@ -1698,12 +1698,13 @@ export const RealGame = ({
     const gid = gameState?.game_id ?? null;
     const dump: Record<string, unknown> = {
       capturedAt: new Date().toISOString(),
+      turn_info: gameState?.turn_info ?? null,
+      // ★perf を先頭付近に置く（フリーズ/API の要約が truncate で消えないように）。
+      perf: perfSnapshot(),
       game_id: gid,
       sessionId: sessionManager.getSessionId(),
-      turn_info: gameState?.turn_info ?? null,
       winner: gameState?.turn_info?.winner ?? null,
       eventLog,
-      perf: perfSnapshot(), // 描画ms・盤面規模・全走査ノード数・フリーズ区間の実測（フェーズA）。
     };
     if (gid) {
       const replay = await apiClient.getReplay(gid);
