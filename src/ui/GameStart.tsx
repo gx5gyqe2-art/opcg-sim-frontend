@@ -10,7 +10,7 @@ interface GameStartProps {
     mode?: 'normal' | 'sandbox', 
     sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string, gameId?: string }
   ) => void;
-  onStartCpu: (difficulty: 'easy' | 'normal' | 'hard' | 'expert') => void;
+  onStartCpu: (difficulty: 'hard' | 'expert') => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
   onLobby: () => void;
@@ -309,18 +309,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
             <div style={styles.section}>
               <div style={styles.sectionTitle}>CPU対戦 — 難易度を選ぶ</div>
               <div style={styles.grid}>
-                <MenuCard
-                  label="かんたん"
-                  desc="フェア · 公開情報のみ"
-                  onClick={() => { onStartCpu('easy'); }}
-                  color="#2ecc71"
-                />
-                <MenuCard
-                  label="ふつう"
-                  desc="リーダー推測 · 多手先読み"
-                  onClick={() => { onStartCpu('normal'); }}
-                  color="#f39c12"
-                />
                 <MenuCard
                   label="つよい"
                   desc="最強 · 全力先読み"
