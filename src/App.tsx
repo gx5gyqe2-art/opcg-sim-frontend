@@ -46,7 +46,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'cpuTemplate' | 'lobby' | 'ruleLobby';
+type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'ruleLobby';
 type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
 // ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
 type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
@@ -187,16 +187,6 @@ export default function App() {
           <DeckBuilder
             onBack={() => setMode('start')}
             viewOnly={mode === 'cardList'}
-            onSwitchView={mode === 'deck' ? () => setMode('cpuTemplate') : undefined}
-            switchViewLabel={mode === 'deck' ? 'CPU相手モデル →' : undefined}
-          />
-        )}
-        {mode === 'cpuTemplate' && (
-          <DeckBuilder
-            onBack={() => setMode('start')}
-            templateMode
-            onSwitchView={() => setMode('deck')}
-            switchViewLabel="← デッキ一覧"
           />
         )}
         {mode === 'lobby' && (
