@@ -39,7 +39,7 @@ export const apiClient = {
     p1Deck: string,
     p2Deck: string,
     // CPU 対戦オプション（未指定＝従来のソロ/ホットシート）。
-    opts?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard'; cpuDeck?: string },
+    opts?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard' | 'expert'; cpuDeck?: string },
     // 先行プレイヤー: ソロは 'p1'/'p2'（プレイヤーが選択）、CPU は 'random'（コイントス）。
     firstPlayer?: 'p1' | 'p2' | 'random'
   ): Promise<{ game_id: string; state: GameState; pending_request?: PendingRequest }> {
