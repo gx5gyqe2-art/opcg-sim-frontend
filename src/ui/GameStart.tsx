@@ -10,7 +10,7 @@ interface GameStartProps {
     mode?: 'normal' | 'sandbox', 
     sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string, gameId?: string }
   ) => void;
-  onStartCpu: (difficulty: 'easy' | 'normal' | 'hard') => void;
+  onStartCpu: (difficulty: 'easy' | 'normal' | 'hard' | 'expert') => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
   onLobby: () => void;
@@ -326,6 +326,12 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                   desc="最強 · 全力先読み"
                   onClick={() => { onStartCpu('hard'); }}
                   color="#e74c3c"
+                />
+                <MenuCard
+                  label="エキスパート"
+                  desc="MCTS · 公平(手札を見ない)"
+                  onClick={() => { onStartCpu('expert'); }}
+                  color="#9b59b6"
                 />
               </div>
               <button style={styles.backBtn} onClick={() => setCpuPick(false)}>← 戻る</button>
