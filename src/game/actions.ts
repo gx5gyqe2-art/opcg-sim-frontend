@@ -40,7 +40,7 @@ export const useGameAction = (
   const startGame = useCallback(async (
     p1Deck: string,
     p2Deck: string,
-    cpuOptions?: { vsCpu?: boolean; cpuDifficulty?: 'easy' | 'normal' | 'hard' | 'expert'; cpuDeck?: string },
+    cpuOptions?: { vsCpu?: boolean; cpuDifficulty?: 'hard' | 'expert'; cpuDeck?: string },
     firstPlayer?: 'p1' | 'p2' | 'random',
   ) => {
     setIsPending(true);

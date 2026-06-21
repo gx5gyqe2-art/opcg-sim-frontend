@@ -46,12 +46,12 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'cpuTemplate' | 'lobby' | 'ruleLobby';
+type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'ruleLobby';
 type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
 // ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
 type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
 // ルールモード・CPU 対戦の設定（null = CPU 対戦ではない）。
-type RuleCpuOptions = { difficulty: 'easy' | 'normal' | 'hard' | 'expert' } | null;
+type RuleCpuOptions = { difficulty: 'hard' | 'expert' } | null;
 
 export default function App() {
   // 対策①：初期値をsessionStorageから復元するように変更
@@ -145,7 +145,7 @@ export default function App() {
   };
 
   // ルールモード・CPU 対戦の開始（人間=p1。デッキは RealGame のセットアップ画面で選ぶ）。
-  const startRuleCpu = (difficulty: 'easy' | 'normal' | 'hard' | 'expert') => {
+  const startRuleCpu = (difficulty: 'hard' | 'expert') => {
     setRuleOnline(null);
     setRuleCpu({ difficulty });
     setSelectedDecks({ p1: '', p2: '' });
@@ -187,16 +187,6 @@ export default function App() {
           <DeckBuilder
             onBack={() => setMode('start')}
             viewOnly={mode === 'cardList'}
-            onSwitchView={mode === 'deck' ? () => setMode('cpuTemplate') : undefined}
-            switchViewLabel={mode === 'deck' ? 'CPU相手モデル →' : undefined}
-          />
-        )}
-        {mode === 'cpuTemplate' && (
-          <DeckBuilder
-            onBack={() => setMode('start')}
-            templateMode
-            onSwitchView={() => setMode('deck')}
-            switchViewLabel="← デッキ一覧"
           />
         )}
         {mode === 'lobby' && (
