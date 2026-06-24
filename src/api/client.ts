@@ -7,7 +7,7 @@ import { recordApi } from '../utils/perfTrace';
 
 const { BASE_URL, ENDPOINTS } = API_CONFIG;
 
-const fetchWithLog = async (url: string, options: RequestInit = {}) => {
+const fetchWithLog = async (url: string, options: RequestInit = {}, timeoutMs?: number) => {
   const sid = sessionManager.getSessionId();
   const headers = {
     ...options.headers,
@@ -15,17 +15,24 @@ const fetchWithLog = async (url: string, options: RequestInit = {}) => {
     'Content-Type': 'application/json',
   };
 
+  // クライアント側タイムアウト（任意）: ゲートウェイの長い待ち（コールドスタート/競合スパイク）を
+  // 自前で打ち切り、呼び出し側のリトライへ早く回す（ハングしたリクエストで進行が止まるのを防ぐ）。
+  const ctrl = (timeoutMs && typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+
   // 計測（フェーズB）: API 応答時間を採取し、「サーバ応答待ちで進行が止まる」フリーズを切り分ける。
   // path はクエリを除いたエンドポイントのみ（集計をエンドポイント単位にするため）。
   const _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const path = url.replace(BASE_URL, '').split('?')[0];
   try {
-    const res = await fetch(url, { ...options, headers });
+    const res = await fetch(url, { ...options, headers, ...(ctrl ? { signal: ctrl.signal } : {}) });
     recordApi({ t: Date.now(), path, ms: +((typeof performance !== 'undefined' ? performance.now() : Date.now()) - _t0).toFixed(1), ok: res.ok });
     return res;
   } catch (e) {
     recordApi({ t: Date.now(), path, ms: +((typeof performance !== 'undefined' ? performance.now() : Date.now()) - _t0).toFixed(1), ok: false });
     throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 };
 
@@ -102,16 +109,32 @@ export const apiClient = {
   },
 
   // CPU 対戦: CPU(p2) の次の 1 手を進める（ポーリング駆動）。
-  async cpuStep(gameId: string): Promise<CpuStepResult> {
-    const res = await fetchWithLog(`${BASE_URL}/api/game/cpu/step`, {
-      method: 'POST',
-      body: JSON.stringify({ game_id: gameId }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.success === false) {
-      throw new Error(data.error?.message || 'CPU step failed');
+  // 堅牢化: 失敗（504/コールドスタート/競合スパイク/クライアントタイムアウト）でもすぐ諦めずバックオフ再試行する。
+  // cpu/step は同一局面で冪等的に再計算でき、かつ初回でサーバ側 MCTS が完了すると plan_cache が温まるため、
+  // 再試行は高確率で即ヒット（キャッシュ replay）して返る。1 回のスパイクが即フリーズになるのを防ぐ。
+  async cpuStep(gameId: string, opts?: { retries?: number; timeoutMs?: number }): Promise<CpuStepResult> {
+    const retries = opts?.retries ?? 4;
+    const timeoutMs = opts?.timeoutMs ?? 25000;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetchWithLog(`${BASE_URL}/api/game/cpu/step`, {
+          method: 'POST',
+          body: JSON.stringify({ game_id: gameId }),
+        }, timeoutMs);
+        const data = await res.json();
+        if (!res.ok || data.success === false) {
+          throw new Error(data.error?.message || `CPU step failed (${res.status})`);
+        }
+        return data as CpuStepResult;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, Math.min(4000, 600 * 2 ** attempt)));  // 0.6/1.2/2.4/4s
+        }
+      }
     }
-    return data as CpuStepResult;
+    throw lastErr instanceof Error ? lastErr : new Error('CPU step failed');
   },
 
   async createSandboxGame(
