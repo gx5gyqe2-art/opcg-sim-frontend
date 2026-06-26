@@ -37,7 +37,7 @@ export const apiClient = {
     p1Deck: string,
     p2Deck: string,
     // CPU 対戦オプション（未指定＝従来のソロ/ホットシート）。
-    opts?: { vsCpu?: boolean; cpuDifficulty?: 'hard' | 'expert'; cpuDeck?: string },
+    opts?: { vsCpu?: boolean; cpuDifficulty?: 'hard'; cpuDeck?: string },
     // 先行プレイヤー: ソロは 'p1'/'p2'（プレイヤーが選択）、CPU は 'random'（コイントス）。
     firstPlayer?: 'p1' | 'p2' | 'random'
   ): Promise<{ game_id: string; state: GameState; pending_request?: PendingRequest }> {
@@ -51,7 +51,7 @@ export const apiClient = {
         ...(firstPlayer ? { first_player: firstPlayer } : {}),
         ...(opts?.vsCpu ? {
           vs_cpu: true,
-          cpu_difficulty: opts.cpuDifficulty || 'expert',
+          cpu_difficulty: opts.cpuDifficulty || 'hard',
           cpu_deck: opts.cpuDeck || p2Deck,
           // CPU 思考トレースを有効化（ログ採取ボタンで GET /api/game/{id}/replay から取得するため）。
           cpu_trace: true,
@@ -101,7 +101,7 @@ export const apiClient = {
 
   // CPU 対戦: CPU(p2) の次の 1 手を進める（ポーリング駆動）。
   // 堅牢化: 失敗（504/コールドスタート/競合スパイク/クライアントタイムアウト）でもすぐ諦めずバックオフ再試行する。
-  // cpu/step は同一局面で冪等的に再計算でき、かつ初回でサーバ側 MCTS が完了すると plan_cache が温まるため、
+  // cpu/step は同一局面で冪等的に再計算でき、かつ初回でサーバ側の思考が完了すると plan_cache が温まるため、
   // 再試行は高確率で即ヒット（キャッシュ replay）して返る。1 回のスパイクが即フリーズになるのを防ぐ。
   async cpuStep(gameId: string, opts?: { retries?: number; timeoutMs?: number }): Promise<CpuStepResult> {
     const retries = opts?.retries ?? 4;
