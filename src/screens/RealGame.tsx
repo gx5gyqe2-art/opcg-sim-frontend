@@ -212,7 +212,7 @@ export const RealGame = ({
   onForceBack?: () => void,
   // ▼ CPU 対戦用（人間=p1 固定・REST＋/api/game/cpu/step ポーリング・WS 不使用）
   vsCpu?: boolean,
-  cpuDifficulty?: 'hard',
+  cpuDifficulty?: 'learned' | 'hard',
 }) => {
   // オンライン対戦かどうか（'both' = 従来のソロ／ホットシート）
   const isOnline = myPlayerId === 'p1' || myPlayerId === 'p2';

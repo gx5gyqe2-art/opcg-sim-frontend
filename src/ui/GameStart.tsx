@@ -10,21 +10,17 @@ interface GameStartProps {
     mode?: 'normal' | 'sandbox', 
     sandboxOptions?: { role: 'both' | 'p1' | 'p2', room_name?: string, gameId?: string }
   ) => void;
-  onStartCpu: (difficulty: 'hard') => void;
+  onStartCpu: (difficulty: 'learned') => void;
   onDeckBuilder: () => void;
   onCardList: () => void;
-  onLobby: () => void;
   onRuleLobby: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onLobby, onRuleLobby }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onRuleLobby }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
-  // PLAYメニューの階層ナビ: root → mode(フリー/ルール) → match(ソロ/オンライン対戦)
-  const [playStep, setPlayStep] = useState<'root' | 'mode' | 'match'>('root');
-  const [playMode, setPlayMode] = useState<'free' | 'rule'>('free');
-  // ルールモードの CPU 対戦: 難易度選択パネルの表示。
-  const [cpuPick, setCpuPick] = useState(false);
+  // PLAYメニューの階層ナビ: root → match(ソロ/オンライン/CPU対戦)。フリーモード/難易度選択は廃止。
+  const [playStep, setPlayStep] = useState<'root' | 'match'>('root');
 
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [contentScale, setContentScale] = useState(1);
@@ -52,7 +48,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
         setContentScale(1);
       }
     }
-  }, [windowSize, isMobile, playStep, playMode]);
+  }, [windowSize, isMobile, playStep]);
 
   // ▼▼▼ 修正: モーダル表示ロジックを削除し、直接 onStart を呼ぶ形に戻しました ▼▼▼
   const handleStartWithLog = (
@@ -213,7 +209,7 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                   <MenuCard
                     label="▶ PLAY"
                     desc="ゲームを始める"
-                    onClick={() => { setPlayStep('mode'); }}
+                    onClick={() => { setPlayStep('match'); }}
                     color="#f1c40f"
                   />
                 </div>
@@ -243,80 +239,31 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
             </>
           )}
 
-          {/* === 第2階層: フリー / ルール の選択 === */}
-          {playStep === 'mode' && (
+          {/* === 第2階層: ソロ / オンライン / CPU対戦（すべてルールモード・難易度は learned 固定） === */}
+          {playStep === 'match' && (
             <div style={styles.section}>
-              <div style={styles.sectionTitle}>Play — モードを選ぶ</div>
-              <div style={styles.grid}>
-                <MenuCard
-                  label="フリーモード"
-                  desc="自由に操作（ルールなし）"
-                  onClick={() => { setPlayMode('free'); setPlayStep('match'); }}
-                  color="#2ecc71"
-                />
-                <MenuCard
-                  label="ルールモード"
-                  desc="公式ルールで自動進行"
-                  onClick={() => { setPlayMode('rule'); setPlayStep('match'); }}
-                  color="#e74c3c"
-                />
-              </div>
-              <button style={styles.backBtn} onClick={() => setPlayStep('root')}>← 戻る</button>
-            </div>
-          )}
-
-          {/* === 第3階層: ソロプレイ / オンライン対戦 / CPU対戦 の選択 === */}
-          {playStep === 'match' && !cpuPick && (
-            <div style={styles.section}>
-              <div style={styles.sectionTitle}>
-                {playMode === 'free' ? 'フリーモード' : 'ルールモード'} — プレイを選ぶ
-              </div>
+              <div style={styles.sectionTitle}>Play — プレイを選ぶ</div>
               <div style={styles.grid}>
                 <MenuCard
                   label="ソロプレイ"
-                  desc={playMode === 'free' ? 'Free · Solo' : 'Rule · Solo'}
-                  onClick={() => {
-                    if (playMode === 'free') handleStartWithLog('sandbox', { role: 'both' });
-                    else handleStartWithLog('normal');
-                  }}
+                  desc="Rule · Solo"
+                  onClick={() => { handleStartWithLog('normal'); }}
                   color="#2ecc71"
                 />
                 <MenuCard
                   label="オンライン対戦"
-                  desc={playMode === 'free' ? 'Free · Online' : 'Rule · Online'}
-                  onClick={() => {
-                    if (playMode === 'free') { onLobby(); }
-                    else { onRuleLobby(); }
-                  }}
+                  desc="Rule · Online"
+                  onClick={() => { onRuleLobby(); }}
                   color="#16a085"
                 />
-                {/* CPU 対戦はルールモードのみ */}
-                {playMode === 'rule' && (
-                  <MenuCard
-                    label="CPU対戦"
-                    desc="Rule · vs CPU"
-                    onClick={() => { setCpuPick(true); }}
-                    color="#e67e22"
-                  />
-                )}
-              </div>
-              <button style={styles.backBtn} onClick={() => setPlayStep('mode')}>← 戻る</button>
-            </div>
-          )}
-
-          {/* === CPU対戦: 難易度選択 === */}
-          {playStep === 'match' && cpuPick && (
-            <div style={styles.section}>
-              <div style={styles.sectionTitle}>CPU対戦 — 難易度を選ぶ</div>
-              <div style={styles.grid}>
                 <MenuCard
-                  label="つよい"
-                  desc="最強 · 全力先読み"
-                  onClick={() => { onStartCpu('hard'); }}
-                  color="#e74c3c"
+                  label="CPU対戦"
+                  desc="Rule · vs CPU"
+                  onClick={() => { onStartCpu('learned'); }}
+                  color="#e67e22"
                 />
               </div>
-              <button style={styles.backBtn} onClick={() => setCpuPick(false)}>← 戻る</button>
+              <button style={styles.backBtn} onClick={() => setPlayStep('root')}>← 戻る</button>
             </div>
           )}
         </div>

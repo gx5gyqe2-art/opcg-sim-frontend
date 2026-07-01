@@ -51,7 +51,7 @@ type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?:
 // ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
 type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
 // ルールモード・CPU 対戦の設定（null = CPU 対戦ではない）。
-type RuleCpuOptions = { difficulty: 'hard' } | null;
+type RuleCpuOptions = { difficulty: 'learned' | 'hard' } | null;
 
 export default function App() {
   // 対策①：初期値をsessionStorageから復元するように変更
@@ -145,7 +145,7 @@ export default function App() {
   };
 
   // ルールモード・CPU 対戦の開始（人間=p1。デッキは RealGame のセットアップ画面で選ぶ）。
-  const startRuleCpu = (difficulty: 'hard') => {
+  const startRuleCpu = (difficulty: 'learned' | 'hard') => {
     setRuleOnline(null);
     setRuleCpu({ difficulty });
     setSelectedDecks({ p1: '', p2: '' });
@@ -156,7 +156,7 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#1a1a1a', overflow: 'hidden', position: 'fixed', top: 0, left: 0, touchAction: 'none' }}>
       <ErrorBoundary>
         {mode === 'start' && (
-          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onLobby={() => setMode('lobby')} onRuleLobby={() => setMode('ruleLobby')} />
+          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onRuleLobby={() => setMode('ruleLobby')} />
         )}
         {mode === 'game' && (
           <RealGame
