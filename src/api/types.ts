@@ -67,6 +67,8 @@ export interface ActionEvent {
   value?: number | null;
   message?: string;
   success?: boolean;
+  /** 移動系（MOVE_CARD 等）の行き先ゾーン（"LIFE"/"HAND" 等・backend が additive に付与）。 */
+  dest?: string;
 }
 
 export interface GameActionResult {
