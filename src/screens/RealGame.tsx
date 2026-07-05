@@ -962,6 +962,12 @@ export const RealGame = ({
       const donCount = me.don_active?.length ?? 0;
       if (donCount > 0) kind = 'don';
     } else if (me.zones.hand.some(c => c.uuid === card.uuid)) {
+      // 【メイン】効果を持たないイベント（カウンター/トリガー専用）はドラッグ発動不可。
+      const isEvent = normalizeCardType(card.type) === 'EVENT';
+      const eventText = 'text' in card && typeof card.text === 'string' ? card.text : '';
+      if (isEvent && !eventText.includes('【メイン】')) {
+        return;
+      }
       kind = 'play';
     } else if (me.leader && me.leader.uuid === card.uuid) {
       const t = normalizeCardType(me.leader.type);
