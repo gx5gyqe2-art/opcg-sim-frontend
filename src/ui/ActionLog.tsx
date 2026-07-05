@@ -43,10 +43,23 @@ const EFFECT_LABELS: Record<string, string> = {
   RULE_PROCESSING: 'ルール処理',
 };
 
+// MOVE_CARD の行き先別ラベル（ev.dest・backend が additive に付与）。無印の「カード移動」だと
+// 効果の意味が読めず、OP16-119 等のライフ追加が「発動していない」ように見えていた。
+const MOVE_DEST_LABELS: Record<string, string> = {
+  LIFE: 'ライフに追加',
+  HAND: '手札に加える',
+  DECK: 'デッキに戻す',
+  TRASH: 'トラッシュへ',
+  FIELD: '場に出す',
+};
+
 function formatEvent(ev: ActionEvent): string {
   if (ev.message) return ev.message;
   if (ev.type === 'EFFECT' && ev.action) {
-    const label = EFFECT_LABELS[ev.action] || ev.action;
+    let label = EFFECT_LABELS[ev.action] || ev.action;
+    if (ev.action === 'MOVE_CARD' && ev.dest) {
+      label = MOVE_DEST_LABELS[ev.dest] ?? `カード移動(${ev.dest})`;
+    }
     const targetStr = ev.targets?.length ? ` → ${ev.targets.join(', ')}` : '';
     const valueStr = ev.value != null && ev.value !== 0 ? ` (${ev.value > 0 ? '+' : ''}${ev.value})` : '';
     const cardStr = ev.card_name ? `「${ev.card_name}」` : '';
