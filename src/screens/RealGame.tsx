@@ -694,21 +694,44 @@ export const RealGame = ({
     'CONFIRM_OPTIONAL', 'CONFIRM_TRIGGER', 'DECLARE_COST', 'MAIN_ACTION',
   ]);
 
+  // キャラかドン!!の混在対象選択（OP12-037「相手の、キャラかドン!!合計2枚まで」等）:
+  // ドン!!は盤面に個別カードとして描画されないため、候補のドン!!は所有者のドン!!パイル
+  // （アクティブ/レスト）を直接タップして1枚ずつ選ばせる。uuid→ドン!!候補を引けるようにする。
+  type PendingDonCand = CardInstance & { attached_to?: string | null; is_rest?: boolean; owner_id?: string };
+  const pendingDonCands = new Map<string, PendingDonCand>(
+    ((pendingRequest?.candidates ?? []) as PendingDonCand[])
+      .filter(c => c.card_id === 'DON' || (c as { type?: string }).type === 'DON')
+      .map(c => [c.uuid, c]),
+  );
+  const donPileIdOf = (d: PendingDonCand) =>
+    `${d.is_rest ? 'donrest' : 'donactive'}-${(d.owner_id ?? '').toLowerCase()}`;
+
   // 任意効果などで「盤面上のカードを選ぶ」要求のとき、画面を覆うモーダルを出すと盤面の
   // カードをクリックできない。選択候補がすべて盤面上にあれば、覆わずにカードをハイライト＋
   // コンパクトなバナーで直接クリック選択させる（SEARCH_AND_SELECT/カウンター/ブロッカーに
-  // 限らず全ての盤面対象選択へ一般化）。デッキ/トラッシュ等の非盤面候補を含む選択は従来通り
-  // モーダル（showSearchModal）にフォールバックする。
+  // 限らず全ての盤面対象選択へ一般化）。候補にドン!!が混ざる場合（キャラかドン!!）は、
+  // ドン!!を所有者のパイルタップに割り当てて同じ盤面選択で扱う。デッキ/トラッシュ等の
+  // 非盤面候補を含む選択は従来通りモーダル（showSearchModal）にフォールバックする。
   const isBoardSelectMode =
     isMyDecision &&
     !isAttackTargeting &&
     !!pendingRequest &&
     !BOARD_SELECT_EXCLUDED_ACTIONS.has(pendingRequest.action) &&
     (pendingRequest.selectable_uuids?.length ?? 0) > 0 &&
-    pendingRequest.selectable_uuids!.every(uuid => boardUuids.has(uuid));
+    pendingRequest.selectable_uuids!.every(uuid => boardUuids.has(uuid) || pendingDonCands.has(uuid));
+
+  // 盤面選択でタップ可能にするドン!!パイル（付与中ドン!!は候補に来ない前提: matcher の
+  // CHAR_OR_DON はアクティブ/レストのドン!!のみをプールに載せる）。
+  const boardSelectDonPiles = isBoardSelectMode
+    ? new Set<string>(
+        [...pendingDonCands.values()].filter(d => !d.attached_to).map(donPileIdOf))
+    : new Set<string>();
 
   const selectableUuids = isBoardSelectMode
-    ? new Set(pendingRequest!.selectable_uuids)
+    ? new Set<string>([
+        ...pendingRequest!.selectable_uuids!.filter(uuid => boardUuids.has(uuid)),
+        ...boardSelectDonPiles,
+      ])
     : new Set<string>();
 
   // ドン!!付与の対象候補: 自陣のリーダーとフィールドのキャラクター。
@@ -824,6 +847,21 @@ export const RealGame = ({
     }
 
     if (isBoardSelectMode) {
+      // ドン!!パイル（アクティブ/レスト）タップ: そのパイルの未選択ドン!!候補を1枚ずつ選ぶ
+      // （キャラかドン!!の混在選択。同じパイルを再タップすると2枚目を追加）。
+      if (boardSelectDonPiles.has(card.uuid)) {
+        const pick = [...pendingDonCands.values()].find(d =>
+          !d.attached_to && donPileIdOf(d) === card.uuid && !boardSelected.includes(d.uuid))?.uuid ?? null;
+        if (!pick) return;
+        const next = [...boardSelected, pick];
+        if (next.length >= maxSelect) {
+          setBoardSelected([]);
+          handleSelectionResolve(next);
+        } else {
+          setBoardSelected(next);
+        }
+        return;
+      }
       if (selectableUuids.has(card.uuid)) {
         if (maxSelect === 1) {
           handleSelectionResolve([card.uuid]);
@@ -924,6 +962,12 @@ export const RealGame = ({
       const donCount = me.don_active?.length ?? 0;
       if (donCount > 0) kind = 'don';
     } else if (me.zones.hand.some(c => c.uuid === card.uuid)) {
+      // 【メイン】効果を持たないイベント（カウンター/トリガー専用）はドラッグ発動不可。
+      const isEvent = normalizeCardType(card.type) === 'EVENT';
+      const eventText = 'text' in card && typeof card.text === 'string' ? card.text : '';
+      if (isEvent && !eventText.includes('【メイン】')) {
+        return;
+      }
       kind = 'play';
     } else if (me.leader && me.leader.uuid === card.uuid) {
       const t = normalizeCardType(me.leader.type);
