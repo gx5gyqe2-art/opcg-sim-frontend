@@ -1247,7 +1247,8 @@ export const RealGame = ({
     };
     const removeAttackLine = () => {
       if (attackTickRef.current) {
-        app.ticker.remove(attackTickRef.current);
+        // destroy 後（アンマウント時）は app.ticker が null になり得るため optional chain で握る。
+        app.ticker?.remove(attackTickRef.current);
         attackTickRef.current = null;
       }
       const l = attackLineRef.current;
@@ -1665,7 +1666,10 @@ export const RealGame = ({
     };
     app.ticker.add(tick);
     return () => {
-      app.ticker.remove(tick);
+      // アンマウント時は PIXI app 初期化 effect の cleanup（app.destroy）が先に走り得る。
+      // destroy 後は app.ticker が null になるため、素の app.ticker.remove は
+      // 「null is not an object」で RENDER ERROR になる。optional chain で握る。
+      app.ticker?.remove(tick);
       if (!g.destroyed) g.destroy();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 選択中のみ。attacker/target/viewer 変化で張り直す
@@ -1972,6 +1976,16 @@ export const RealGame = ({
     );
   }
 
+  // カウンター選択は候補（selectable_uuids／candidates）がある時だけモーダル/盤面選択に載せる。
+  // 手札にカウンター値を持つカードが1枚も無い場合、サーバは selectable_uuids=[] & can_skip=true の
+  // SELECT_COUNTER を返す。この時モーダルは候補ゼロで描画されず（下の modalCandidates.length>0 ゲート）、
+  // かつ showSearchModal=true が下の汎用バナー（パスボタン付き）を抑止するため、パス手段が画面から
+  // 消えてソフトロックしていた。候補ゼロなら showSearchModal を false に落とし、汎用バナーの
+  // 「パス（カウンターしない）」で解決できるようにする。
+  const counterHasCandidates =
+    (pendingRequest?.selectable_uuids?.length ?? 0) > 0 ||
+    (pendingRequest?.candidates?.length ?? 0) > 0;
+
   const showSearchModal =
     isMyDecision &&
     !isBoardSelectMode &&
@@ -1981,7 +1995,8 @@ export const RealGame = ({
       // ドン!!返却(RETURN_DON)で候補が盤面外/混在のとき等はモーダルにフォールバック。
       // 候補がすべてドン!!なら isDonReturnMode により盤面から直接選ばせる。
       pendingRequest?.action === CONST.c_to_s_interface.PENDING_ACTION_TYPES.SELECT_RESOURCE ||
-      pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
+      (pendingRequest?.action === CONST.c_to_s_interface.BATTLE_ACTIONS.TYPES.SELECT_COUNTER
+        && counterHasCandidates)
     );
     
   const constraints = pendingRequest?.constraints || {};
