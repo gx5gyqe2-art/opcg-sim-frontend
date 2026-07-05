@@ -14,6 +14,12 @@ export interface CardActionDescriptor {
 const hasActivateMain = (card: CardInstance): boolean =>
   'text' in card && typeof card.text === 'string' && card.text.includes('起動メイン');
 
+// イベントが手札からメインフェイズに発動できるか＝【メイン】効果を持つか。
+// 【カウンター】/【トリガー】のみのイベント（ゴムゴムの巨人 OP09-078 等）は自ターンに
+// 発動できない（バックエンドの play_card_action も同条件で拒否する）。
+const eventHasMainPlay = (card: CardInstance): boolean =>
+  'text' in card && typeof card.text === 'string' && card.text.includes('【メイン】');
+
 // location: RealGame.getPhysicalLocation 由来の物理ロケーション
 //   ('hand' | 'field' | 'leader' | 'life' | 'trash' | 'deck' | ... )
 // isMyTurn: そのカードが手番プレイヤーの操作可能カードか
@@ -28,6 +34,14 @@ export const getAvailableActions = (
   const actions: CardActionDescriptor[] = [];
 
   if (location === 'hand') {
+    // イベントは【メイン】効果を持つ場合のみ「発動」できる。カウンター/トリガー専用
+    // イベントは自ターンに発動不可（発動導線を出さない）。
+    if (normalizeCardType(card.type) === 'EVENT') {
+      if (eventHasMainPlay(card)) {
+        actions.push({ key: 'play', label: '発動する' });
+      }
+      return actions;
+    }
     actions.push({ key: 'play', label: '登場させる' });
     return actions;
   }
