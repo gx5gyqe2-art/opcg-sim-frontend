@@ -6,10 +6,10 @@ import {
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
-  deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, fetchOembedBody,
+  deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
   fetchSeriesSummary, putEventResults,
 } from './resultsClient';
-import type { FlagshipLeader, SummaryItem } from './resultsClient';
+import type { ExtractedEntry, FlagshipLeader, SummaryItem } from './resultsClient';
 
 /**
  * フラッグシップバトル 開催一覧（P1）+ 結果登録・閲覧（P2）。
@@ -609,42 +609,50 @@ const DetailPanel: React.FC<{
     }
   };
 
-  // oEmbed 代理取得で本文欄を埋める（ベストエフォート。取れなければ手貼り誘導）。
-  const runOembed = async () => {
+  // 抽出候補をフォームへ流し込み、確認メッセージ文面を返す（取り込み/手貼り共通）。
+  const applyResults = (results: ExtractedEntry[], prefix = ''): string => {
+    if (results.length === 0) return `${prefix}リーダーを抽出できませんでした。手入力してください。`;
+    setRows(results.map((r) => ({
+      placement: r.placement,
+      cardNumber: r.leaderCardNumber ?? '',
+      raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
+    })));
+    const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
+    return `${prefix}${results.length}件の候補を入れました。`
+      + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
+      + '確認・修正して保存してください。';
+  };
+
+  // URL → 本文取得 → 候補抽出 を一発で実行（設計 §15、無料・認証不要）。
+  const runIngest = async () => {
     if (!url.trim()) return;
     setExtracting(true); setExtractNote(null);
-    const body = await fetchOembedBody(url.trim());
-    setExtracting(false);
-    if (body) {
-      setBodyText(body);
-      setExtractNote('本文を取得しました。「候補を生成」で抽出できます。');
-    } else {
-      setExtractNote('本文を自動取得できませんでした。ポスト本文をコピペしてください。');
+    try {
+      const ing = await ingestFromUrl(url.trim());
+      setBodyText(ing.bodyText);
+      const who = ing.author ? `@${ing.author} の本文を取得。` : '本文を取得。';
+      setExtractNote(applyResults(ing.results, who));
+    } catch (e) {
+      // 取得不可（画像のみ・X制限・非公開等）→ 手貼りへ誘導
+      setExtractNote(
+        (e instanceof Error && e.message && !e.message.startsWith('HTTP')
+          ? `${e.message} `
+          : '本文を自動取得できませんでした。')
+        + 'ポスト本文をコピペして「候補を生成」してください。',
+      );
+    } finally {
+      setExtracting(false);
     }
   };
 
-  // 本文 → 順位×リーダーの候補をフォームへ流し込む（人が確認・修正して保存）。
+  // 手貼り本文 → 順位×リーダーの候補をフォームへ流し込む（取得できない画像ポスト等の受け皿）。
   const runExtract = async () => {
     const text = bodyText.trim();
     if (!text) { setExtractNote('本文を入力してください。'); return; }
     setExtracting(true); setExtractNote(null);
     try {
       const { results } = await extractFromText(text);
-      if (results.length === 0) {
-        setExtractNote('リーダーを抽出できませんでした。手入力してください。');
-      } else {
-        setRows(results.map((r) => ({
-          placement: r.placement,
-          cardNumber: r.leaderCardNumber ?? '',
-          raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
-        })));
-        const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
-        setExtractNote(
-          `${results.length}件の候補を入れました。`
-          + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
-          + '確認・修正して保存してください。',
-        );
-      }
+      setExtractNote(applyResults(results));
     } catch (e) {
       setExtractNote(e instanceof Error ? e.message : String(e));
     } finally {
@@ -702,17 +710,19 @@ const DetailPanel: React.FC<{
               />
 
               <div className="fs-extract">
-                <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（貼り付けて候補生成 / LLM不使用・無料）</label>
+                <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（URLから自動取得 / 手貼り可・LLM不使用・無料）</label>
                 <textarea
                   id="fs-body" className="fs-textarea" rows={3}
-                  placeholder="ポスト本文をコピペ。または「URLから本文取得」を試す（画像のみのポストは手入力）"
+                  placeholder="上のURLを入れて「Xから取り込み」。取得できないポスト（画像のみ等）は本文をコピペして「候補を生成」"
                   value={bodyText} onChange={(e) => setBodyText(e.target.value)}
                 />
                 <div className="fs-form-actions">
-                  <button className="fs-btn ghost" onClick={runOembed} disabled={extracting || !url.trim()}>URLから本文取得</button>
+                  <button className="fs-btn" onClick={runIngest} disabled={extracting || !url.trim()}>
+                    {extracting ? '取り込み中…' : 'Xから取り込み'}
+                  </button>
                   <div className="fs-spacer" />
-                  <button className="fs-btn" onClick={runExtract} disabled={extracting || !bodyText.trim()}>
-                    {extracting ? '生成中…' : '候補を生成'}
+                  <button className="fs-btn ghost" onClick={runExtract} disabled={extracting || !bodyText.trim()}>
+                    候補を生成
                   </button>
                 </div>
                 {extractNote && <p className="fs-dim" style={{ margin: '2px 0 0', fontSize: 12 }}>{extractNote}</p>}
