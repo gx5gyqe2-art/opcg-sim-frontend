@@ -25,7 +25,8 @@ export interface UseFlagshipEvents {
   refetch: () => void;
 }
 
-export function useFlagshipEvents(seriesId: number): UseFlagshipEvents {
+/** seriesId に null を渡すと何も取得しない（その月に存在しない大会種別のスロット用）。 */
+export function useFlagshipEvents(seriesId: number | null): UseFlagshipEvents {
   const [events, setEvents] = useState<FlagshipEvent[]>([]);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -67,6 +68,14 @@ export function useFlagshipEvents(seriesId: number): UseFlagshipEvents {
 
   // シリーズ変更・マウント時: キャッシュを即反映し、鮮度が切れていれば自動取得。
   useEffect(() => {
+    if (seriesId === null) {
+      setEvents([]);
+      setSyncedAt(null);
+      setIsLoading(false);
+      setIsRefetching(false);
+      setError(null);
+      return;
+    }
     const now = new Date();
     const cache = readCache(seriesId);
     if (cache) {
@@ -83,6 +92,7 @@ export function useFlagshipEvents(seriesId: number): UseFlagshipEvents {
   }, [seriesId, load]);
 
   const refetch = useCallback(() => {
+    if (seriesId === null) return;
     void load(seriesId, readCache(seriesId) !== null);
   }, [seriesId, load]);
 

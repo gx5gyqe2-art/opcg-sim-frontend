@@ -17,8 +17,8 @@ import type { FlagshipSeries } from './flagship.config';
 const API_BASE = 'https://api.bandai-tcg-plus.com';
 /** ONE PIECE CARD GAME の game_title_id（event/list 応答の実測値） */
 const GAME_TITLE_ID = 8;
-/** 発見対象の大会種別（セレクタの表示順もこの順） */
-const KINDS = ['フラッグシップバトル', 'エクストラグランドバトル'] as const;
+/** 発見対象の大会種別（表示順もこの順） */
+export const KINDS = ['フラッグシップバトル', 'エクストラグランドバトル'] as const;
 const PAGE_SIZE = 100;
 /** 種別ごとに先頭何ページまで見るか（新開催期は先頭に現れるため少数で足りる） */
 const PAGES = 2;
@@ -101,14 +101,56 @@ export function loadSeriesList(): FlagshipSeries[] {
   return merge([...SERIES], readCachedSeries());
 }
 
+/** 種別名の短縮表示（一覧のバッジ・KPI サブラベル用）。 */
+export function kindShort(kind: string): string {
+  if (kind === 'フラッグシップバトル') return 'フラッグシップ';
+  if (kind === 'エクストラグランドバトル') return 'エクストラ';
+  return kind;
+}
+
+/** 同じ月のフラッグシップ+エクストラをまとめた開催期セレクタの1項目。 */
+export interface SeriesMonth {
+  /** 月（1-12）。セレクタの値 */
+  month: number;
+  /** 表示ラベル（例: 7月開催） */
+  label: string;
+  /** その月の開催期（種別順）。無い種別は含まれない */
+  series: FlagshipSeries[];
+}
+
 /**
- * 既定で選択する開催期: 当月のフラッグシップバトル →（無ければ）一覧先頭。
- * 新しい月の開催期が発見されても、その月になるまで既定は当月のまま。
+ * 開催期一覧を月単位にまとめる（同月のフラッグシップとエクストラを1画面に統合するため）。
+ * 同月同種別が複数ある場合（年をまたいだ同月など）は新しい id の開催期を採用する。
+ * 並びは新しい月（id が大きい開催期を含む月）が先。
  */
-export function pickDefaultSeriesId(list: FlagshipSeries[], now: Date): number {
-  const month = now.getMonth() + 1;
-  const current = list.find((s) => s.kind === KINDS[0] && monthOf(s) === month);
-  return (current ?? list[0]).id;
+export function groupByMonth(list: FlagshipSeries[]): SeriesMonth[] {
+  const byMonth = new Map<number, Map<string, FlagshipSeries>>();
+  for (const s of list) {
+    const m = monthOf(s);
+    if (m === null) continue;
+    const kinds = byMonth.get(m) ?? new Map<string, FlagshipSeries>();
+    const prev = kinds.get(s.kind);
+    if (!prev || s.id > prev.id) kinds.set(s.kind, s);
+    byMonth.set(m, kinds);
+  }
+  const kindOrder = new Map<string, number>(KINDS.map((k, i) => [k, i]));
+  return [...byMonth.entries()]
+    .map(([month, kinds]) => ({
+      month,
+      label: `${month}月開催`,
+      series: [...kinds.values()].sort((a, b) =>
+        (kindOrder.get(a.kind) ?? KINDS.length) - (kindOrder.get(b.kind) ?? KINDS.length)),
+    }))
+    .sort((a, b) => Math.max(...b.series.map((s) => s.id)) - Math.max(...a.series.map((s) => s.id)));
+}
+
+/**
+ * 既定で選択する月: 当月 →（無ければ）一覧先頭。
+ * 翌月の開催期が早めに公開されても、月が変わるまで既定は当月のまま。
+ */
+export function pickDefaultMonth(months: SeriesMonth[], now: Date): number {
+  const m = now.getMonth() + 1;
+  return (months.find((x) => x.month === m) ?? months[0]).month;
 }
 
 /**
