@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_SERIES_ID, SERIES } from './flagship.config';
+import type { FlagshipSeries } from './flagship.config';
+import {
+  groupByMonth, kindShort, loadSeriesList, pickDefaultMonth, refreshSeriesList,
+} from './seriesDiscovery';
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
@@ -31,6 +34,14 @@ const STATUS_LABEL: Record<Status, string> = {
 
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
 
+/** 種別タグ付きの開催。同月のフラッグシップ+エクストラを1つの一覧に統合するための形。 */
+interface MergedEvent extends FlagshipEvent {
+  /** この開催が属する開催期（結果登録時に backend へ同送する） */
+  seriesId: number;
+  /** 大会種別名（フラッグシップバトル / エクストラグランドバトル） */
+  kind: string;
+}
+
 /** その日を含む週（月曜始まり）の月曜日を YYYY-MM-DD で返す。 */
 function weekOf(date: string): string {
   const d = new Date(`${date}T00:00:00`);
@@ -61,14 +72,51 @@ function winnerLabel(item: SummaryItem | undefined): string | null {
 }
 
 export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
-  const [seriesId, setSeriesId] = useState<number>(DEFAULT_SERIES_ID);
-  const { events, syncedAt, isLoading, isRefetching, error, refetch } = useFlagshipEvents(seriesId);
+  // 開催期一覧は「静的設定 + 発見済みキャッシュ」で即表示し、裏で自動発見を回して更新する。
+  // セレクタは月単位: 同じ月のフラッグシップとエクストラグランドバトルを1つの一覧に統合する。
+  const [seriesList, setSeriesList] = useState<FlagshipSeries[]>(() => loadSeriesList());
+  const months = useMemo(() => groupByMonth(seriesList), [seriesList]);
+  const [month, setMonth] = useState<number>(() => pickDefaultMonth(groupByMonth(loadSeriesList()), new Date()));
+  const current = months.find((m) => m.month === month) ?? months[0];
+
+  // 種別ごとの開催期スロット（無い月は null → フックは何もしない）
+  const fsSeries = current?.series.find((s) => s.kind === 'フラッグシップバトル') ?? null;
+  const exSeries = current?.series.find((s) => s.kind === 'エクストラグランドバトル') ?? null;
+  const fs = useFlagshipEvents(fsSeries?.id ?? null);
+  const ex = useFlagshipEvents(exSeries?.id ?? null);
+
+  // 統合一覧（開催日時順）。各行に seriesId / kind をタグ付けする。
+  const events: MergedEvent[] = useMemo(() => {
+    const tag = (list: FlagshipEvent[], series: FlagshipSeries | null): MergedEvent[] =>
+      series ? list.map((e) => ({ ...e, seriesId: series.id, kind: series.kind })) : [];
+    return [...tag(fs.events, fsSeries), ...tag(ex.events, exSeries)]
+      .sort((a, b) => a.startDatetime.localeCompare(b.startDatetime));
+  }, [fs.events, ex.events, fsSeries, exSeries]);
+
+  const isLoading = fs.isLoading || ex.isLoading;
+  const isRefetching = fs.isRefetching || ex.isRefetching;
+  const error = fs.error ?? ex.error;
+  const syncedAt = [fs.syncedAt, ex.syncedAt].filter((x): x is string => !!x).sort().pop() ?? null;
+
+  useEffect(() => {
+    let alive = true;
+    refreshSeriesList().then((l) => { if (alive) setSeriesList(l); }).catch(() => { /* 静的設定で継続 */ });
+    return () => { alive = false; };
+  }, []);
+
+  // 手動「取得」は両種別の開催マスターに加えて開催期の発見も強制更新する。
+  const onRefetch = () => {
+    fs.refetch();
+    ex.refetch();
+    refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
+  };
 
   const [q, setQ] = useState('');
   const [pref, setPref] = useState('');
   const [week, setWeek] = useState('');
   const [status, setStatus] = useState<Status | ''>('');
-  const [selected, setSelected] = useState<FlagshipEvent | null>(null);
+  const [kindFilter, setKindFilter] = useState('');
+  const [selected, setSelected] = useState<MergedEvent | null>(null);
 
   // P2: 結果オーバーレイ（eventId → サマリ）とリーダー辞書。不達時は backendOk=false で P1 表示。
   const [summary, setSummary] = useState<Map<number, SummaryItem>>(new Map());
@@ -79,29 +127,34 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     fetchLeaders().then(setLeaders).catch(() => setBackendOk(false));
   }, []);
 
+  const seriesIds = useMemo(() => (current?.series ?? []).map((s) => s.id), [current]);
   const loadSummary = useCallback(() => {
-    fetchSeriesSummary(seriesId)
-      .then((m) => { setSummary(m); setBackendOk(true); })
+    Promise.all(seriesIds.map((id) => fetchSeriesSummary(id)))
+      .then((maps) => {
+        setSummary(new Map(maps.flatMap((m) => [...m])));
+        setBackendOk(true);
+      })
       .catch(() => { setSummary(new Map()); setBackendOk(false); });
-  }, [seriesId]);
+  }, [seriesIds]);
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
   // 実運用時の当日。開催日との比較にのみ使う。
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const statusOf = useCallback((e: FlagshipEvent): Status => {
+  const statusOf = useCallback((e: MergedEvent): Status => {
     if (summary.has(e.id)) return 'collected';
     return baseStatus(e.date, today);
   }, [summary, today]);
 
-  // シリーズ切り替え時は絞り込みと選択もリセットする。
-  const changeSeries = (id: number) => {
-    setSeriesId(id);
+  // 月の切り替え時は絞り込みと選択もリセットする。
+  const changeMonth = (m: number) => {
+    setMonth(m);
     setQ('');
     setPref('');
     setWeek('');
     setStatus('');
+    setKindFilter('');
     setSelected(null);
   };
 
@@ -138,9 +191,10 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       (!q || e.store.includes(q)) &&
       (!pref || e.pref === pref) &&
       (!week || weekOf(e.date) === week) &&
-      (!status || statusOf(e) === status),
+      (!status || statusOf(e) === status) &&
+      (!kindFilter || e.kind === kindFilter),
     );
-  }, [events, q, pref, week, status, statusOf]);
+  }, [events, q, pref, week, status, statusOf, kindFilter]);
 
   const chipDefs: Array<[Status | '', string]> = [
     ['', 'すべて'],
@@ -159,7 +213,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       const d = new Date(`${e.date}T00:00:00`);
       rows.push(
         <tr key={`h-${e.date}`} className="fs-datehead">
-          <td colSpan={7}>
+          <td colSpan={8}>
             {d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}){e.date === today ? ' — 本日' : ''}
           </td>
         </tr>,
@@ -171,6 +225,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       <tr key={e.id} onClick={() => setSelected(e)}>
         <td className="fs-dt"><b>{e.startDatetime.slice(11, 16)}</b></td>
         <td className="fs-store"><span className="fs-name">{e.store}</span></td>
+        <td><span className={`fs-kind ${e.kind === 'エクストラグランドバトル' ? 'fs-kind-ex' : 'fs-kind-fs'}`}>{kindShort(e.kind)}</span></td>
         <td className="fs-pref">{e.pref}</td>
         <td className="fs-cap">{e.capacity ?? '—'}</td>
         <td><span className={`fs-badge fs-${s}`}>{STATUS_LABEL[s]}</span></td>
@@ -191,11 +246,11 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <div className="fs-topbar">
           <div>
             <div className="fs-eyebrow">OPCG SIM — FLAGSHIP</div>
-            <h1 className="fs-h1">{SERIES.find((s) => s.id === seriesId)?.kind ?? 'フラッグシップバトル'} 開催一覧</h1>
+            <h1 className="fs-h1">大会開催一覧</h1>
           </div>
           <div className="fs-spacer" />
           <span className="fs-synced">開催マスター同期: {formatSynced(syncedAt)}</span>
-          <button className="fs-btn" onClick={refetch} disabled={isLoading || isRefetching}>
+          <button className="fs-btn" onClick={onRefetch} disabled={isLoading || isRefetching}>
             {isRefetching || isLoading ? '取得中…' : '↻ 取得'}
           </button>
           <button className="fs-btn ghost" onClick={onBack}>← 戻る</button>
@@ -203,9 +258,15 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
 
         <div className="fs-series-row">
           <label className="fs-dim" htmlFor="fs-series">開催期</label>
-          <select id="fs-series" value={seriesId} onChange={(e) => changeSeries(Number(e.target.value))}>
-            {SERIES.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
+          <select id="fs-series" value={month} onChange={(e) => changeMonth(Number(e.target.value))}>
+            {months.map((m) => (
+              <option key={m.month} value={m.month}>{m.label}</option>
+            ))}
+          </select>
+          <select aria-label="大会種別で絞り込み" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
+            <option value="">すべての大会</option>
+            {(current?.series ?? []).map((s) => (
+              <option key={s.kind} value={s.kind}>{s.kind}</option>
             ))}
           </select>
           {!backendOk && <span className="fs-dim" style={{ fontSize: 12 }}>結果APIに接続できないため回収状況は非表示</span>}
@@ -218,7 +279,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         )}
 
         <div className="fs-kpis">
-          <Kpi label="総開催" value={kpi.total} sub={SERIES.find((s) => s.id === seriesId)?.label ?? ''} />
+          <Kpi label="総開催" value={kpi.total} sub={`${current?.label ?? ''} ${(current?.series ?? []).map((s) => kindShort(s.kind)).join(' + ')}`} />
           <Kpi label="終了した開催" value={kpi.past} sub="結果の回収対象" />
           <Kpi label="回収済" value={kpi.collected} sub={`回収率 ${kpi.rate}%`} />
           <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
@@ -258,14 +319,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
             <table>
               <thead>
                 <tr>
-                  <th>開催日時</th><th>店舗</th><th>都道府県</th><th style={{ textAlign: 'right' }}>定員</th>
+                  <th>開催日時</th><th>店舗</th><th>大会</th><th>都道府県</th><th style={{ textAlign: 'right' }}>定員</th>
                   <th>状況</th><th>優勝リーダー</th><th style={{ textAlign: 'right' }}>リンク</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length > 0 ? rows : (
                   <tr>
-                    <td colSpan={7} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={8} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
                       {isLoading ? '開催データを取得中…' : '該当する開催がありません'}
                     </td>
                   </tr>
@@ -277,6 +338,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
 
         <p className="fs-footnote">
           開催データは BANDAI TCG+ から取得した実データ（「取得」ボタンで再取得、自動取得は前回から24時間経過時）。
+          同じ月のフラッグシップバトルとエクストラグランドバトルを統合表示している（「大会」列・種別セレクタで区別）。
           結果（優勝リーダー・回収状況）は開催の行をクリックして登録・修正できる。抽出の自動化はP3で対応予定。
         </p>
       </div>
@@ -286,7 +348,6 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           key={selected.id}
           event={selected}
           today={today}
-          seriesId={seriesId}
           leaders={leaders}
           summaryItem={summary.get(selected.id)}
           backendOk={backendOk}
@@ -314,15 +375,14 @@ interface FormRow {
 }
 
 const DetailPanel: React.FC<{
-  event: FlagshipEvent;
+  event: MergedEvent;
   today: string;
-  seriesId: number;
   leaders: FlagshipLeader[];
   summaryItem: SummaryItem | undefined;
   backendOk: boolean;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ event, today, seriesId, leaders, summaryItem, backendOk, onClose, onSaved }) => {
+}> = ({ event, today, leaders, summaryItem, backendOk, onClose, onSaved }) => {
   const d = new Date(`${event.date}T00:00:00`);
   const hasResults = !!summaryItem;
   const s: Status = hasResults ? 'collected' : baseStatus(event.date, today);
@@ -368,7 +428,7 @@ const DetailPanel: React.FC<{
           leaderCardNumber: r.cardNumber || undefined,
           leaderRaw: r.cardNumber ? undefined : r.raw.trim(),
         }));
-      await putEventResults(event, seriesId, url, entries);
+      await putEventResults(event, event.seriesId, url, entries);
       setMsg({ kind: 'ok', text: '保存しました' });
       onSaved();
     } catch (e) {
@@ -403,6 +463,7 @@ const DetailPanel: React.FC<{
         <h2 className="fs-panel-h2">{event.store}</h2>
         <span className={`fs-badge fs-${s}`}>{STATUS_LABEL[s]}</span>
         <dl className="fs-dl">
+          <dt>大会</dt><dd>{event.kind}</dd>
           <dt>開催日時</dt>
           <dd>{d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}) {event.startDatetime.slice(11, 16)}</dd>
           <dt>都道府県</dt><dd>{event.pref}</dd>
@@ -532,6 +593,9 @@ const FlagshipStyles: React.FC = () => (
     .fs-missing { color: #e67e22; background: rgba(230,126,34,.14); }
     .fs-today { color: #f1c40f; background: rgba(241,196,15,.12); }
     .fs-upcoming { color: #8a8577; background: rgba(138,133,119,.12); }
+    .fs-kind { border: 1px solid #2e261c; border-radius: 4px; font-size: 11px; padding: 1px 7px; white-space: nowrap; }
+    .fs-kind-fs { color: #d4b46a; }
+    .fs-kind-ex { color: #8fb8d8; border-color: #27394a; }
     .fs-dim { color: #6f6553; }
     .fs-xlink { color: #a89a80; text-decoration: none; border: 1px solid #2e261c; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
     .fs-xlink:hover { color: #f1c40f; border-color: #8a6d0b; }
