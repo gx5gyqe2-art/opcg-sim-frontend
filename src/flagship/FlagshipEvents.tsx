@@ -6,7 +6,8 @@ import {
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
-  deleteEventResults, fetchEventResults, fetchLeaders, fetchSeriesSummary, putEventResults,
+  deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, fetchOembedBody,
+  fetchSeriesSummary, putEventResults,
 } from './resultsClient';
 import type { FlagshipLeader, SummaryItem } from './resultsClient';
 
@@ -187,6 +188,30 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return { total: events.length, past, collected, missing, rate };
   }, [events, summary, today]);
 
+  // P4: 一覧 / 集計 のビュー切替。
+  const [view, setView] = useState<'list' | 'agg'>('list');
+
+  // P4: 優勝リーダー分布。summary（月内の全開催期分＝優勝リーダー入り）を束ねるだけ。
+  const distribution = useMemo(() => {
+    const byLeader = new Map<string, { name: string; color: string; count: number }>();
+    let withWinner = 0;
+    for (const it of summary.values()) {
+      const w = it.winner;
+      if (!w) continue;
+      withWinner++;
+      const key = w.leaderCardNumber ?? `raw:${w.leaderRaw ?? ''}`;
+      const name = w.leader?.name ?? w.leaderRaw ?? '不明';
+      const color = w.leader?.color ?? '';
+      const cur = byLeader.get(key);
+      if (cur) cur.count += 1;
+      else byLeader.set(key, { name, color, count: 1 });
+    }
+    const rows = [...byLeader.values()]
+      .sort((a, b) => b.count - a.count)
+      .map((r) => ({ ...r, pct: withWinner ? Math.round((r.count / withWinner) * 1000) / 10 : 0 }));
+    return { rows, withWinner };
+  }, [summary]);
+
   const filtered = useMemo(() => {
     return events.filter((e) =>
       (!q || e.store.includes(q)) &&
@@ -270,6 +295,10 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
               <option key={s.kind} value={s.kind}>{s.kind}</option>
             ))}
           </select>
+          <div className="fs-viewtoggle" role="group" aria-label="表示切替">
+            <button className="fs-vbtn" aria-pressed={view === 'list'} onClick={() => setView('list')}>一覧</button>
+            <button className="fs-vbtn" aria-pressed={view === 'agg'} onClick={() => setView('agg')}>集計</button>
+          </div>
           {!backendOk && <span className="fs-dim" style={{ fontSize: 12 }}>結果APIに接続できないため回収状況は非表示</span>}
         </div>
 
@@ -286,6 +315,16 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
         </div>
 
+        {view === 'agg' && (
+          <AggregateView
+            distribution={distribution}
+            monthLabel={current?.label ?? ''}
+            kinds={(current?.series ?? []).map((s) => kindShort(s.kind)).join(' + ')}
+            backendOk={backendOk}
+          />
+        )}
+
+        {view === 'list' && <>
         <div className="fs-filters">
           <input type="search" placeholder="店舗名で検索" aria-label="店舗名で検索" value={q} onChange={(e) => setQ(e.target.value)} />
           <PrefFilter prefs={prefs} selected={prefSet} onChange={setPrefSet} />
@@ -335,8 +374,9 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <p className="fs-footnote">
           開催データは BANDAI TCG+ から取得した実データ（「取得」ボタンで再取得、自動取得は前回から24時間経過時）。
           同じ月のフラッグシップバトルとエクストラグランドバトルを統合表示している（「大会」列・種別セレクタで区別）。
-          結果（優勝リーダー・回収状況）は開催の行をクリックして登録・修正できる。抽出の自動化はP3で対応予定。
+          結果（優勝リーダー・回収状況）は開催の行をクリックして登録・修正できる。結果ポスト本文からの候補生成（無料）にも対応。
         </p>
+        </>}
       </div>
 
       {selected && (
@@ -429,6 +469,71 @@ const Kpi: React.FC<{ label: string; value: number; sub: string }> = ({ label, v
   </div>
 );
 
+/** OPCG の色 → 表示色。2色（"赤/緑"）は分割チップにする。 */
+const LEADER_COLOR: Record<string, string> = {
+  赤: '#e0403a', 緑: '#3fae6b', 青: '#3f7fd0', 紫: '#8a5fc0', 黒: '#5a5a63', 黄: '#e6c33a',
+};
+
+const ColorChip: React.FC<{ color: string }> = ({ color }) => {
+  const cs = color.split('/').filter(Boolean);
+  if (cs.length === 0) return <span className="fs-agg-chip" style={{ background: '#3a332a' }} />;
+  if (cs.length === 1) return <span className="fs-agg-chip" style={{ background: LEADER_COLOR[cs[0]] ?? '#3a332a' }} />;
+  return (
+    <span
+      className="fs-agg-chip"
+      style={{ background: `linear-gradient(135deg, ${LEADER_COLOR[cs[0]] ?? '#3a332a'} 50%, ${LEADER_COLOR[cs[1]] ?? '#3a332a'} 50%)` }}
+    />
+  );
+};
+
+/**
+ * P4: 集計ビュー。優勝リーダー分布を横棒で表示する。
+ * データは一覧が既に読み込んでいる summary を束ねたもの（追加の取得なし）。X投稿は範囲外。
+ */
+const AggregateView: React.FC<{
+  distribution: { rows: Array<{ name: string; color: string; count: number; pct: number }>; withWinner: number };
+  monthLabel: string;
+  kinds: string;
+  backendOk: boolean;
+}> = ({ distribution, monthLabel, kinds, backendOk }) => {
+  const { rows, withWinner } = distribution;
+  const max = rows.length ? rows[0].count : 1;
+  return (
+    <div className="fs-agg">
+      <div className="fs-agg-head">
+        <h2 className="fs-agg-h2">優勝リーダー分布</h2>
+        <span className="fs-dim" style={{ fontSize: 12 }}>{monthLabel} {kinds}・回収済 {withWinner} 件</span>
+      </div>
+      {!backendOk ? (
+        <p className="fs-dim" style={{ margin: 0 }}>結果APIに接続できないため集計できません。</p>
+      ) : rows.length === 0 ? (
+        <p className="fs-dim" style={{ margin: 0 }}>
+          まだ結果が登録されていません。一覧から開催を開いて結果を登録すると、ここに優勝リーダー分布が出ます。
+        </p>
+      ) : (
+        <div className="fs-agg-chart">
+          {rows.map((r, i) => (
+            <div className="fs-agg-row" key={`${r.name}-${r.color}-${i}`} title={`${r.name}（${r.color || '—'}）: ${r.count}件 / ${r.pct}%`}>
+              <div className="fs-agg-who">
+                <ColorChip color={r.color} />
+                <span className="fs-agg-name">{r.name}</span>
+              </div>
+              <div className="fs-agg-track">
+                <span className={`fs-agg-bar${i === 0 ? ' top' : ''}`} style={{ width: `${(r.count / max) * 100}%` }} />
+                <span className="fs-agg-qty"><b>{r.count}</b>件 · {r.pct}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="fs-footnote" style={{ marginTop: 14 }}>
+        登録済み結果の優勝リーダー（placement=1）を集計。回収率などの KPI は上段カードを参照。
+        集計は結果登録データからその場で算出（LLM不使用・追加取得なし）。X 投稿はまだ対象外。
+      </p>
+    </div>
+  );
+};
+
 /** 結果登録フォームの1行分。cardNumber（辞書選択）が空のときのみ raw（自由入力）を使う。 */
 interface FormRow {
   placement: number;
@@ -453,6 +558,10 @@ const DetailPanel: React.FC<{
   const [rows, setRows] = useState<FormRow[]>([{ placement: 1, cardNumber: '', raw: '' }]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // P3: 本文から候補を抽出（LLM不使用・辞書マッチング、設計 §13）。
+  const [bodyText, setBodyText] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState<string | null>(null);
 
   // 登録済みの開催は既存の結果をフォームへプリフィルする（訂正フロー）。
   useEffect(() => {
@@ -497,6 +606,49 @@ const DetailPanel: React.FC<{
       setMsg({ kind: 'err', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
+    }
+  };
+
+  // oEmbed 代理取得で本文欄を埋める（ベストエフォート。取れなければ手貼り誘導）。
+  const runOembed = async () => {
+    if (!url.trim()) return;
+    setExtracting(true); setExtractNote(null);
+    const body = await fetchOembedBody(url.trim());
+    setExtracting(false);
+    if (body) {
+      setBodyText(body);
+      setExtractNote('本文を取得しました。「候補を生成」で抽出できます。');
+    } else {
+      setExtractNote('本文を自動取得できませんでした。ポスト本文をコピペしてください。');
+    }
+  };
+
+  // 本文 → 順位×リーダーの候補をフォームへ流し込む（人が確認・修正して保存）。
+  const runExtract = async () => {
+    const text = bodyText.trim();
+    if (!text) { setExtractNote('本文を入力してください。'); return; }
+    setExtracting(true); setExtractNote(null);
+    try {
+      const { results } = await extractFromText(text);
+      if (results.length === 0) {
+        setExtractNote('リーダーを抽出できませんでした。手入力してください。');
+      } else {
+        setRows(results.map((r) => ({
+          placement: r.placement,
+          cardNumber: r.leaderCardNumber ?? '',
+          raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
+        })));
+        const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
+        setExtractNote(
+          `${results.length}件の候補を入れました。`
+          + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
+          + '確認・修正して保存してください。',
+        );
+      }
+    } catch (e) {
+      setExtractNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExtracting(false);
     }
   };
 
@@ -548,6 +700,24 @@ const DetailPanel: React.FC<{
                 id="fs-post-url" type="url" placeholder="https://x.com/…/status/…"
                 value={url} onChange={(e) => setUrl(e.target.value)}
               />
+
+              <div className="fs-extract">
+                <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（貼り付けて候補生成 / LLM不使用・無料）</label>
+                <textarea
+                  id="fs-body" className="fs-textarea" rows={3}
+                  placeholder="ポスト本文をコピペ。または「URLから本文取得」を試す（画像のみのポストは手入力）"
+                  value={bodyText} onChange={(e) => setBodyText(e.target.value)}
+                />
+                <div className="fs-form-actions">
+                  <button className="fs-btn ghost" onClick={runOembed} disabled={extracting || !url.trim()}>URLから本文取得</button>
+                  <div className="fs-spacer" />
+                  <button className="fs-btn" onClick={runExtract} disabled={extracting || !bodyText.trim()}>
+                    {extracting ? '生成中…' : '候補を生成'}
+                  </button>
+                </div>
+                {extractNote && <p className="fs-dim" style={{ margin: '2px 0 0', fontSize: 12 }}>{extractNote}</p>}
+              </div>
+
               {rows.map((r, i) => (
                 <div className="fs-form-row" key={i}>
                   <span className="fs-place">{r.placement === 1 ? '優勝' : `${r.placement}位`}</span>
@@ -620,6 +790,25 @@ const FlagshipStyles: React.FC = () => (
     .fs-btn.danger { border-color: #8a4b1c; color: #e6b98a; }
     .fs-btn.danger:hover:not(:disabled) { background: rgba(230,126,34,.15); color: #e6b98a; }
     .fs-series-row { display: flex; align-items: center; gap: 10px; margin: 14px 0 0; flex-wrap: wrap; }
+    .fs-viewtoggle { display: inline-flex; border: 1px solid #2e261c; border-radius: 6px; overflow: hidden; }
+    .fs-vbtn { background: #1e1812; color: #a89a80; border: none; padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
+    .fs-vbtn + .fs-vbtn { border-left: 1px solid #2e261c; }
+    .fs-vbtn[aria-pressed="true"] { background: #f1c40f; color: #0b0908; font-weight: 700; }
+    .fs-agg { background: #16120e; border: 1px solid #2e261c; border-radius: 8px; padding: 16px 18px; margin-bottom: 12px; }
+    .fs-agg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .fs-agg-h2 { font-size: 13px; letter-spacing: .08em; color: #f1c40f; font-weight: 700; margin: 0; }
+    .fs-agg-chart { display: flex; flex-direction: column; gap: 2px; }
+    .fs-agg-row { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 12px; padding: 5px 6px; border-radius: 6px; }
+    .fs-agg-row:hover { background: rgba(241,196,15,.05); }
+    .fs-agg-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .fs-agg-chip { width: 11px; height: 11px; border-radius: 3px; flex: none; border: 1px solid rgba(0,0,0,.35); }
+    .fs-agg-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .fs-agg-track { display: flex; align-items: center; gap: 8px; }
+    .fs-agg-bar { height: 15px; border-radius: 3px 5px 5px 3px; background: linear-gradient(90deg, #d9a521, #f1c40f); min-width: 3px; }
+    .fs-agg-bar.top { background: linear-gradient(90deg, #e6b011, #f1c40f); }
+    .fs-agg-qty { font-variant-numeric: tabular-nums; font-size: 12px; color: #a89a80; white-space: nowrap; }
+    .fs-agg-qty b { color: #f0e6d2; font-weight: 700; }
+    @media (max-width: 620px) { .fs-agg-row { grid-template-columns: 140px 1fr; } }
     .fs-root select, .fs-root input[type="search"], .fs-root input[type="url"], .fs-root input[type="text"] { background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: inherit; }
     .fs-root select:focus-visible, .fs-root input:focus-visible, .fs-root button:focus-visible { outline: 2px solid #f1c40f; outline-offset: 1px; }
     .fs-error { margin: 14px 0 0; padding: 8px 12px; border: 1px solid #8a4b1c; background: rgba(230,126,34,.12); color: #e6b98a; border-radius: 6px; font-size: 13px; }
@@ -686,6 +875,9 @@ const FlagshipStyles: React.FC = () => (
     .fs-section h3 { font-size: 11px; letter-spacing: .14em; color: #f1c40f; margin: 0 0 8px; font-weight: 700; }
     .fs-form { display: flex; flex-direction: column; gap: 8px; }
     .fs-form-label { font-size: 12px; color: #a89a80; }
+    .fs-extract { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin: 2px 0 4px; border: 1px dashed #2e261c; border-radius: 6px; background: rgba(241,196,15,.03); }
+    .fs-textarea { background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
+    .fs-textarea:focus-visible { outline: 2px solid #f1c40f; outline-offset: 1px; }
     .fs-form-row { display: flex; gap: 6px; align-items: center; }
     .fs-form-row select { flex: 1; min-width: 0; }
     .fs-form-row input[type="text"] { flex: 1; min-width: 0; }

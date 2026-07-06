@@ -86,6 +86,35 @@ export async function fetchLeaders(): Promise<FlagshipLeader[]> {
   return raw.map(toLeader);
 }
 
+/** 抽出候補 1 件（設計 §13、LLM不使用の辞書マッチング結果）。 */
+export interface ExtractedEntry extends ResultEntry {
+  confidence: number;
+}
+
+/** 本文から順位×リーダーの候補を抽出（サジェスト）。DBには書かない。 */
+export async function extractFromText(
+  text: string,
+): Promise<{ results: ExtractedEntry[]; unmatched: string[] }> {
+  const raw = await request<{
+    results: Array<RawEntry & { confidence: number }>;
+    unmatched: string[];
+  }>('/extract', { method: 'POST', body: JSON.stringify({ text }) });
+  return {
+    results: raw.results.map((r) => ({ ...toEntry(r), confidence: r.confidence })),
+    unmatched: raw.unmatched ?? [],
+  };
+}
+
+/** oEmbed 代理取得でポスト本文を得る（ベストエフォート。取れなければ null）。 */
+export async function fetchOembedBody(url: string): Promise<string | null> {
+  try {
+    const raw = await request<{ body_text: string }>(`/oembed?url=${encodeURIComponent(url)}`);
+    return raw.body_text || null;
+  } catch {
+    return null; // 取得不可（X制限・環境依存）→ 手貼りへ
+  }
+}
+
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
