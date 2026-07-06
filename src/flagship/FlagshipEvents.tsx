@@ -6,7 +6,8 @@ import {
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
-  deleteEventResults, fetchEventResults, fetchLeaders, fetchSeriesSummary, putEventResults,
+  deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, fetchOembedBody,
+  fetchSeriesSummary, putEventResults,
 } from './resultsClient';
 import type { FlagshipLeader, SummaryItem } from './resultsClient';
 
@@ -453,6 +454,10 @@ const DetailPanel: React.FC<{
   const [rows, setRows] = useState<FormRow[]>([{ placement: 1, cardNumber: '', raw: '' }]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // P3: 本文から候補を抽出（LLM不使用・辞書マッチング、設計 §13）。
+  const [bodyText, setBodyText] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extractNote, setExtractNote] = useState<string | null>(null);
 
   // 登録済みの開催は既存の結果をフォームへプリフィルする（訂正フロー）。
   useEffect(() => {
@@ -497,6 +502,49 @@ const DetailPanel: React.FC<{
       setMsg({ kind: 'err', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
+    }
+  };
+
+  // oEmbed 代理取得で本文欄を埋める（ベストエフォート。取れなければ手貼り誘導）。
+  const runOembed = async () => {
+    if (!url.trim()) return;
+    setExtracting(true); setExtractNote(null);
+    const body = await fetchOembedBody(url.trim());
+    setExtracting(false);
+    if (body) {
+      setBodyText(body);
+      setExtractNote('本文を取得しました。「候補を生成」で抽出できます。');
+    } else {
+      setExtractNote('本文を自動取得できませんでした。ポスト本文をコピペしてください。');
+    }
+  };
+
+  // 本文 → 順位×リーダーの候補をフォームへ流し込む（人が確認・修正して保存）。
+  const runExtract = async () => {
+    const text = bodyText.trim();
+    if (!text) { setExtractNote('本文を入力してください。'); return; }
+    setExtracting(true); setExtractNote(null);
+    try {
+      const { results } = await extractFromText(text);
+      if (results.length === 0) {
+        setExtractNote('リーダーを抽出できませんでした。手入力してください。');
+      } else {
+        setRows(results.map((r) => ({
+          placement: r.placement,
+          cardNumber: r.leaderCardNumber ?? '',
+          raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
+        })));
+        const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
+        setExtractNote(
+          `${results.length}件の候補を入れました。`
+          + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
+          + '確認・修正して保存してください。',
+        );
+      }
+    } catch (e) {
+      setExtractNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExtracting(false);
     }
   };
 
@@ -548,6 +596,24 @@ const DetailPanel: React.FC<{
                 id="fs-post-url" type="url" placeholder="https://x.com/…/status/…"
                 value={url} onChange={(e) => setUrl(e.target.value)}
               />
+
+              <div className="fs-extract">
+                <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（貼り付けて候補生成 / LLM不使用・無料）</label>
+                <textarea
+                  id="fs-body" className="fs-textarea" rows={3}
+                  placeholder="ポスト本文をコピペ。または「URLから本文取得」を試す（画像のみのポストは手入力）"
+                  value={bodyText} onChange={(e) => setBodyText(e.target.value)}
+                />
+                <div className="fs-form-actions">
+                  <button className="fs-btn ghost" onClick={runOembed} disabled={extracting || !url.trim()}>URLから本文取得</button>
+                  <div className="fs-spacer" />
+                  <button className="fs-btn" onClick={runExtract} disabled={extracting || !bodyText.trim()}>
+                    {extracting ? '生成中…' : '候補を生成'}
+                  </button>
+                </div>
+                {extractNote && <p className="fs-dim" style={{ margin: '2px 0 0', fontSize: 12 }}>{extractNote}</p>}
+              </div>
+
               {rows.map((r, i) => (
                 <div className="fs-form-row" key={i}>
                   <span className="fs-place">{r.placement === 1 ? '優勝' : `${r.placement}位`}</span>
@@ -686,6 +752,9 @@ const FlagshipStyles: React.FC = () => (
     .fs-section h3 { font-size: 11px; letter-spacing: .14em; color: #f1c40f; margin: 0 0 8px; font-weight: 700; }
     .fs-form { display: flex; flex-direction: column; gap: 8px; }
     .fs-form-label { font-size: 12px; color: #a89a80; }
+    .fs-extract { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin: 2px 0 4px; border: 1px dashed #2e261c; border-radius: 6px; background: rgba(241,196,15,.03); }
+    .fs-textarea { background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
+    .fs-textarea:focus-visible { outline: 2px solid #f1c40f; outline-offset: 1px; }
     .fs-form-row { display: flex; gap: 6px; align-items: center; }
     .fs-form-row select { flex: 1; min-width: 0; }
     .fs-form-row input[type="text"] { flex: 1; min-width: 0; }
