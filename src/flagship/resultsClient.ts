@@ -214,6 +214,63 @@ export async function discoverPosts(req: {
   };
 }
 
+/** 全国の優勝ポストを収集して DB に貯める（設計 §16.7）。件数を返す。 */
+export async function collectPosts(opts?: { maxResults?: number; pages?: number }): Promise<number> {
+  const raw = await request<{ collected: number }>('/collect', {
+    method: 'POST',
+    body: JSON.stringify({ max_results: opts?.maxResults ?? 100, pages: opts?.pages ?? 3 }),
+  });
+  return raw.collected;
+}
+
+/** 収集ポストの開催候補1件（handle=自動確定候補／name=要承認、設計 §16.7）。 */
+export interface LinkCandidate {
+  eventId: number;
+  method: string;   // 'handle' | 'name'
+  score: number;
+  dayGap: number;
+  auto: boolean;
+}
+
+/** 紐付けレビューの1行（未紐付け収集ポスト＋開催候補）。 */
+export interface ReviewPost {
+  tweetId: string;
+  author: string | null;
+  authorName: string | null;
+  date: string | null;
+  charName: string | null;
+  cardNumber: string | null;
+  tweetUrl: string | null;
+  candidates: LinkCandidate[];
+}
+
+/** 指定シリーズの開催へ、未紐付けポストを照合したレビュー表を取得。 */
+export async function fetchLinkReview(seriesId: number): Promise<ReviewPost[]> {
+  const raw = await request<{
+    posts: Array<{
+      tweet_id: string; author: string | null; author_name: string | null; date: string | null;
+      char_name: string | null; card_number: string | null; tweet_url: string | null;
+      candidates: Array<{ event_id: number; method: string; score: number; day_gap: number; auto: boolean }>;
+    }>;
+  }>(`/link/review?series_id=${seriesId}`);
+  return raw.posts.map((p) => ({
+    tweetId: p.tweet_id, author: p.author, authorName: p.author_name, date: p.date,
+    charName: p.char_name, cardNumber: p.card_number, tweetUrl: p.tweet_url,
+    candidates: p.candidates.map((c) => ({
+      eventId: c.event_id, method: c.method, score: c.score, dayGap: c.day_gap, auto: c.auto,
+    })),
+  }));
+}
+
+/** 承認した (ポスト→開催) をまとめて保存（未紐付けプールから外す）。更新件数を返す。 */
+export async function linkApprove(links: Array<{ tweetId: string; eventId: number | null }>): Promise<number> {
+  const raw = await request<{ updated: number }>('/link/approve', {
+    method: 'POST',
+    body: JSON.stringify({ links: links.map((l) => ({ tweet_id: l.tweetId, event_id: l.eventId })) }),
+  });
+  return raw.updated;
+}
+
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
