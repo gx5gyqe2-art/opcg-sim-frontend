@@ -1,10 +1,12 @@
 /**
- * フラッグシップバトル開催一覧（P1）の設定。
+ * 大会開催一覧（P1）の設定。
  *
  * 対象の開催期（シリーズ）ID と、開催マスター取得のキャッシュ方針をここで管理する。
  * 新しい開催期が始まったら SERIES 配列の先頭に追加する。ID は公式イベントページ
- * （onepiece-cardgame.com/events/flagship-battle-YYYYMM.html）がリンクする
- * BANDAI TCG+ のシリーズページ URL 末尾から取得できる。
+ * （onepiece-cardgame.com/events/flagship-battle-YYYYMM.html や
+ * extra-grand-battle-YYYYMM.html）がリンクする BANDAI TCG+ のシリーズページ URL
+ * 末尾から取得できる。フラッグシップ以外の大会（エクストラグランドバトル等）も
+ * 同一 API・同一形式のため、ここに追加するだけで一覧・結果登録の対象になる。
  */
 
 export interface FlagshipSeries {
@@ -12,12 +14,16 @@ export interface FlagshipSeries {
   id: number;
   /** 画面表示用のラベル（例: フラッグシップバトル(7月開催)） */
   label: string;
+  /** 大会種別名（画面見出しに使う。例: フラッグシップバトル） */
+  kind: string;
 }
 
 /** 対象の開催期。先頭が既定選択。 */
 export const SERIES: readonly FlagshipSeries[] = [
-  { id: 7664, label: 'フラッグシップバトル(8月開催)' },
-  { id: 7395, label: 'フラッグシップバトル(7月開催)' },
+  { id: 7664, label: 'フラッグシップバトル(8月開催)', kind: 'フラッグシップバトル' },
+  { id: 7395, label: 'フラッグシップバトル(7月開催)', kind: 'フラッグシップバトル' },
+  { id: 7665, label: 'エクストラグランドバトル(8月開催)', kind: 'エクストラグランドバトル' },
+  { id: 7396, label: 'エクストラグランドバトル(7月開催)', kind: 'エクストラグランドバトル' },
 ] as const;
 
 /** 既定で選択するシリーズ ID。 */

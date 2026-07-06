@@ -191,7 +191,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <div className="fs-topbar">
           <div>
             <div className="fs-eyebrow">OPCG SIM — FLAGSHIP</div>
-            <h1 className="fs-h1">フラッグシップバトル 開催一覧</h1>
+            <h1 className="fs-h1">{SERIES.find((s) => s.id === seriesId)?.kind ?? 'フラッグシップバトル'} 開催一覧</h1>
           </div>
           <div className="fs-spacer" />
           <span className="fs-synced">開催マスター同期: {formatSynced(syncedAt)}</span>
