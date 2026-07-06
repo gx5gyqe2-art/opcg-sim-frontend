@@ -7,10 +7,11 @@ import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
-  fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts, fetchTrend,
+  fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
+  collectPosts, fetchLinkReview, linkApprove,
 } from './resultsClient';
 import type {
-  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem, TrendItem,
+  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem, ReviewPost,
 } from './resultsClient';
 
 /**
@@ -190,13 +191,13 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return { total: events.length, past, collected, missing, rate };
   }, [events, summary, today]);
 
-  // P4/§16.6: 一覧 / 集計 / 全国トレンド のビュー切替。
-  const [view, setView] = useState<'list' | 'agg' | 'trend'>('list');
-  // §16.6: 検索（＝全国トレンド）が使えるか。鍵未設定なら導線を隠す。
-  const [trendEnabled, setTrendEnabled] = useState(false);
+  // P4/§16.7: 一覧 / 集計 / 紐付け のビュー切替。
+  const [view, setView] = useState<'list' | 'agg' | 'link'>('list');
+  // §16.7: 収集＝検索が使えるか（鍵未設定なら紐付け導線を隠す）。
+  const [linkEnabled, setLinkEnabled] = useState(false);
   useEffect(() => {
     let alive = true;
-    fetchDiscoverStatus().then((ok) => { if (alive) setTrendEnabled(ok); });
+    fetchDiscoverStatus().then((ok) => { if (alive) setLinkEnabled(ok); });
     return () => { alive = false; };
   }, []);
 
@@ -307,8 +308,8 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           <div className="fs-viewtoggle" role="group" aria-label="表示切替">
             <button className="fs-vbtn" aria-pressed={view === 'list'} onClick={() => setView('list')}>一覧</button>
             <button className="fs-vbtn" aria-pressed={view === 'agg'} onClick={() => setView('agg')}>集計</button>
-            {trendEnabled && (
-              <button className="fs-vbtn" aria-pressed={view === 'trend'} onClick={() => setView('trend')}>全国トレンド</button>
+            {linkEnabled && (
+              <button className="fs-vbtn" aria-pressed={view === 'link'} onClick={() => setView('link')}>紐付け</button>
             )}
           </div>
           {!backendOk && <span className="fs-dim" style={{ fontSize: 12 }}>結果APIに接続できないため回収状況は非表示</span>}
@@ -336,7 +337,9 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           />
         )}
 
-        {view === 'trend' && <TrendView />}
+        {view === 'link' && (
+          <LinkView events={events} seriesIds={seriesIds} onSaved={loadSummary} />
+        )}
 
         {view === 'list' && <>
         <div className="fs-filters">
@@ -549,69 +552,149 @@ const AggregateView: React.FC<{
 };
 
 /**
- * §16.6: 全国トレンドビュー。X の「フラッグシップ 優勝」を横断収集し、(投稿者×日)で重複除去、
- * キャラ単位に正規化した優勝リーダー分布を表示する。手動「集計する」で backend /trend を叩く。
+ * §16.7: 紐付け（一括登録）ビュー。全国の優勝ポストを収集し、この月の開催へ照合した候補を
+ * 突き合わせ表で出す。店アカウント一致(handle)は自動チェック、店名一致は要確認。選んで
+ * 「一括登録」すると、既存の結果登録として保存され、集計・一覧・回収率に反映される。
  */
-const TrendView: React.FC = () => {
-  const [busy, setBusy] = useState(false);
-  const [data, setData] = useState<{ collected: number; tournaments: number; items: TrendItem[] } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: () => void }>
+  = ({ events, seriesIds, onSaved }) => {
+    const [busy, setBusy] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [review, setReview] = useState<ReviewPost[] | null>(null);
+    const [sel, setSel] = useState<Record<string, number | null>>({});
+    const [note, setNote] = useState<string | null>(null);
+    const eventById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
 
-  const run = async () => {
-    setBusy(true); setErr(null);
-    try {
-      const r = await fetchTrend({ pages: 3 });
-      setData({ collected: r.collected, tournaments: r.tournaments, items: r.items });
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+    const run = async () => {
+      setBusy(true); setNote(null);
+      try {
+        const collected = await collectPosts({ pages: 3 });
+        const all = (await Promise.all(seriesIds.map((id) => fetchLinkReview(id)))).flat();
+        const byId = new Map<string, ReviewPost>();
+        for (const p of all) {
+          const ex = byId.get(p.tweetId);
+          if (ex) ex.candidates = [...ex.candidates, ...p.candidates];
+          else byId.set(p.tweetId, { ...p, candidates: [...p.candidates] });
+        }
+        const posts = [...byId.values()];
+        const withCand = posts.filter((p) => p.candidates.length > 0);
+        const s: Record<string, number | null> = {};
+        for (const p of withCand) {
+          const auto = p.candidates.find((c) => c.auto);
+          if (auto) s[p.tweetId] = auto.eventId;   // handle一致は自動チェック
+        }
+        setReview(withCand); setSel(s);
+        setNote(`収集 ${collected} 件 / この月の開催に一致 ${withCand.length} 件（候補なし ${posts.length - withCand.length} 件は個人ポスト等で対象外）`);
+      } catch (e) {
+        setNote(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    };
 
-  const max = data && data.items.length ? data.items[0].count : 1;
-  return (
-    <div className="fs-agg">
-      <div className="fs-agg-head">
-        <h2 className="fs-agg-h2">全国トレンド（優勝リーダー）</h2>
-        <div className="fs-form-actions" style={{ margin: 0 }}>
-          {data && <span className="fs-dim" style={{ fontSize: 12 }}>収集 {data.collected} 件 → 重複除去 {data.tournaments} 大会</span>}
-          <div className="fs-spacer" />
-          <button className="fs-btn" onClick={run} disabled={busy}>{busy ? '集計中…' : data ? '再集計' : '集計する'}</button>
+    const register = async () => {
+      const picks = (review ?? []).filter((p) => sel[p.tweetId] != null);
+      if (!picks.length) { setNote('登録する候補を選択してください。'); return; }
+      setSaving(true); setNote(null);
+      const done: string[] = [];
+      try {
+        for (const p of picks) {
+          const ev = eventById.get(sel[p.tweetId] as number);
+          if (!ev) continue;
+          try {
+            await putEventResults(ev, ev.seriesId, p.tweetUrl ?? '', [{
+              placement: 1,
+              leaderCardNumber: p.cardNumber ?? undefined,
+              leaderRaw: p.cardNumber ? undefined : (p.charName ?? undefined),
+            }]);
+            done.push(p.tweetId);
+          } catch { /* 重複URL(409)等はスキップ */ }
+        }
+        if (done.length) {
+          await linkApprove(done.map((tid) => ({ tweetId: tid, eventId: sel[tid] as number })));
+        }
+        onSaved();
+        setReview((review ?? []).filter((p) => !done.includes(p.tweetId)));
+        setNote(`${done.length}/${picks.length} 件を一括登録しました${done.length < picks.length ? '（残りは重複等でスキップ）' : ''}。集計・一覧・回収率に反映されます。`);
+      } catch (e) {
+        setNote(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const selectedCount = (review ?? []).filter((p) => sel[p.tweetId] != null).length;
+    return (
+      <div className="fs-agg">
+        <div className="fs-agg-head">
+          <h2 className="fs-agg-h2">紐付け（一括登録）</h2>
+          <div className="fs-form-actions" style={{ margin: 0 }}>
+            {note && <span className="fs-dim" style={{ fontSize: 12 }}>{note}</span>}
+            <div className="fs-spacer" />
+            <button className="fs-btn" onClick={run} disabled={busy || saving}>{busy ? '収集中…' : review ? '再収集' : '収集して照合'}</button>
+          </div>
         </div>
-      </div>
-      {err && <p className="fs-dim" style={{ margin: '4px 0 0', color: '#e0806a' }}>{err}</p>}
-      {!data && !busy && !err && (
-        <p className="fs-dim" style={{ margin: 0 }}>
-          「集計する」で、直近のXから全国のフラッグシップ優勝ポストを横断収集し、優勝リーダー分布を出します（店舗・タグ不問）。
-        </p>
-      )}
-      {data && data.items.length > 0 && (
-        <div className="fs-agg-chart">
-          {data.items.map((r, i) => (
-            <div className="fs-agg-row" key={`${r.character}-${i}`} title={`${r.character}（${r.colors.join('/') || '色未確定'}）: ${r.count}大会 / ${r.pct}%`}>
-              <div className="fs-agg-who">
-                <ColorChip color={r.colors.join('/')} />
-                <span className="fs-agg-name">{r.character}</span>
-              </div>
-              <div className="fs-agg-track">
-                <span className={`fs-agg-bar${i === 0 ? ' top' : ''}`} style={{ width: `${(r.count / max) * 100}%` }} />
-                <span className="fs-agg-qty"><b>{r.count}</b>大会 · {r.pct}%</span>
-              </div>
+        {!review && !busy && (
+          <p className="fs-dim" style={{ margin: 0 }}>
+            「収集して照合」で全国の優勝ポストを集め、この月の開催に一致する候補を出します。店舗が投稿した結果は★handle一致で自動チェック、店名一致は要確認。選んで一括登録すると集計・一覧に反映されます。
+          </p>
+        )}
+        {review && review.length > 0 && (
+          <>
+            <div className="fs-linktbl">
+              {review.map((p) => (
+                <div className="fs-linkrow" key={p.tweetId}>
+                  <input
+                    type="checkbox" aria-label="登録対象"
+                    checked={sel[p.tweetId] != null}
+                    onChange={(e) => setSel((s) => ({
+                      ...s,
+                      [p.tweetId]: e.target.checked
+                        ? (p.candidates.find((c) => c.auto)?.eventId ?? p.candidates[0].eventId)
+                        : null,
+                    }))}
+                  />
+                  <div className="fs-linkinfo">
+                    <b>{p.charName ?? '—'}</b>
+                    <span className="fs-dim"> @{p.author ?? '—'} · {p.date ?? ''}</span>
+                  </div>
+                  <select
+                    aria-label="紐付け先の開催"
+                    value={sel[p.tweetId] ?? ''}
+                    onChange={(e) => setSel((s) => ({ ...s, [p.tweetId]: e.target.value ? Number(e.target.value) : null }))}
+                  >
+                    <option value="">登録しない</option>
+                    {p.candidates.map((c) => {
+                      const ev = eventById.get(c.eventId);
+                      const tag = c.method === 'handle' ? '★handle' : `名前${Math.round(c.score * 100)}%`;
+                      return (
+                        <option key={c.eventId} value={c.eventId}>
+                          {ev ? `${ev.store}（${ev.date}）` : `#${c.eventId}`} — {tag}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-      {data && data.items.length === 0 && (
-        <p className="fs-dim" style={{ margin: 0 }}>優勝リーダーを抽出できるポストが見つかりませんでした。</p>
-      )}
-      <p className="fs-footnote" style={{ marginTop: 14 }}>
-        X の「フラッグシップ 優勝/全勝」を全国横断で収集 → (投稿者×日)で重複除去（同一店の連投を1大会に）→
-        集計アカウント除外 → キャラ単位に正規化（別名・色略称を合流）。直近約7日分。色は本文で不記載が多いためキャラ単位。
-      </p>
-    </div>
-  );
-};
+            <div className="fs-form-actions">
+              <div className="fs-spacer" />
+              <button className="fs-btn" onClick={register} disabled={saving || selectedCount === 0}>
+                {saving ? '登録中…' : `選択を一括登録（${selectedCount}）`}
+              </button>
+            </div>
+          </>
+        )}
+        {review && review.length === 0 && (
+          <p className="fs-dim" style={{ margin: 0 }}>この月の開催に一致する未紐付けポストはありません。</p>
+        )}
+        <p className="fs-footnote" style={{ marginTop: 14 }}>
+          収集した優勝ポストのうち、この月の開催に一致した候補を表示。★handle=店アカウント一致（自動チェック）、名前%=表示名一致（要確認・別チェーン誤爆に注意）。
+          一括登録すると結果として保存され、集計・一覧・回収率に反映。個人ポスト（候補なし）は対象外。
+        </p>
+      </div>
+    );
+  };
 
 /** 結果登録フォームの1行分。cardNumber（辞書選択）が空のときのみ raw（自由入力）を使う。 */
 interface FormRow {
@@ -957,6 +1040,10 @@ const FlagshipStyles: React.FC = () => (
     .fs-agg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
     .fs-agg-h2 { font-size: 13px; letter-spacing: .08em; color: #f1c40f; font-weight: 700; margin: 0; }
     .fs-agg-chart { display: flex; flex-direction: column; gap: 2px; }
+    .fs-linktbl { display: flex; flex-direction: column; gap: 4px; max-height: 420px; overflow-y: auto; margin-top: 4px; }
+    .fs-linkrow { display: grid; grid-template-columns: 22px 1fr minmax(200px, 40%); align-items: center; gap: 10px; padding: 6px 8px; background: #1e1812; border: 1px solid #2e261c; border-radius: 6px; }
+    .fs-linkinfo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .fs-linkrow select { max-width: 100%; }
     .fs-agg-row { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 12px; padding: 5px 6px; border-radius: 6px; }
     .fs-agg-row:hover { background: rgba(241,196,15,.05); }
     .fs-agg-who { display: flex; align-items: center; gap: 8px; min-width: 0; }

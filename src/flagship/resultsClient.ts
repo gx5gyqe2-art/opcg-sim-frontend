@@ -214,39 +214,61 @@ export async function discoverPosts(req: {
   };
 }
 
-/** 全国トレンドのキャラ別1件（設計 §16.6）。 */
-export interface TrendItem {
-  character: string;
-  count: number;
-  pct: number;
-  colors: string[];
-  sampleUrl: string;
-}
-
-/** 全国トレンド集計結果。 */
-export interface TrendResult {
-  query: string;
-  collected: number;      // 収集した優勝ポスト数
-  tournaments: number;    // 重複除去後の大会数（集計母数）
-  items: TrendItem[];
-}
-
-/** 全国の優勝リーダー傾向を集計する（`フラッグシップ 優勝` を横断収集→重複除去→キャラ集計）。 */
-export async function fetchTrend(opts?: { maxResults?: number; pages?: number }): Promise<TrendResult> {
-  const raw = await request<{
-    query: string; collected: number; tournaments: number;
-    items: Array<{ character: string; count: number; pct: number; colors: string[]; sample_url: string }>;
-  }>('/trend', {
+/** 全国の優勝ポストを収集して DB に貯める（設計 §16.7）。件数を返す。 */
+export async function collectPosts(opts?: { maxResults?: number; pages?: number }): Promise<number> {
+  const raw = await request<{ collected: number }>('/collect', {
     method: 'POST',
     body: JSON.stringify({ max_results: opts?.maxResults ?? 100, pages: opts?.pages ?? 3 }),
   });
-  return {
-    query: raw.query, collected: raw.collected, tournaments: raw.tournaments,
-    items: raw.items.map((i) => ({
-      character: i.character, count: i.count, pct: i.pct,
-      colors: i.colors ?? [], sampleUrl: i.sample_url,
+  return raw.collected;
+}
+
+/** 収集ポストの開催候補1件（handle=自動確定候補／name=要承認、設計 §16.7）。 */
+export interface LinkCandidate {
+  eventId: number;
+  method: string;   // 'handle' | 'name'
+  score: number;
+  dayGap: number;
+  auto: boolean;
+}
+
+/** 紐付けレビューの1行（未紐付け収集ポスト＋開催候補）。 */
+export interface ReviewPost {
+  tweetId: string;
+  author: string | null;
+  authorName: string | null;
+  date: string | null;
+  charName: string | null;
+  cardNumber: string | null;
+  tweetUrl: string | null;
+  candidates: LinkCandidate[];
+}
+
+/** 指定シリーズの開催へ、未紐付けポストを照合したレビュー表を取得。 */
+export async function fetchLinkReview(seriesId: number): Promise<ReviewPost[]> {
+  const raw = await request<{
+    posts: Array<{
+      tweet_id: string; author: string | null; author_name: string | null; date: string | null;
+      char_name: string | null; card_number: string | null; tweet_url: string | null;
+      candidates: Array<{ event_id: number; method: string; score: number; day_gap: number; auto: boolean }>;
+    }>;
+  }>(`/link/review?series_id=${seriesId}`);
+  return raw.posts.map((p) => ({
+    tweetId: p.tweet_id, author: p.author, authorName: p.author_name, date: p.date,
+    charName: p.char_name, cardNumber: p.card_number, tweetUrl: p.tweet_url,
+    candidates: p.candidates.map((c) => ({
+      eventId: c.event_id, method: c.method, score: c.score, dayGap: c.day_gap, auto: c.auto,
     })),
-  };
+  }));
+}
+
+/** 承認した (ポスト→開催) をまとめて保存（未紐付けプールから外す）。更新件数を返す。 */
+export async function linkApprove(links: Array<{ tweetId: string; eventId: number | null }>): Promise<number> {
+  const raw = await request<{ updated: number }>('/link/approve', {
+    method: 'POST',
+    body: JSON.stringify({ links: links.map((l) => ({ tweet_id: l.tweetId, event_id: l.eventId })) }),
+  });
+  return raw.updated;
 }
 
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
