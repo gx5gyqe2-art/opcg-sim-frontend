@@ -7,9 +7,11 @@ import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
-  fetchSeriesSummary, putEventResults,
+  fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
 } from './resultsClient';
-import type { ExtractedEntry, FlagshipLeader, SummaryItem } from './resultsClient';
+import type {
+  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem,
+} from './resultsClient';
 
 /**
  * フラッグシップバトル 開催一覧（P1）+ 結果登録・閲覧（P2）。
@@ -562,6 +564,10 @@ const DetailPanel: React.FC<{
   const [bodyText, setBodyText] = useState('');
   const [extracting, setExtracting] = useState(false);
   const [extractNote, setExtractNote] = useState<string | null>(null);
+  // P6: X 検索で結果ポストを発見（設計 §16）。鍵未設定なら導線を隠す（手動運用・定期ジョブなし）。
+  const [discoverEnabled, setDiscoverEnabled] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [candidates, setCandidates] = useState<DiscoveredCandidate[] | null>(null);
 
   // 登録済みの開催は既存の結果をフォームへプリフィルする（訂正フロー）。
   useEffect(() => {
@@ -578,6 +584,13 @@ const DetailPanel: React.FC<{
     }).catch(() => { /* 読めなくても空フォームで登録し直せる */ });
     return () => { alive = false; };
   }, [event.id, hasResults]);
+
+  // 検索（発見）が使えるか一度だけ確認。鍵未設定なら導線を出さない（graceful degrade）。
+  useEffect(() => {
+    let alive = true;
+    fetchDiscoverStatus().then((ok) => { if (alive) setDiscoverEnabled(ok); });
+    return () => { alive = false; };
+  }, []);
 
   const setRow = (i: number, patch: Partial<FormRow>) => {
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -660,6 +673,34 @@ const DetailPanel: React.FC<{
     }
   };
 
+  // P6: この開催の結果ポストを X 検索で探す（店舗アカウント＋ハッシュタグ）。手動運用。
+  const runDiscover = async () => {
+    setDiscovering(true); setExtractNote(null); setCandidates(null);
+    try {
+      const { candidates: cs } = await discoverPosts({
+        hashtags: ['フラッグシップ', 'フラッグシップバトル'],
+        accounts: event.snsUrl ? [event.snsUrl] : [],
+        maxResults: 10,
+      });
+      setCandidates(cs);
+      setExtractNote(cs.length ? `${cs.length}件の候補が見つかりました。使う候補を選んでください。`
+        : '候補が見つかりませんでした（直近7日・店舗アカウント/ハッシュタグ）。手貼りもできます。');
+    } catch (e) {
+      setExtractNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  // 発見候補をフォームへ採用（URL・本文・順位×リーダーを流し込む）。
+  const pickCandidate = (c: DiscoveredCandidate) => {
+    setUrl(c.tweetUrl);
+    setBodyText(c.bodyText);
+    setCandidates(null);
+    const who = c.author ? `@${c.author} を採用。` : '候補を採用。';
+    setExtractNote(applyResults(c.results, who));
+  };
+
   const remove = async () => {
     if (!window.confirm('この開催の結果を削除しますか？')) return;
     setBusy(true); setMsg(null);
@@ -710,6 +751,37 @@ const DetailPanel: React.FC<{
               />
 
               <div className="fs-extract">
+                {discoverEnabled && (
+                  <div className="fs-discover">
+                    <div className="fs-form-actions">
+                      <span className="fs-form-label" style={{ margin: 0 }}>Xで結果ポストを探す（店舗アカウント＋ハッシュタグ・直近7日）</span>
+                      <div className="fs-spacer" />
+                      <button className="fs-btn" onClick={runDiscover} disabled={discovering || extracting}>
+                        {discovering ? '検索中…' : '候補を探す'}
+                      </button>
+                    </div>
+                    {candidates && candidates.length > 0 && (
+                      <ul className="fs-cands">
+                        {candidates.map((c) => {
+                          const w = c.results.find((r) => r.placement === 1);
+                          return (
+                            <li className="fs-cand" key={c.tweetUrl}>
+                              <div className="fs-cand-body">
+                                <div className="fs-cand-meta">
+                                  <span className="fs-cand-who">@{c.author ?? '—'}</span>
+                                  {c.createdAt && <span className="fs-cand-date">{c.createdAt.slice(0, 10)}</span>}
+                                  <span className="fs-cand-win">{w ? (w.leader?.name ?? w.leaderRaw ?? '—') : '抽出なし'}</span>
+                                </div>
+                                <div className="fs-cand-snip">{c.bodyText.slice(0, 70)}</div>
+                              </div>
+                              <button className="fs-btn ghost" onClick={() => pickCandidate(c)}>使う</button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（URLから自動取得 / 手貼り可・LLM不使用・無料）</label>
                 <textarea
                   id="fs-body" className="fs-textarea" rows={3}
@@ -886,6 +958,15 @@ const FlagshipStyles: React.FC = () => (
     .fs-form { display: flex; flex-direction: column; gap: 8px; }
     .fs-form-label { font-size: 12px; color: #a89a80; }
     .fs-extract { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin: 2px 0 4px; border: 1px dashed #2e261c; border-radius: 6px; background: rgba(241,196,15,.03); }
+    .fs-discover { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; margin-bottom: 2px; border-bottom: 1px solid #2e261c; }
+    .fs-cands { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+    .fs-cand { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #1e1812; border: 1px solid #2e261c; border-radius: 6px; }
+    .fs-cand-body { min-width: 0; flex: 1; }
+    .fs-cand-meta { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+    .fs-cand-who { color: #f1c40f; font-weight: 700; }
+    .fs-cand-date { color: #6f6553; font-variant-numeric: tabular-nums; }
+    .fs-cand-win { color: #f0e6d2; font-weight: 600; margin-left: auto; }
+    .fs-cand-snip { color: #a89a80; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fs-textarea { background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
     .fs-textarea:focus-visible { outline: 2px solid #f1c40f; outline-offset: 1px; }
     .fs-form-row { display: flex; gap: 6px; align-items: center; }

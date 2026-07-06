@@ -151,6 +151,69 @@ export async function ingestFromUrl(url: string): Promise<IngestResult> {
   };
 }
 
+/** 発見候補 1 件（設計 §16、recent search + P3 抽出）。 */
+export interface DiscoveredCandidate {
+  tweetUrl: string;
+  author: string | null;
+  authorName: string | null;
+  createdAt: string | null;
+  bodyText: string;
+  results: ExtractedEntry[];
+  unmatched: string[];
+}
+
+/** 発見結果（候補ポスト一覧）。 */
+export interface DiscoverResult {
+  enabled: boolean;
+  query: string;
+  candidates: DiscoveredCandidate[];
+}
+
+/** 検索（発見）が使えるか（Bearer Token 有無）。無効なら画面は導線を隠す。 */
+export async function fetchDiscoverStatus(): Promise<boolean> {
+  try {
+    const raw = await request<{ enabled: boolean }>('/discover/status');
+    return !!raw.enabled;
+  } catch {
+    return false; // 到達不可＝機能なし扱い
+  }
+}
+
+/** ハッシュタグ／店舗アカウントから結果ポストを検索し、各候補を P3 抽出して返す。 */
+export async function discoverPosts(req: {
+  hashtags?: string[];
+  accounts?: string[];
+  startTime?: string;
+  endTime?: string;
+  maxResults?: number;
+}): Promise<DiscoverResult> {
+  const raw = await request<{
+    enabled: boolean;
+    query: string;
+    candidates: Array<{
+      tweet_url: string; author: string | null; author_name: string | null;
+      created_at: string | null; body_text: string;
+      results: Array<RawEntry & { confidence: number }>; unmatched: string[];
+    }>;
+  }>('/discover', {
+    method: 'POST',
+    body: JSON.stringify({
+      hashtags: req.hashtags ?? [], accounts: req.accounts ?? [],
+      start_time: req.startTime, end_time: req.endTime, max_results: req.maxResults ?? 10,
+    }),
+  });
+  return {
+    enabled: raw.enabled,
+    query: raw.query,
+    candidates: raw.candidates.map((c) => ({
+      tweetUrl: c.tweet_url, author: c.author, authorName: c.author_name,
+      createdAt: c.created_at, bodyText: c.body_text,
+      results: c.results.map((r) => ({ ...toEntry(r), confidence: r.confidence })),
+      unmatched: c.unmatched ?? [],
+    })),
+  };
+}
+
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
