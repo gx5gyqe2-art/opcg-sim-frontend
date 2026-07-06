@@ -7,10 +7,10 @@ import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
-  fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
+  fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts, fetchTrend,
 } from './resultsClient';
 import type {
-  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem,
+  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem, TrendItem,
 } from './resultsClient';
 
 /**
@@ -190,8 +190,15 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return { total: events.length, past, collected, missing, rate };
   }, [events, summary, today]);
 
-  // P4: 一覧 / 集計 のビュー切替。
-  const [view, setView] = useState<'list' | 'agg'>('list');
+  // P4/§16.6: 一覧 / 集計 / 全国トレンド のビュー切替。
+  const [view, setView] = useState<'list' | 'agg' | 'trend'>('list');
+  // §16.6: 検索（＝全国トレンド）が使えるか。鍵未設定なら導線を隠す。
+  const [trendEnabled, setTrendEnabled] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetchDiscoverStatus().then((ok) => { if (alive) setTrendEnabled(ok); });
+    return () => { alive = false; };
+  }, []);
 
   // P4: 優勝リーダー分布。summary（月内の全開催期分＝優勝リーダー入り）を束ねるだけ。
   const distribution = useMemo(() => {
@@ -300,6 +307,9 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           <div className="fs-viewtoggle" role="group" aria-label="表示切替">
             <button className="fs-vbtn" aria-pressed={view === 'list'} onClick={() => setView('list')}>一覧</button>
             <button className="fs-vbtn" aria-pressed={view === 'agg'} onClick={() => setView('agg')}>集計</button>
+            {trendEnabled && (
+              <button className="fs-vbtn" aria-pressed={view === 'trend'} onClick={() => setView('trend')}>全国トレンド</button>
+            )}
           </div>
           {!backendOk && <span className="fs-dim" style={{ fontSize: 12 }}>結果APIに接続できないため回収状況は非表示</span>}
         </div>
@@ -325,6 +335,8 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
             backendOk={backendOk}
           />
         )}
+
+        {view === 'trend' && <TrendView />}
 
         {view === 'list' && <>
         <div className="fs-filters">
@@ -531,6 +543,71 @@ const AggregateView: React.FC<{
       <p className="fs-footnote" style={{ marginTop: 14 }}>
         登録済み結果の優勝リーダー（placement=1）を集計。回収率などの KPI は上段カードを参照。
         集計は結果登録データからその場で算出（LLM不使用・追加取得なし）。X 投稿はまだ対象外。
+      </p>
+    </div>
+  );
+};
+
+/**
+ * §16.6: 全国トレンドビュー。X の「フラッグシップ 優勝」を横断収集し、(投稿者×日)で重複除去、
+ * キャラ単位に正規化した優勝リーダー分布を表示する。手動「集計する」で backend /trend を叩く。
+ */
+const TrendView: React.FC = () => {
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState<{ collected: number; tournaments: number; items: TrendItem[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetchTrend({ pages: 3 });
+      setData({ collected: r.collected, tournaments: r.tournaments, items: r.items });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const max = data && data.items.length ? data.items[0].count : 1;
+  return (
+    <div className="fs-agg">
+      <div className="fs-agg-head">
+        <h2 className="fs-agg-h2">全国トレンド（優勝リーダー）</h2>
+        <div className="fs-form-actions" style={{ margin: 0 }}>
+          {data && <span className="fs-dim" style={{ fontSize: 12 }}>収集 {data.collected} 件 → 重複除去 {data.tournaments} 大会</span>}
+          <div className="fs-spacer" />
+          <button className="fs-btn" onClick={run} disabled={busy}>{busy ? '集計中…' : data ? '再集計' : '集計する'}</button>
+        </div>
+      </div>
+      {err && <p className="fs-dim" style={{ margin: '4px 0 0', color: '#e0806a' }}>{err}</p>}
+      {!data && !busy && !err && (
+        <p className="fs-dim" style={{ margin: 0 }}>
+          「集計する」で、直近のXから全国のフラッグシップ優勝ポストを横断収集し、優勝リーダー分布を出します（店舗・タグ不問）。
+        </p>
+      )}
+      {data && data.items.length > 0 && (
+        <div className="fs-agg-chart">
+          {data.items.map((r, i) => (
+            <div className="fs-agg-row" key={`${r.character}-${i}`} title={`${r.character}（${r.colors.join('/') || '色未確定'}）: ${r.count}大会 / ${r.pct}%`}>
+              <div className="fs-agg-who">
+                <ColorChip color={r.colors.join('/')} />
+                <span className="fs-agg-name">{r.character}</span>
+              </div>
+              <div className="fs-agg-track">
+                <span className={`fs-agg-bar${i === 0 ? ' top' : ''}`} style={{ width: `${(r.count / max) * 100}%` }} />
+                <span className="fs-agg-qty"><b>{r.count}</b>大会 · {r.pct}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {data && data.items.length === 0 && (
+        <p className="fs-dim" style={{ margin: 0 }}>優勝リーダーを抽出できるポストが見つかりませんでした。</p>
+      )}
+      <p className="fs-footnote" style={{ marginTop: 14 }}>
+        X の「フラッグシップ 優勝/全勝」を全国横断で収集 → (投稿者×日)で重複除去（同一店の連投を1大会に）→
+        集計アカウント除外 → キャラ単位に正規化（別名・色略称を合流）。直近約7日分。色は本文で不記載が多いためキャラ単位。
       </p>
     </div>
   );

@@ -214,6 +214,41 @@ export async function discoverPosts(req: {
   };
 }
 
+/** 全国トレンドのキャラ別1件（設計 §16.6）。 */
+export interface TrendItem {
+  character: string;
+  count: number;
+  pct: number;
+  colors: string[];
+  sampleUrl: string;
+}
+
+/** 全国トレンド集計結果。 */
+export interface TrendResult {
+  query: string;
+  collected: number;      // 収集した優勝ポスト数
+  tournaments: number;    // 重複除去後の大会数（集計母数）
+  items: TrendItem[];
+}
+
+/** 全国の優勝リーダー傾向を集計する（`フラッグシップ 優勝` を横断収集→重複除去→キャラ集計）。 */
+export async function fetchTrend(opts?: { maxResults?: number; pages?: number }): Promise<TrendResult> {
+  const raw = await request<{
+    query: string; collected: number; tournaments: number;
+    items: Array<{ character: string; count: number; pct: number; colors: string[]; sample_url: string }>;
+  }>('/trend', {
+    method: 'POST',
+    body: JSON.stringify({ max_results: opts?.maxResults ?? 100, pages: opts?.pages ?? 3 }),
+  });
+  return {
+    query: raw.query, collected: raw.collected, tournaments: raw.tournaments,
+    items: raw.items.map((i) => ({
+      character: i.character, count: i.count, pct: i.pct,
+      colors: i.colors ?? [], sampleUrl: i.sample_url,
+    })),
+  };
+}
+
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
