@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_SERIES_ID, SERIES } from './flagship.config';
+import type { FlagshipSeries } from './flagship.config';
+import { loadSeriesList, pickDefaultSeriesId, refreshSeriesList } from './seriesDiscovery';
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
@@ -61,8 +62,22 @@ function winnerLabel(item: SummaryItem | undefined): string | null {
 }
 
 export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
-  const [seriesId, setSeriesId] = useState<number>(DEFAULT_SERIES_ID);
+  // 開催期一覧は「静的設定 + 発見済みキャッシュ」で即表示し、裏で自動発見を回して更新する。
+  const [seriesList, setSeriesList] = useState<FlagshipSeries[]>(() => loadSeriesList());
+  const [seriesId, setSeriesId] = useState<number>(() => pickDefaultSeriesId(loadSeriesList(), new Date()));
   const { events, syncedAt, isLoading, isRefetching, error, refetch } = useFlagshipEvents(seriesId);
+
+  useEffect(() => {
+    let alive = true;
+    refreshSeriesList().then((l) => { if (alive) setSeriesList(l); }).catch(() => { /* 静的設定で継続 */ });
+    return () => { alive = false; };
+  }, []);
+
+  // 手動「取得」は開催マスターに加えて開催期の発見も強制更新する。
+  const onRefetch = () => {
+    refetch();
+    refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
+  };
 
   const [q, setQ] = useState('');
   const [pref, setPref] = useState('');
@@ -191,11 +206,11 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <div className="fs-topbar">
           <div>
             <div className="fs-eyebrow">OPCG SIM — FLAGSHIP</div>
-            <h1 className="fs-h1">{SERIES.find((s) => s.id === seriesId)?.kind ?? 'フラッグシップバトル'} 開催一覧</h1>
+            <h1 className="fs-h1">{seriesList.find((s) => s.id === seriesId)?.kind ?? 'フラッグシップバトル'} 開催一覧</h1>
           </div>
           <div className="fs-spacer" />
           <span className="fs-synced">開催マスター同期: {formatSynced(syncedAt)}</span>
-          <button className="fs-btn" onClick={refetch} disabled={isLoading || isRefetching}>
+          <button className="fs-btn" onClick={onRefetch} disabled={isLoading || isRefetching}>
             {isRefetching || isLoading ? '取得中…' : '↻ 取得'}
           </button>
           <button className="fs-btn ghost" onClick={onBack}>← 戻る</button>
@@ -204,7 +219,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <div className="fs-series-row">
           <label className="fs-dim" htmlFor="fs-series">開催期</label>
           <select id="fs-series" value={seriesId} onChange={(e) => changeSeries(Number(e.target.value))}>
-            {SERIES.map((s) => (
+            {seriesList.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
@@ -218,7 +233,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         )}
 
         <div className="fs-kpis">
-          <Kpi label="総開催" value={kpi.total} sub={SERIES.find((s) => s.id === seriesId)?.label ?? ''} />
+          <Kpi label="総開催" value={kpi.total} sub={seriesList.find((s) => s.id === seriesId)?.label ?? ''} />
           <Kpi label="終了した開催" value={kpi.past} sub="結果の回収対象" />
           <Kpi label="回収済" value={kpi.collected} sub={`回収率 ${kpi.rate}%`} />
           <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
