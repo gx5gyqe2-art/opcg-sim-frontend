@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FlagshipSeries } from './flagship.config';
 import {
   groupByMonth, kindShort, loadSeriesList, pickDefaultMonth, refreshSeriesList,
@@ -112,7 +112,8 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   };
 
   const [q, setQ] = useState('');
-  const [pref, setPref] = useState('');
+  // 都道府県は複数選択（空集合＝全都道府県）。
+  const [prefSet, setPrefSet] = useState<Set<string>>(new Set());
   const [week, setWeek] = useState('');
   const [status, setStatus] = useState<Status | ''>('');
   const [kindFilter, setKindFilter] = useState('');
@@ -151,7 +152,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const changeMonth = (m: number) => {
     setMonth(m);
     setQ('');
-    setPref('');
+    setPrefSet(new Set());
     setWeek('');
     setStatus('');
     setKindFilter('');
@@ -189,12 +190,12 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const filtered = useMemo(() => {
     return events.filter((e) =>
       (!q || e.store.includes(q)) &&
-      (!pref || e.pref === pref) &&
+      (prefSet.size === 0 || prefSet.has(e.pref)) &&
       (!week || weekOf(e.date) === week) &&
       (!status || statusOf(e) === status) &&
       (!kindFilter || e.kind === kindFilter),
     );
-  }, [events, q, pref, week, status, statusOf, kindFilter]);
+  }, [events, q, prefSet, week, status, statusOf, kindFilter]);
 
   const chipDefs: Array<[Status | '', string]> = [
     ['', 'すべて'],
@@ -287,12 +288,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
 
         <div className="fs-filters">
           <input type="search" placeholder="店舗名で検索" aria-label="店舗名で検索" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select aria-label="都道府県で絞り込み" value={pref} onChange={(e) => setPref(e.target.value)}>
-            <option value="">全都道府県</option>
-            {prefs.map(([p, n]) => (
-              <option key={p} value={p}>{p} ({n})</option>
-            ))}
-          </select>
+          <PrefFilter prefs={prefs} selected={prefSet} onChange={setPrefSet} />
           <select aria-label="週で絞り込み" value={week} onChange={(e) => setWeek(e.target.value)}>
             <option value="">全期間</option>
             {weeks.map((w, i) => {
@@ -354,6 +350,72 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           onClose={() => setSelected(null)}
           onSaved={loadSummary}
         />
+      )}
+    </div>
+  );
+};
+
+/**
+ * 都道府県の複数選択フィルタ（チェックボックス式ポップオーバー）。
+ * 空集合＝全都道府県。ボタンには選択状況を要約表示する。
+ */
+const PrefFilter: React.FC<{
+  prefs: Array<[string, number]>;
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+}> = ({ prefs, selected, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // 外側クリック・Escape で閉じる。
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const toggle = (p: string) => {
+    const next = new Set(selected);
+    if (next.has(p)) next.delete(p); else next.add(p);
+    onChange(next);
+  };
+
+  const arr = [...selected];
+  const label = arr.length === 0 ? '全都道府県'
+    : arr.length === 1 ? arr[0]
+    : `${arr[0]} 他${arr.length - 1}件`;
+
+  return (
+    <div className="fs-multi" ref={ref}>
+      <button
+        type="button" className="fs-multi-btn"
+        aria-haspopup="listbox" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span>{label}</span>
+        <span className="fs-multi-caret">▾</span>
+      </button>
+      {open && (
+        <div className="fs-multi-pop" role="group" aria-label="都道府県で絞り込み">
+          <div className="fs-multi-head">
+            <span className="fs-dim">{selected.size === 0 ? '全都道府県' : `${selected.size}件選択中`}</span>
+            {selected.size > 0 && (
+              <button type="button" className="fs-multi-clear" onClick={() => onChange(new Set())}>クリア</button>
+            )}
+          </div>
+          <div className="fs-multi-list">
+            {prefs.map(([p, n]) => (
+              <label key={p} className="fs-multi-item">
+                <input type="checkbox" checked={selected.has(p)} onChange={() => toggle(p)} />
+                <span className="fs-multi-name">{p}</span>
+                <span className="fs-dim">{n}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -593,6 +655,19 @@ const FlagshipStyles: React.FC = () => (
     .fs-missing { color: #e67e22; background: rgba(230,126,34,.14); }
     .fs-today { color: #f1c40f; background: rgba(241,196,15,.12); }
     .fs-upcoming { color: #8a8577; background: rgba(138,133,119,.12); }
+    .fs-multi { position: relative; }
+    .fs-multi-btn { display: inline-flex; align-items: center; gap: 8px; background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: inherit; cursor: pointer; }
+    .fs-multi-btn:hover { border-color: #8a6d0b; }
+    .fs-multi-caret { color: #a89a80; font-size: 10px; }
+    .fs-multi-pop { position: absolute; z-index: 8; top: calc(100% + 4px); left: 0; width: 240px; max-height: 320px; display: flex; flex-direction: column; background: #16120e; border: 1px solid #2e261c; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+    .fs-multi-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #2e261c; font-size: 12px; }
+    .fs-multi-clear { background: none; border: none; color: #f1c40f; font-size: 12px; cursor: pointer; font-family: inherit; padding: 0; }
+    .fs-multi-clear:hover { text-decoration: underline; }
+    .fs-multi-list { overflow-y: auto; padding: 4px; }
+    .fs-multi-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+    .fs-multi-item:hover { background: rgba(241,196,15,.06); }
+    .fs-multi-item input { accent-color: #f1c40f; cursor: pointer; }
+    .fs-multi-name { flex: 1; }
     .fs-kind { border: 1px solid #2e261c; border-radius: 4px; font-size: 11px; padding: 1px 7px; white-space: nowrap; }
     .fs-kind-fs { color: #d4b46a; }
     .fs-kind-ex { color: #8fb8d8; border-color: #27394a; }
