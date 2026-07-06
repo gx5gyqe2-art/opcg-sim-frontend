@@ -14,9 +14,10 @@ interface GameStartProps {
   onDeckBuilder: () => void;
   onCardList: () => void;
   onRuleLobby: () => void;
+  onFlagship: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onRuleLobby }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onRuleLobby, onFlagship }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
   // PLAYメニューの階層ナビ: root → match(ソロ/オンライン/CPU対戦)。フリーモード/難易度選択は廃止。
@@ -233,6 +234,20 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                       onCardList();
                     }}
                     color="#e67e22"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Flagship</div>
+                <div style={styles.grid}>
+                  <MenuCard
+                    label="フラッグシップ開催一覧"
+                    desc="Flagship Events"
+                    onClick={() => {
+                      onFlagship();
+                    }}
+                    color="#f1c40f"
                   />
                 </div>
               </div>
