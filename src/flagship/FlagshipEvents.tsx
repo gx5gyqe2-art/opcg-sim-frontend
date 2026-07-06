@@ -6,10 +6,12 @@ import {
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
-  deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, fetchOembedBody,
-  fetchSeriesSummary, putEventResults,
+  deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
+  fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
 } from './resultsClient';
-import type { FlagshipLeader, SummaryItem } from './resultsClient';
+import type {
+  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem,
+} from './resultsClient';
 
 /**
  * フラッグシップバトル 開催一覧（P1）+ 結果登録・閲覧（P2）。
@@ -562,6 +564,10 @@ const DetailPanel: React.FC<{
   const [bodyText, setBodyText] = useState('');
   const [extracting, setExtracting] = useState(false);
   const [extractNote, setExtractNote] = useState<string | null>(null);
+  // P6: X 検索で結果ポストを発見（設計 §16）。鍵未設定なら導線を隠す（手動運用・定期ジョブなし）。
+  const [discoverEnabled, setDiscoverEnabled] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [candidates, setCandidates] = useState<DiscoveredCandidate[] | null>(null);
 
   // 登録済みの開催は既存の結果をフォームへプリフィルする（訂正フロー）。
   useEffect(() => {
@@ -578,6 +584,13 @@ const DetailPanel: React.FC<{
     }).catch(() => { /* 読めなくても空フォームで登録し直せる */ });
     return () => { alive = false; };
   }, [event.id, hasResults]);
+
+  // 検索（発見）が使えるか一度だけ確認。鍵未設定なら導線を出さない（graceful degrade）。
+  useEffect(() => {
+    let alive = true;
+    fetchDiscoverStatus().then((ok) => { if (alive) setDiscoverEnabled(ok); });
+    return () => { alive = false; };
+  }, []);
 
   const setRow = (i: number, patch: Partial<FormRow>) => {
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -609,47 +622,83 @@ const DetailPanel: React.FC<{
     }
   };
 
-  // oEmbed 代理取得で本文欄を埋める（ベストエフォート。取れなければ手貼り誘導）。
-  const runOembed = async () => {
+  // 抽出候補をフォームへ流し込み、確認メッセージ文面を返す（取り込み/手貼り共通）。
+  const applyResults = (results: ExtractedEntry[], prefix = ''): string => {
+    if (results.length === 0) return `${prefix}リーダーを抽出できませんでした。手入力してください。`;
+    setRows(results.map((r) => ({
+      placement: r.placement,
+      cardNumber: r.leaderCardNumber ?? '',
+      raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
+    })));
+    const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
+    return `${prefix}${results.length}件の候補を入れました。`
+      + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
+      + '確認・修正して保存してください。';
+  };
+
+  // URL → 本文取得 → 候補抽出 を一発で実行（設計 §15、無料・認証不要）。
+  const runIngest = async () => {
     if (!url.trim()) return;
     setExtracting(true); setExtractNote(null);
-    const body = await fetchOembedBody(url.trim());
-    setExtracting(false);
-    if (body) {
-      setBodyText(body);
-      setExtractNote('本文を取得しました。「候補を生成」で抽出できます。');
-    } else {
-      setExtractNote('本文を自動取得できませんでした。ポスト本文をコピペしてください。');
+    try {
+      const ing = await ingestFromUrl(url.trim());
+      setBodyText(ing.bodyText);
+      const who = ing.author ? `@${ing.author} の本文を取得。` : '本文を取得。';
+      setExtractNote(applyResults(ing.results, who));
+    } catch (e) {
+      // 取得不可（画像のみ・X制限・非公開等）→ 手貼りへ誘導
+      setExtractNote(
+        (e instanceof Error && e.message && !e.message.startsWith('HTTP')
+          ? `${e.message} `
+          : '本文を自動取得できませんでした。')
+        + 'ポスト本文をコピペして「候補を生成」してください。',
+      );
+    } finally {
+      setExtracting(false);
     }
   };
 
-  // 本文 → 順位×リーダーの候補をフォームへ流し込む（人が確認・修正して保存）。
+  // 手貼り本文 → 順位×リーダーの候補をフォームへ流し込む（取得できない画像ポスト等の受け皿）。
   const runExtract = async () => {
     const text = bodyText.trim();
     if (!text) { setExtractNote('本文を入力してください。'); return; }
     setExtracting(true); setExtractNote(null);
     try {
       const { results } = await extractFromText(text);
-      if (results.length === 0) {
-        setExtractNote('リーダーを抽出できませんでした。手入力してください。');
-      } else {
-        setRows(results.map((r) => ({
-          placement: r.placement,
-          cardNumber: r.leaderCardNumber ?? '',
-          raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
-        })));
-        const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
-        setExtractNote(
-          `${results.length}件の候補を入れました。`
-          + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
-          + '確認・修正して保存してください。',
-        );
-      }
+      setExtractNote(applyResults(results));
     } catch (e) {
       setExtractNote(e instanceof Error ? e.message : String(e));
     } finally {
       setExtracting(false);
     }
+  };
+
+  // P6: この開催の結果ポストを X 検索で探す（店舗アカウント＋ハッシュタグ）。手動運用。
+  const runDiscover = async () => {
+    setDiscovering(true); setExtractNote(null); setCandidates(null);
+    try {
+      const { candidates: cs } = await discoverPosts({
+        hashtags: ['フラッグシップ', 'フラッグシップバトル'],
+        accounts: event.snsUrl ? [event.snsUrl] : [],
+        maxResults: 10,
+      });
+      setCandidates(cs);
+      setExtractNote(cs.length ? `${cs.length}件の候補が見つかりました。使う候補を選んでください。`
+        : '候補が見つかりませんでした（直近7日・店舗アカウント/ハッシュタグ）。手貼りもできます。');
+    } catch (e) {
+      setExtractNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  // 発見候補をフォームへ採用（URL・本文・順位×リーダーを流し込む）。
+  const pickCandidate = (c: DiscoveredCandidate) => {
+    setUrl(c.tweetUrl);
+    setBodyText(c.bodyText);
+    setCandidates(null);
+    const who = c.author ? `@${c.author} を採用。` : '候補を採用。';
+    setExtractNote(applyResults(c.results, who));
   };
 
   const remove = async () => {
@@ -702,17 +751,50 @@ const DetailPanel: React.FC<{
               />
 
               <div className="fs-extract">
-                <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（貼り付けて候補生成 / LLM不使用・無料）</label>
+                {discoverEnabled && (
+                  <div className="fs-discover">
+                    <div className="fs-form-actions">
+                      <span className="fs-form-label" style={{ margin: 0 }}>Xで結果ポストを探す（店舗アカウント＋ハッシュタグ・直近7日）</span>
+                      <div className="fs-spacer" />
+                      <button className="fs-btn" onClick={runDiscover} disabled={discovering || extracting}>
+                        {discovering ? '検索中…' : '候補を探す'}
+                      </button>
+                    </div>
+                    {candidates && candidates.length > 0 && (
+                      <ul className="fs-cands">
+                        {candidates.map((c) => {
+                          const w = c.results.find((r) => r.placement === 1);
+                          return (
+                            <li className="fs-cand" key={c.tweetUrl}>
+                              <div className="fs-cand-body">
+                                <div className="fs-cand-meta">
+                                  <span className="fs-cand-who">@{c.author ?? '—'}</span>
+                                  {c.createdAt && <span className="fs-cand-date">{c.createdAt.slice(0, 10)}</span>}
+                                  <span className="fs-cand-win">{w ? (w.leader?.name ?? w.leaderRaw ?? '—') : '抽出なし'}</span>
+                                </div>
+                                <div className="fs-cand-snip">{c.bodyText.slice(0, 70)}</div>
+                              </div>
+                              <button className="fs-btn ghost" onClick={() => pickCandidate(c)}>使う</button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                <label className="fs-form-label" htmlFor="fs-body">結果ポスト本文（URLから自動取得 / 手貼り可・LLM不使用・無料）</label>
                 <textarea
                   id="fs-body" className="fs-textarea" rows={3}
-                  placeholder="ポスト本文をコピペ。または「URLから本文取得」を試す（画像のみのポストは手入力）"
+                  placeholder="上のURLを入れて「Xから取り込み」。取得できないポスト（画像のみ等）は本文をコピペして「候補を生成」"
                   value={bodyText} onChange={(e) => setBodyText(e.target.value)}
                 />
                 <div className="fs-form-actions">
-                  <button className="fs-btn ghost" onClick={runOembed} disabled={extracting || !url.trim()}>URLから本文取得</button>
+                  <button className="fs-btn" onClick={runIngest} disabled={extracting || !url.trim()}>
+                    {extracting ? '取り込み中…' : 'Xから取り込み'}
+                  </button>
                   <div className="fs-spacer" />
-                  <button className="fs-btn" onClick={runExtract} disabled={extracting || !bodyText.trim()}>
-                    {extracting ? '生成中…' : '候補を生成'}
+                  <button className="fs-btn ghost" onClick={runExtract} disabled={extracting || !bodyText.trim()}>
+                    候補を生成
                   </button>
                 </div>
                 {extractNote && <p className="fs-dim" style={{ margin: '2px 0 0', fontSize: 12 }}>{extractNote}</p>}
@@ -876,6 +958,15 @@ const FlagshipStyles: React.FC = () => (
     .fs-form { display: flex; flex-direction: column; gap: 8px; }
     .fs-form-label { font-size: 12px; color: #a89a80; }
     .fs-extract { display: flex; flex-direction: column; gap: 6px; padding: 8px; margin: 2px 0 4px; border: 1px dashed #2e261c; border-radius: 6px; background: rgba(241,196,15,.03); }
+    .fs-discover { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; margin-bottom: 2px; border-bottom: 1px solid #2e261c; }
+    .fs-cands { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+    .fs-cand { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #1e1812; border: 1px solid #2e261c; border-radius: 6px; }
+    .fs-cand-body { min-width: 0; flex: 1; }
+    .fs-cand-meta { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+    .fs-cand-who { color: #f1c40f; font-weight: 700; }
+    .fs-cand-date { color: #6f6553; font-variant-numeric: tabular-nums; }
+    .fs-cand-win { color: #f0e6d2; font-weight: 600; margin-left: auto; }
+    .fs-cand-snip { color: #a89a80; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fs-textarea { background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
     .fs-textarea:focus-visible { outline: 2px solid #f1c40f; outline-offset: 1px; }
     .fs-form-row { display: flex; gap: 6px; align-items: center; }

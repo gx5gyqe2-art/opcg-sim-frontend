@@ -115,6 +115,105 @@ export async function fetchOembedBody(url: string): Promise<string | null> {
   }
 }
 
+/** X 取り込みの結果（設計 §15、本文取得 + P3 抽出の一気通貫）。 */
+export interface IngestResult {
+  tweetUrl: string;
+  bodyText: string;
+  author: string | null;
+  authorName: string | null;
+  createdAt: string | null;
+  source: string;
+  results: ExtractedEntry[];
+  unmatched: string[];
+}
+
+/** ポスト URL から本文取得 → 候補抽出をまとめて取得。取得不可（404 等）は例外。 */
+export async function ingestFromUrl(url: string): Promise<IngestResult> {
+  const raw = await request<{
+    tweet_url: string;
+    body_text: string;
+    author: string | null;
+    author_name: string | null;
+    created_at: string | null;
+    source: string;
+    results: Array<RawEntry & { confidence: number }>;
+    unmatched: string[];
+  }>('/ingest', { method: 'POST', body: JSON.stringify({ url }) });
+  return {
+    tweetUrl: raw.tweet_url,
+    bodyText: raw.body_text,
+    author: raw.author,
+    authorName: raw.author_name,
+    createdAt: raw.created_at,
+    source: raw.source,
+    results: raw.results.map((r) => ({ ...toEntry(r), confidence: r.confidence })),
+    unmatched: raw.unmatched ?? [],
+  };
+}
+
+/** 発見候補 1 件（設計 §16、recent search + P3 抽出）。 */
+export interface DiscoveredCandidate {
+  tweetUrl: string;
+  author: string | null;
+  authorName: string | null;
+  createdAt: string | null;
+  bodyText: string;
+  results: ExtractedEntry[];
+  unmatched: string[];
+}
+
+/** 発見結果（候補ポスト一覧）。 */
+export interface DiscoverResult {
+  enabled: boolean;
+  query: string;
+  candidates: DiscoveredCandidate[];
+}
+
+/** 検索（発見）が使えるか（Bearer Token 有無）。無効なら画面は導線を隠す。 */
+export async function fetchDiscoverStatus(): Promise<boolean> {
+  try {
+    const raw = await request<{ enabled: boolean }>('/discover/status');
+    return !!raw.enabled;
+  } catch {
+    return false; // 到達不可＝機能なし扱い
+  }
+}
+
+/** ハッシュタグ／店舗アカウントから結果ポストを検索し、各候補を P3 抽出して返す。 */
+export async function discoverPosts(req: {
+  hashtags?: string[];
+  accounts?: string[];
+  startTime?: string;
+  endTime?: string;
+  maxResults?: number;
+}): Promise<DiscoverResult> {
+  const raw = await request<{
+    enabled: boolean;
+    query: string;
+    candidates: Array<{
+      tweet_url: string; author: string | null; author_name: string | null;
+      created_at: string | null; body_text: string;
+      results: Array<RawEntry & { confidence: number }>; unmatched: string[];
+    }>;
+  }>('/discover', {
+    method: 'POST',
+    body: JSON.stringify({
+      hashtags: req.hashtags ?? [], accounts: req.accounts ?? [],
+      start_time: req.startTime, end_time: req.endTime, max_results: req.maxResults ?? 10,
+    }),
+  });
+  return {
+    enabled: raw.enabled,
+    query: raw.query,
+    candidates: raw.candidates.map((c) => ({
+      tweetUrl: c.tweet_url, author: c.author, authorName: c.author_name,
+      createdAt: c.created_at, bodyText: c.body_text,
+      results: c.results.map((r) => ({ ...toEntry(r), confidence: r.confidence })),
+      unmatched: c.unmatched ?? [],
+    })),
+  };
+}
+
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
