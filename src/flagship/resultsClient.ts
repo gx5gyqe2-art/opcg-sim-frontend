@@ -86,6 +86,29 @@ export async function fetchLeaders(): Promise<FlagshipLeader[]> {
   return raw.map(toLeader);
 }
 
+/**
+ * 開催マスター（設計 §16.8）。backend が TCG+ を取得＋永続化し、過去開催も含めて返す。
+ * フロントはこれを開催の唯一の取得元にする（TCG+ 直取得のフォールバックは持たない）。
+ */
+export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promise<FlagshipEvent[]> {
+  const res = await fetch(`${BASE}/events?series_id=${seriesId}`, {
+    signal, headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null }>;
+  };
+  return data.events.map((e) => ({
+    id: e.id,
+    startDatetime: e.start_datetime ?? '',
+    date: (e.start_datetime ?? '').slice(0, 10),
+    store: e.store ?? '',
+    pref: e.pref ?? '',
+    capacity: e.capacity ?? null,
+    snsUrl: e.sns_url ?? '',
+  }));
+}
+
 /** 抽出候補 1 件（設計 §13、LLM不使用の辞書マッチング結果）。 */
 export interface ExtractedEntry extends ResultEntry {
   confidence: number;

@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchSeriesEvents } from './tcgPlusClient';
+import { fetchEvents } from './resultsClient';
 import type { FlagshipEvent } from './tcgPlusClient';
 import { isFresh, readCache, writeCache } from './eventsCache';
 
@@ -47,7 +47,7 @@ export function useFlagshipEvents(seriesId: number | null): UseFlagshipEvents {
       setError(null);
 
       try {
-        const fetched = await fetchSeriesEvents(id, controller.signal);
+        const fetched = await fetchEvents(id, controller.signal);
         if (controller.signal.aborted) return;
         const saved = writeCache(id, fetched, new Date());
         setEvents(saved.events);
