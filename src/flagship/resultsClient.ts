@@ -202,10 +202,16 @@ export async function fetchDiscoverStatus(): Promise<boolean> {
   }
 }
 
-/** ハッシュタグ／店舗アカウントから結果ポストを検索し、各候補を P3 抽出して返す。 */
+/**
+ * 結果ポストを X 検索して各候補を P3 抽出して返す。
+ * `accounts`（`from:`）や `keywords`（AND の素キーワード）＋`anyTerms`（優勝/全勝/準優勝 の OR 群）で
+ * 絞り込む。結果ポストはハッシュタグを付けないことが多い（設計 §16.6）ため、タグ必須にはしない。
+ */
 export async function discoverPosts(req: {
   hashtags?: string[];
   accounts?: string[];
+  keywords?: string[];
+  anyTerms?: string[];
   startTime?: string;
   endTime?: string;
   maxResults?: number;
@@ -222,6 +228,7 @@ export async function discoverPosts(req: {
     method: 'POST',
     body: JSON.stringify({
       hashtags: req.hashtags ?? [], accounts: req.accounts ?? [],
+      keywords: req.keywords ?? [], any_terms: req.anyTerms ?? [],
       start_time: req.startTime, end_time: req.endTime, max_results: req.maxResults ?? 10,
     }),
   });

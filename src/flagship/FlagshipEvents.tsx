@@ -46,11 +46,20 @@ interface MergedEvent extends FlagshipEvent {
   kind: string;
 }
 
+/**
+ * ローカルタイム（JST 運用）の YYYY-MM-DD を返す。TCG+ の開催日時は JST ローカルのため、
+ * toISOString()（UTC）で日付文字列を作ると JST 午前は前日にズレる。日付比較はこれで揃える。
+ */
+function localDate(d: Date): string {
+  const p = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 /** その日を含む週（月曜始まり）の月曜日を YYYY-MM-DD で返す。 */
 function weekOf(date: string): string {
   const d = new Date(`${date}T00:00:00`);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 /** 開催日ベースの状況（結果の有無は関与しない）。 */
@@ -161,8 +170,8 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
-  // 実運用時の当日。開催日との比較にのみ使う。
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // 実運用時の当日（JST ローカル）。開催日との比較にのみ使う。UTC で作ると午前は前日にズレる。
+  const today = useMemo(() => localDate(new Date()), []);
 
   const statusOf = useCallback((e: MergedEvent): Status => {
     if (summary.has(e.id)) return 'collected';
@@ -885,18 +894,25 @@ const DetailPanel: React.FC<{
     }
   };
 
-  // P6: この開催の結果ポストを X 検索で探す（店舗アカウント＋ハッシュタグ）。手動運用。
+  // P6: この開催の結果ポストを X 検索で探す（手動運用）。
+  // 結果ポストはハッシュタグを付けないことが多い（設計 §16.6）ため、タグ必須にはしない。
+  // 店舗X が分かれば from:店 を軸に、無ければ素キーワードで、いずれも優勝系語(OR)で絞る。
+  // 店舗X は §16.9 の手動登録込みの解決値（shownSns）を使う。
   const runDiscover = async () => {
     setDiscovering(true); setExtractNote(null); setCandidates(null);
+    const account = shownSns ? [shownSns] : [];
     try {
       const { candidates: cs } = await discoverPosts({
-        hashtags: ['フラッグシップ', 'フラッグシップバトル'],
-        accounts: event.snsUrl ? [event.snsUrl] : [],
-        maxResults: 10,
+        accounts: account,
+        keywords: account.length ? [] : ['フラッグシップ'],
+        anyTerms: ['優勝', '全勝', '準優勝'],
+        maxResults: account.length ? 20 : 10,
       });
       setCandidates(cs);
       setExtractNote(cs.length ? `${cs.length}件の候補が見つかりました。使う候補を選んでください。`
-        : '候補が見つかりませんでした（直近7日・店舗アカウント/ハッシュタグ）。手貼りもできます。');
+        : account.length
+          ? '店舗X の直近7日の優勝系ポストは見つかりませんでした。手貼りもできます。'
+          : '候補が見つかりませんでした。店舗X を登録すると from: で絞り込めて精度が上がります。手貼りもできます。');
     } catch (e) {
       setExtractNote(e instanceof Error ? e.message : String(e));
     } finally {
@@ -981,7 +997,7 @@ const DetailPanel: React.FC<{
                 {discoverEnabled && (
                   <div className="fs-discover">
                     <div className="fs-form-actions">
-                      <span className="fs-form-label" style={{ margin: 0 }}>Xで結果ポストを探す（店舗アカウント＋ハッシュタグ・直近7日）</span>
+                      <span className="fs-form-label" style={{ margin: 0 }}>Xで結果ポストを探す（店舗X＋「優勝/全勝/準優勝」・直近7日）</span>
                       <div className="fs-spacer" />
                       <button className="fs-btn" onClick={runDiscover} disabled={discovering || extracting}>
                         {discovering ? '検索中…' : '候補を探す'}
