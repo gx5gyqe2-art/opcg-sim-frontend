@@ -46,11 +46,20 @@ interface MergedEvent extends FlagshipEvent {
   kind: string;
 }
 
+/**
+ * ローカルタイム（JST 運用）の YYYY-MM-DD を返す。TCG+ の開催日時は JST ローカルのため、
+ * toISOString()（UTC）で日付文字列を作ると JST 午前は前日にズレる。日付比較はこれで揃える。
+ */
+function localDate(d: Date): string {
+  const p = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 /** その日を含む週（月曜始まり）の月曜日を YYYY-MM-DD で返す。 */
 function weekOf(date: string): string {
   const d = new Date(`${date}T00:00:00`);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 /** 開催日ベースの状況（結果の有無は関与しない）。 */
@@ -161,8 +170,8 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
-  // 実運用時の当日。開催日との比較にのみ使う。
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // 実運用時の当日（JST ローカル）。開催日との比較にのみ使う。UTC で作ると午前は前日にズレる。
+  const today = useMemo(() => localDate(new Date()), []);
 
   const statusOf = useCallback((e: MergedEvent): Status => {
     if (summary.has(e.id)) return 'collected';
