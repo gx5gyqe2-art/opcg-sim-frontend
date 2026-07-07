@@ -128,6 +128,23 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const [leaders, setLeaders] = useState<FlagshipLeader[]>([]);
   const [backendOk, setBackendOk] = useState(true);
 
+  // §16.9: 一覧行から店舗X を直接登録（店名キーで表示を上書き＝同店の全行に反映）。
+  const [snsOverrides, setSnsOverrides] = useState<Map<string, string | null>>(new Map());
+  const [editSnsStore, setEditSnsStore] = useState<string | null>(null);
+  const [rowSnsInput, setRowSnsInput] = useState('');
+  const [rowSnsBusy, setRowSnsBusy] = useState(false);
+
+  const saveRowSns = async (store: string) => {
+    setRowSnsBusy(true);
+    try {
+      const v = await setStoreSns(store, rowSnsInput.trim());
+      setSnsOverrides((m) => new Map(m).set(store, v));
+      setEditSnsStore(null);
+    } catch { /* 失敗時は編集のまま */ } finally {
+      setRowSnsBusy(false);
+    }
+  };
+
   useEffect(() => {
     fetchLeaders().then(setLeaders).catch(() => setBackendOk(false));
   }, []);
@@ -266,10 +283,23 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <td className="fs-cap">{e.capacity ?? '—'}</td>
         <td><span className={`fs-badge fs-${s}`}>{STATUS_LABEL[s]}</span></td>
         <td className="fs-winner">{winner ?? <span className="fs-dim">—</span>}</td>
-        <td className="fs-links">
-          {e.snsUrl
-            ? <a className="fs-xlink" href={e.snsUrl} target="_blank" rel="noopener noreferrer" onClick={(ev) => ev.stopPropagation()}>店舗X ↗</a>
-            : <span className="fs-dim" style={{ fontSize: 12 }}>X未登録</span>}
+        <td className="fs-links" onClick={(ev) => ev.stopPropagation()}>
+          {editSnsStore === e.store ? (
+            <span className="fs-sns">
+              <input
+                className="fs-sns-input fs-sns-input-sm" type="text" autoFocus value={rowSnsInput}
+                placeholder="@handle / URL"
+                onChange={(ev) => setRowSnsInput(ev.target.value)}
+                onKeyDown={(ev) => { if (ev.key === 'Enter') saveRowSns(e.store); }}
+              />
+              <button className="fs-btn ghost" disabled={rowSnsBusy} onClick={() => saveRowSns(e.store)}>{rowSnsBusy ? '…' : '保存'}</button>
+              <button className="fs-linklike" onClick={() => setEditSnsStore(null)}>取消</button>
+            </span>
+          ) : (snsOverrides.has(e.store) ? snsOverrides.get(e.store) : e.snsUrl) ? (
+            <a className="fs-xlink" href={(snsOverrides.get(e.store) ?? e.snsUrl) as string} target="_blank" rel="noopener noreferrer">店舗X ↗</a>
+          ) : (
+            <button className="fs-xreg" onClick={() => { setEditSnsStore(e.store); setRowSnsInput(''); }}>X登録</button>
+          )}
         </td>
       </tr>,
     );
@@ -321,12 +351,15 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           </div>
         )}
 
-        <div className="fs-kpis">
-          <Kpi label="総開催" value={kpi.total} sub={`${current?.label ?? ''} ${(current?.series ?? []).map((s) => kindShort(s.kind)).join(' + ')}`} />
-          <Kpi label="終了した開催" value={kpi.past} sub="結果の回収対象" />
-          <Kpi label="回収済" value={kpi.collected} sub={`回収率 ${kpi.rate}%`} />
-          <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
-        </div>
+        {/* KPI 枠は集計タブのみに表示（一覧タブは一覧だけ）。 */}
+        {view === 'agg' && (
+          <div className="fs-kpis">
+            <Kpi label="総開催" value={kpi.total} sub={`${current?.label ?? ''} ${(current?.series ?? []).map((s) => kindShort(s.kind)).join(' + ')}`} />
+            <Kpi label="終了した開催" value={kpi.past} sub="結果の回収対象" />
+            <Kpi label="回収済" value={kpi.collected} sub={`回収率 ${kpi.rate}%`} />
+            <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
+          </div>
+        )}
 
         {view === 'agg' && (
           <AggregateView
@@ -1149,6 +1182,9 @@ const FlagshipStyles: React.FC = () => (
     .fs-sns .fs-btn { padding: 3px 10px; font-size: 12px; }
     .fs-linklike { background: none; border: none; color: #8a6d0b; font-size: 12px; cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline; }
     .fs-linklike:hover { color: #f1c40f; }
+    .fs-sns-input-sm { min-width: 120px; padding: 2px 6px; font-size: 11px; }
+    .fs-xreg { background: transparent; border: 1px solid #8a6d0b; color: #f1c40f; border-radius: 5px; padding: 2px 8px; font-size: 11px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .fs-xreg:hover { background: #f1c40f; color: #0b0908; }
     .fs-footnote { margin-top: 14px; font-size: 11px; color: #6f6553; line-height: 1.7; }
     .fs-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9; }
     .fs-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(430px, 92vw); background: #16120e; border-left: 1px solid #2e261c; overflow-y: auto; padding: 20px; z-index: 10; }
