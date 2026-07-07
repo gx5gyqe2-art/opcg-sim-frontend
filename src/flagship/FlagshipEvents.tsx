@@ -351,12 +351,15 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           </div>
         )}
 
-        <div className="fs-kpis">
-          <Kpi label="総開催" value={kpi.total} sub={`${current?.label ?? ''} ${(current?.series ?? []).map((s) => kindShort(s.kind)).join(' + ')}`} />
-          <Kpi label="終了した開催" value={kpi.past} sub="結果の回収対象" />
-          <Kpi label="回収済" value={kpi.collected} sub={`回収率 ${kpi.rate}%`} />
-          <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
-        </div>
+        {/* KPI 枠は集計タブのみに表示（一覧タブは一覧だけ）。 */}
+        {view === 'agg' && (
+          <div className="fs-kpis">
+            <Kpi label="総開催" value={kpi.total} sub={`${current?.label ?? ''} ${(current?.series ?? []).map((s) => kindShort(s.kind)).join(' + ')}`} />
+            <Kpi label="終了した開催" value={kpi.past} sub="結果の回収対象" />
+            <Kpi label="回収済" value={kpi.collected} sub={`回収率 ${kpi.rate}%`} />
+            <Kpi label="未回収" value={kpi.missing} sub="結果ポスト待ち" />
+          </div>
+        )}
 
         {view === 'agg' && (
           <AggregateView
