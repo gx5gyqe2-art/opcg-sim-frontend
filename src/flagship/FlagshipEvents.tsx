@@ -8,7 +8,7 @@ import type { FlagshipEvent } from './tcgPlusClient';
 import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
   fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
-  collectPosts, fetchLinkReview, linkApprove,
+  collectPosts, fetchLinkReview, linkApprove, setStoreSns,
 } from './resultsClient';
 import type {
   DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem, ReviewPost,
@@ -728,6 +728,25 @@ const DetailPanel: React.FC<{
   const [discoverEnabled, setDiscoverEnabled] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [candidates, setCandidates] = useState<DiscoveredCandidate[] | null>(null);
+  // §16.9: 店舗X の手動登録（未登録店舗の X を人が登録＝店舗の全開催へ反映）。
+  const [snsOverride, setSnsOverride] = useState<string | null | undefined>(undefined);
+  const [snsInput, setSnsInput] = useState('');
+  const [snsEditing, setSnsEditing] = useState(false);
+  const [snsBusy, setSnsBusy] = useState(false);
+  const shownSns = snsOverride !== undefined ? snsOverride : (event.snsUrl ?? null);
+  useEffect(() => { setSnsOverride(undefined); setSnsEditing(false); setSnsInput(''); }, [event.id]);
+
+  const saveSns = async () => {
+    setSnsBusy(true);
+    try {
+      const v = await setStoreSns(event.store, snsInput.trim());
+      setSnsOverride(v);
+      setSnsEditing(false);
+      onSaved();  // 同店舗の他開催にも反映されるようサマリ/一覧を更新
+    } catch { /* 失敗時は編集のまま */ } finally {
+      setSnsBusy(false);
+    }
+  };
 
   // 登録済みの開催は既存の結果をフォームへプリフィルする（訂正フロー）。
   useEffect(() => {
@@ -892,9 +911,24 @@ const DetailPanel: React.FC<{
           <dt>都道府県</dt><dd>{event.pref}</dd>
           <dt>定員</dt><dd>{event.capacity ?? '—'} 名</dd>
           <dt>店舗X</dt>
-          <dd>{event.snsUrl
-            ? <a className="fs-xlink" href={event.snsUrl} target="_blank" rel="noopener noreferrer">{event.snsUrl.replace('https://', '')} ↗</a>
-            : <span className="fs-dim">未登録</span>}</dd>
+          <dd>{shownSns && !snsEditing ? (
+            <span className="fs-sns">
+              <a className="fs-xlink" href={shownSns} target="_blank" rel="noopener noreferrer">{shownSns.replace('https://', '')} ↗</a>
+              {backendOk && (
+                <button className="fs-linklike" onClick={() => { setSnsInput(shownSns); setSnsEditing(true); }}>編集</button>
+              )}
+            </span>
+          ) : backendOk ? (
+            <span className="fs-sns">
+              <input
+                className="fs-sns-input" type="text" value={snsInput}
+                placeholder="@handle または https://x.com/…"
+                onChange={(e) => setSnsInput(e.target.value)}
+              />
+              <button className="fs-btn ghost" disabled={snsBusy} onClick={saveSns}>{snsBusy ? '…' : '登録'}</button>
+              {shownSns && <button className="fs-linklike" onClick={() => setSnsEditing(false)}>取消</button>}
+            </span>
+          ) : <span className="fs-dim">未登録</span>}</dd>
         </dl>
         <section className="fs-section">
           <h3>結果{hasResults ? '（登録済み・保存で上書き）' : 'の登録'}</h3>
@@ -1109,6 +1143,12 @@ const FlagshipStyles: React.FC = () => (
     .fs-dim { color: #6f6553; }
     .fs-xlink { color: #a89a80; text-decoration: none; border: 1px solid #2e261c; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
     .fs-xlink:hover { color: #f1c40f; border-color: #8a6d0b; }
+    .fs-sns { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .fs-sns-input { background: #1e1812; color: #f0e6d2; border: 1px solid #2e261c; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-family: inherit; min-width: 180px; }
+    .fs-sns-input:focus-visible { outline: 2px solid #f1c40f; outline-offset: 1px; }
+    .fs-sns .fs-btn { padding: 3px 10px; font-size: 12px; }
+    .fs-linklike { background: none; border: none; color: #8a6d0b; font-size: 12px; cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline; }
+    .fs-linklike:hover { color: #f1c40f; }
     .fs-footnote { margin-top: 14px; font-size: 11px; color: #6f6553; line-height: 1.7; }
     .fs-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9; }
     .fs-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(430px, 92vw); background: #16120e; border-left: 1px solid #2e261c; overflow-y: auto; padding: 20px; z-index: 10; }
