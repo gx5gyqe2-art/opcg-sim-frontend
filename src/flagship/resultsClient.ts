@@ -294,6 +294,15 @@ export async function linkApprove(links: Array<{ tweetId: string; eventId: numbe
   return raw.updated;
 }
 
+/** 店名 → 店舗X を手動登録する（設計 §16.9）。空文字で登録解除。正規化後の URL（or null）を返す。 */
+export async function setStoreSns(store: string, snsUrl: string): Promise<string | null> {
+  const raw = await request<{ store: string; sns_url: string | null }>('/stores/sns', {
+    method: 'POST',
+    body: JSON.stringify({ store, sns_url: snsUrl }),
+  });
+  return raw.sns_url;
+}
+
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
