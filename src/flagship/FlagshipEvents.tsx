@@ -902,12 +902,11 @@ const DetailPanel: React.FC<{
     setDiscovering(true); setExtractNote(null); setCandidates(null);
     const account = shownSns ? [shownSns] : [];
     try {
-      const { candidates: cs } = await discoverPosts({
-        accounts: account,
-        keywords: account.length ? [] : ['フラッグシップ'],
-        anyTerms: ['優勝', '全勝', '準優勝'],
-        maxResults: account.length ? 20 : 10,
-      });
+      // 店舗X 既知: from:店 (優勝 OR 全勝 OR 準優勝)。
+      // 未知: サーバ既定に委ねる（イベント語を OR で拡張＝「フラッグシップバトル」表記の結果も拾う・§16.10）。
+      const { candidates: cs } = account.length
+        ? await discoverPosts({ accounts: account, anyTerms: ['優勝', '全勝', '準優勝'], maxResults: 20 })
+        : await discoverPosts({ maxResults: 20 });
       setCandidates(cs);
       setExtractNote(cs.length ? `${cs.length}件の候補が見つかりました。使う候補を選んでください。`
         : account.length
