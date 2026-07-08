@@ -124,6 +124,13 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
   };
 
+  // 開催マスターのみ再取得（日次ガード無視）。店舗X 登録後に /events の overlay 済み sns を
+  // 一覧＋キャッシュへ流し込むために使う（キャッシュ任せだと登録が反映されずリロードで消えて見える）。
+  const refetchEvents = () => {
+    fs.refetch();
+    ex.refetch();
+  };
+
   const [q, setQ] = useState('');
   // 都道府県は複数選択（空集合＝全都道府県）。
   const [prefSet, setPrefSet] = useState<Set<string>>(new Set());
@@ -143,12 +150,19 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const [rowSnsInput, setRowSnsInput] = useState('');
   const [rowSnsBusy, setRowSnsBusy] = useState(false);
 
+  // 店舗X 保存後の共通反映: 一覧の即時上書き（session内）＋ /events 再取得（overlay 済みを
+  // キャッシュへ反映しリロードでも残す）。詳細パネル・行登録の両方から呼ぶ。
+  const onSnsSaved = (store: string, url: string | null) => {
+    setSnsOverrides((m) => new Map(m).set(store, url));
+    refetchEvents();
+  };
+
   const saveRowSns = async (store: string) => {
     setRowSnsBusy(true);
     try {
       const v = await setStoreSns(store, rowSnsInput.trim());
-      setSnsOverrides((m) => new Map(m).set(store, v));
       setEditSnsStore(null);
+      onSnsSaved(store, v);
     } catch { /* 失敗時は編集のまま */ } finally {
       setRowSnsBusy(false);
     }
@@ -448,6 +462,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           backendOk={backendOk}
           onClose={() => setSelected(null)}
           onSaved={loadSummary}
+          onSnsSaved={onSnsSaved}
         />
       )}
     </div>
@@ -753,7 +768,9 @@ const DetailPanel: React.FC<{
   backendOk: boolean;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ event, today, leaders, summaryItem, backendOk, onClose, onSaved }) => {
+  /** 店舗X 保存後に一覧へ反映＋ /events 再取得（§16.9 の登録が一覧に出ない不具合対策）。 */
+  onSnsSaved: (store: string, url: string | null) => void;
+}> = ({ event, today, leaders, summaryItem, backendOk, onClose, onSaved, onSnsSaved }) => {
   const d = new Date(`${event.date}T00:00:00`);
   const hasResults = !!summaryItem;
   const s: Status = hasResults ? 'collected' : baseStatus(event.date, today);
@@ -784,7 +801,9 @@ const DetailPanel: React.FC<{
       const v = await setStoreSns(event.store, snsInput.trim());
       setSnsOverride(v);
       setSnsEditing(false);
-      onSaved();  // 同店舗の他開催にも反映されるようサマリ/一覧を更新
+      // 一覧へ即時反映＋ /events 再取得（overlay 済み sns をキャッシュへ。リロードでも残す）。
+      // 従来は onSaved()=loadSummary（/results のみ）で /events を更新せず、登録が一覧に出なかった。
+      onSnsSaved(event.store, v);
     } catch { /* 失敗時は編集のまま */ } finally {
       setSnsBusy(false);
     }
