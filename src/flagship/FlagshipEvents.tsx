@@ -6,6 +6,9 @@ import {
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
+  readApplicantCache, isApplicantCacheFresh, recruitingIds, fetchApplicantsFor, isRecruiting,
+} from './applicants';
+import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
   fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
   collectPosts, fetchLinkReview, linkApprove, setStoreSns,
@@ -122,17 +125,42 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const error = fs.error ?? ex.error;
   const syncedAt = [fs.syncedAt, ex.syncedAt].filter((x): x is string => !!x).sort().pop() ?? null;
 
+  // §16.13: 申込人数（募集中の開催のみ・TCG+ 詳細を並列取得）。取得は開催マスターの取得に合わせる。
+  const [applicants, setApplicants] = useState<Map<number, number | null>>(
+    () => new Map(Object.entries(readApplicantCache()).map(([k, v]) => [Number(k), v])),
+  );
+  const applicantReqRef = useRef<Set<number>>(new Set());
+  const applicantAbortRef = useRef<AbortController | null>(null);
+  const loadApplicants = useCallback((force: boolean) => {
+    const now = new Date();
+    if (force) applicantReqRef.current = new Set();
+    const ids = recruitingIds(events, now).filter((id) => !applicantReqRef.current.has(id));
+    if (!ids.length) return;
+    ids.forEach((id) => applicantReqRef.current.add(id));
+    applicantAbortRef.current?.abort();
+    const controller = new AbortController();
+    applicantAbortRef.current = controller;
+    void fetchApplicantsFor(ids, now, (id, c) => setApplicants((m) => new Map(m).set(id, c)), controller.signal);
+  }, [events]);
+  // 開催が読めたら、募集中の未取得分を取得（キャッシュ鮮度切れなら全募集中を再取得）。
+  useEffect(() => {
+    if (!events.length) return;
+    loadApplicants(!isApplicantCacheFresh(new Date()));
+    return () => applicantAbortRef.current?.abort();
+  }, [events, loadApplicants]);
+
   useEffect(() => {
     let alive = true;
     refreshSeriesList().then((l) => { if (alive) setSeriesList(l); }).catch(() => { /* 静的設定で継続 */ });
     return () => { alive = false; };
   }, []);
 
-  // 手動「取得」は両種別の開催マスターに加えて開催期の発見も強制更新する。
+  // 手動「取得」は両種別の開催マスターに加えて開催期の発見・申込人数も強制更新する。
   const onRefetch = () => {
     fs.refetch();
     ex.refetch();
     refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
+    loadApplicants(true);
   };
 
   // 開催マスターのみ再取得（日次ガード無視）。店舗X 登録後に /events の overlay 済み sns を
@@ -202,6 +230,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     if (summary.has(e.id)) return 'collected';
     return baseStatus(e.date, today);
   }, [summary, today]);
+
+  // 申込人数セル: 募集中の開催のみ数値（未取得は「…」）、募集中でない/取得不可は「-」（§16.13）。
+  const applicantCell = (e: MergedEvent): React.ReactNode => {
+    if (!isRecruiting(e, new Date())) return <span className="fs-dim">-</span>;
+    if (!applicants.has(e.id)) return <span className="fs-dim">…</span>;
+    const n = applicants.get(e.id);
+    return n == null ? <span className="fs-dim">-</span> : <b>{n}</b>;
+  };
 
   // 月の切り替え時は絞り込みと選択もリセットする。
   const changeMonth = (m: number) => {
@@ -304,7 +340,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       const d = new Date(`${e.date}T00:00:00`);
       rows.push(
         <tr key={`h-${e.date}`} className="fs-datehead">
-          <td colSpan={8}>
+          <td colSpan={9}>
             {d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}){e.date === today ? ' — 本日' : ''}
           </td>
         </tr>,
@@ -319,6 +355,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <td><span className={`fs-kind ${e.kind === 'エクストラグランドバトル' ? 'fs-kind-ex' : 'fs-kind-fs'}`}>{kindShort(e.kind)}</span></td>
         <td className="fs-pref">{e.pref}</td>
         <td className="fs-cap">{e.capacity ?? '—'}</td>
+        <td className="fs-cap">{applicantCell(e)}</td>
         <td><span className={`fs-badge fs-${s}`}>{STATUS_LABEL[s]}</span></td>
         <td className="fs-winner">{winner ?? <span className="fs-dim">—</span>}</td>
         <td className="fs-links" onClick={(ev) => ev.stopPropagation()}>
@@ -443,13 +480,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
               <thead>
                 <tr>
                   <th>開催日時</th><th>店舗</th><th>大会</th><th>都道府県</th><th style={{ textAlign: 'right' }}>定員</th>
+                  <th style={{ textAlign: 'right' }}>申込</th>
                   <th>状況</th><th>優勝リーダー</th><th style={{ textAlign: 'right' }}>リンク</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length > 0 ? rows : (
                   <tr>
-                    <td colSpan={8} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={9} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
                       {isLoading ? '開催データを取得中…' : '該当する開催がありません'}
                     </td>
                   </tr>

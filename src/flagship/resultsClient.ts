@@ -97,7 +97,7 @@ export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promi
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as {
-    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null }>;
+    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null; apply_end?: string | null }>;
   };
   return data.events.map((e) => ({
     id: e.id,
@@ -107,6 +107,7 @@ export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promi
     pref: e.pref ?? '',
     capacity: e.capacity ?? null,
     snsUrl: e.sns_url ?? '',
+    applyEnd: e.apply_end ?? '',
   }));
 }
 
