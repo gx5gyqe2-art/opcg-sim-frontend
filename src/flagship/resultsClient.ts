@@ -245,11 +245,18 @@ export async function discoverPosts(req: {
   };
 }
 
-/** 全国の優勝ポストを収集して DB に貯める（設計 §16.7）。件数を返す。 */
-export async function collectPosts(opts?: { maxResults?: number; pages?: number }): Promise<number> {
+/**
+ * 優勝ポストを**店アカウントに絞って**収集し DB に貯める（トークン節約・§16.12）。件数を返す。
+ * `accounts`（未登録・開催済み開催の店 X）で `(from:店…) (優勝 OR …)` 検索する。全国収集は廃止。
+ */
+export async function collectPosts(
+  opts: { accounts: string[]; maxResults?: number; pages?: number },
+): Promise<number> {
   const raw = await request<{ collected: number }>('/collect', {
     method: 'POST',
-    body: JSON.stringify({ max_results: opts?.maxResults ?? 100, pages: opts?.pages ?? 3 }),
+    body: JSON.stringify({
+      accounts: opts.accounts, max_results: opts.maxResults ?? 100, pages: opts.pages ?? 1,
+    }),
   });
   return raw.collected;
 }

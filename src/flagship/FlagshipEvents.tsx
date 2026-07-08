@@ -62,6 +62,13 @@ function weekOf(date: string): string {
   return localDate(d);
 }
 
+/** 配列を n 件ずつに分割する（`from:` 検索のクエリ長対策で店アカウントをチャンクする）。 */
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
 /** 開催日ベースの状況（結果の有無は関与しない）。 */
 function baseStatus(date: string, today: string): 'missing' | 'today' | 'upcoming' {
   if (date < today) return 'missing';
@@ -402,7 +409,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         )}
 
         {view === 'link' && (
-          <LinkView events={events} seriesIds={seriesIds} onSaved={loadSummary} />
+          <LinkView events={events} seriesIds={seriesIds} summary={summary} today={today} onSaved={loadSummary} />
         )}
 
         {view === 'list' && <>
@@ -617,12 +624,16 @@ const AggregateView: React.FC<{
 };
 
 /**
- * §16.7: 紐付け（一括登録）ビュー。全国の優勝ポストを収集し、この月の開催へ照合した候補を
- * 突き合わせ表で出す。店アカウント一致(handle)は自動チェック、店名一致は要確認。選んで
- * 「一括登録」すると、既存の結果登録として保存され、集計・一覧・回収率に反映される。
+ * §16.7/§16.12: 紐付け（一括登録）ビュー。**未登録かつ開催済み（当日まで）で店舗X ありの開催**の
+ * 店アカウントに絞って優勝ポストを収集し（`from:店`・トークン節約）、この月の開催へ照合した候補を
+ * 突き合わせ表で出す。店アカウント一致(handle)は自動チェック、店名一致は要確認。選んで「一括登録」
+ * すると、既存の結果登録として保存され、集計・一覧・回収率に反映される。全国収集は廃止。
  */
-const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: () => void }>
-  = ({ events, seriesIds, onSaved }) => {
+const LinkView: React.FC<{
+  events: MergedEvent[]; seriesIds: number[];
+  summary: Map<number, SummaryItem>; today: string; onSaved: () => void;
+}>
+  = ({ events, seriesIds, summary, today, onSaved }) => {
     const [busy, setBusy] = useState(false);
     const [saving, setSaving] = useState(false);
     const [review, setReview] = useState<ReviewPost[] | null>(null);
@@ -630,10 +641,23 @@ const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: 
     const [note, setNote] = useState<string | null>(null);
     const eventById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
 
+    // 収集対象＝未登録（結果なし）× 開催済み（開催日≤今日）× 店舗X あり の店アカウント（重複除去）。
+    const targetAccounts = useMemo(() => [...new Set(
+      events.filter((e) => !summary.has(e.id) && e.date <= today && !!e.snsUrl).map((e) => e.snsUrl),
+    )], [events, summary, today]);
+
     const run = async () => {
+      if (targetAccounts.length === 0) {
+        setNote('収集対象がありません（未登録・開催済み・店舗X登録ありの開催が必要）。店舗X を登録すると対象に入ります。');
+        return;
+      }
       setBusy(true); setNote(null);
       try {
-        const collected = await collectPosts({ pages: 3 });
+        // 店アカウントを from: でまとめて検索（クエリ長対策でチャンク分割）。全国収集はしない。
+        let collected = 0;
+        for (const group of chunk(targetAccounts, 15)) {
+          collected += await collectPosts({ accounts: group, pages: 1 });
+        }
         const all = (await Promise.all(seriesIds.map((id) => fetchLinkReview(id)))).flat();
         const byId = new Map<string, ReviewPost>();
         for (const p of all) {
@@ -649,7 +673,7 @@ const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: 
           if (auto) s[p.tweetId] = auto.eventId;   // handle一致は自動チェック
         }
         setReview(withCand); setSel(s);
-        setNote(`収集 ${collected} 件 / この月の開催に一致 ${withCand.length} 件（候補なし ${posts.length - withCand.length} 件は個人ポスト等で対象外）`);
+        setNote(`未登録・開催済み ${targetAccounts.length} 店に絞って収集 ${collected} 件 / この月の開催に一致 ${withCand.length} 件（候補なし ${posts.length - withCand.length} 件は個人ポスト等で対象外）`);
       } catch (e) {
         setNote(e instanceof Error ? e.message : String(e));
       } finally {
@@ -696,12 +720,17 @@ const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: 
           <div className="fs-form-actions" style={{ margin: 0 }}>
             {note && <span className="fs-dim" style={{ fontSize: 12 }}>{note}</span>}
             <div className="fs-spacer" />
-            <button className="fs-btn" onClick={run} disabled={busy || saving}>{busy ? '収集中…' : review ? '再収集' : '収集して照合'}</button>
+            <button className="fs-btn" onClick={run} disabled={busy || saving || targetAccounts.length === 0}>
+              {busy ? '収集中…' : review ? '再収集' : `未登録を収集して照合（${targetAccounts.length}店）`}
+            </button>
           </div>
         </div>
         {!review && !busy && (
           <p className="fs-dim" style={{ margin: 0 }}>
-            「収集して照合」で全国の優勝ポストを集め、この月の開催に一致する候補を出します。店舗が投稿した結果は★handle一致で自動チェック、店名一致は要確認。選んで一括登録すると集計・一覧に反映されます。
+            <b>未登録かつ開催済み（当日まで）で店舗X 登録ありの開催 {targetAccounts.length} 店</b>の
+            アカウントに絞って（`from:店`）優勝ポストを収集し、この月の開催に一致する候補を出します。
+            トークン節約のため全国収集はしません。店舗が投稿した結果は★handle一致で自動チェック、店名一致は要確認。
+            選んで一括登録すると集計・一覧に反映されます。店舗X 未登録の開催は対象外（詳細/一覧から店舗X を登録すると入ります）。
           </p>
         )}
         {review && review.length > 0 && (
