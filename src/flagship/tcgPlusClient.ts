@@ -29,6 +29,8 @@ export interface FlagshipEvent {
   snsUrl: string;
   /** 応募締切（RFC3339、無ければ空文字）。募集中＝now < applyEnd の判定に使う（§16.13）。 */
   applyEnd: string;
+  /** 申込人数（backend 保存分・§16.14）。未取得は null。募集中は取得ボタンで最新化。 */
+  applicants: number | null;
 }
 
 /** TCG+ event/list の1件分（必要フィールドのみ）。 */
@@ -80,6 +82,7 @@ function normalize(raw: RawEvent): FlagshipEvent {
     capacity: typeof raw.max_join_count === 'number' ? raw.max_join_count : null,
     snsUrl: raw.organizer_sns_url ?? '',
     applyEnd: raw.apply_end_datetime ?? '',
+    applicants: null,  // 一覧APIには無い。backend 保存分は /events から来る（§16.14）。
   };
 }
 

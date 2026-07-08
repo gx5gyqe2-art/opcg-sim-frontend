@@ -5,13 +5,11 @@ import {
 } from './seriesDiscovery';
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
-import {
-  readApplicantCache, isApplicantCacheFresh, recruitingIds, fetchApplicantsFor, isRecruiting,
-} from './applicants';
+import { fetchApplicantsFor, isRecruiting } from './applicants';
 import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
   fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
-  collectPosts, fetchLinkReview, linkApprove, setStoreSns,
+  collectPosts, fetchLinkReview, linkApprove, setStoreSns, syncApplicants,
 } from './resultsClient';
 import type {
   DiscoveredCandidate, ExtractedEntry, FlagshipLeader, ResultEntry, SummaryItem, ReviewPost,
@@ -125,27 +123,34 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const error = fs.error ?? ex.error;
   const syncedAt = [fs.syncedAt, ex.syncedAt].filter((x): x is string => !!x).sort().pop() ?? null;
 
-  // §16.13: 申込人数（募集中の開催のみ・TCG+ 詳細を並列取得）。取得は開催マスターの取得に合わせる。
-  const [applicants, setApplicants] = useState<Map<number, number | null>>(
-    () => new Map(Object.entries(readApplicantCache()).map(([k, v]) => [Number(k), v])),
-  );
+  // §16.13/§16.14: 申込人数。ベースは backend 保存分（各開催の applicants＝/events 由来）。募集中は
+  // TCG+ から並列取得して override へ反映し、結果を backend へ sync（全端末で共有・保存役は backend）。
+  const [applicantOverride, setApplicantOverride] = useState<Map<number, number>>(new Map());
   const applicantReqRef = useRef<Set<number>>(new Set());
   const applicantAbortRef = useRef<AbortController | null>(null);
   const loadApplicants = useCallback((force: boolean) => {
     const now = new Date();
     if (force) applicantReqRef.current = new Set();
-    const ids = recruitingIds(events, now).filter((id) => !applicantReqRef.current.has(id));
+    // 募集中で、未リクエスト かつ（force か backend にまだ値が無い）開催を取得対象にする。
+    const ids = events
+      .filter((e) => isRecruiting(e, now) && !applicantReqRef.current.has(e.id)
+        && (force || e.applicants == null))
+      .map((e) => e.id);
     if (!ids.length) return;
     ids.forEach((id) => applicantReqRef.current.add(id));
     applicantAbortRef.current?.abort();
     const controller = new AbortController();
     applicantAbortRef.current = controller;
-    void fetchApplicantsFor(ids, now, (id, c) => setApplicants((m) => new Map(m).set(id, c)), controller.signal);
+    void fetchApplicantsFor(
+      ids,
+      (id, c) => { if (c != null) setApplicantOverride((m) => new Map(m).set(id, c)); },
+      controller.signal,
+    ).then((counts) => { if (!controller.signal.aborted) void syncApplicants(counts); });
   }, [events]);
-  // 開催が読めたら、募集中の未取得分を取得（キャッシュ鮮度切れなら全募集中を再取得）。
+  // 開催が読めたら、募集中で backend にまだ無い分を取得。「取得」ボタンでは全募集中を再取得（force）。
   useEffect(() => {
     if (!events.length) return;
-    loadApplicants(!isApplicantCacheFresh(new Date()));
+    loadApplicants(false);
     return () => applicantAbortRef.current?.abort();
   }, [events, loadApplicants]);
 
@@ -231,12 +236,12 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return baseStatus(e.date, today);
   }, [summary, today]);
 
-  // 申込人数セル: 募集中の開催のみ数値（未取得は「…」）、募集中でない/取得不可は「-」（§16.13）。
+  // 申込人数セル: 募集中の開催のみ表示。値は override（今回取得）優先、無ければ backend 保存分
+  // （e.applicants）。どちらも無ければ「…」（取得待ち）。募集中でない開催は「-」（§16.13/§16.14）。
   const applicantCell = (e: MergedEvent): React.ReactNode => {
     if (!isRecruiting(e, new Date())) return <span className="fs-dim">-</span>;
-    if (!applicants.has(e.id)) return <span className="fs-dim">…</span>;
-    const n = applicants.get(e.id);
-    return n == null ? <span className="fs-dim">-</span> : <b>{n}</b>;
+    const n = applicantOverride.has(e.id) ? applicantOverride.get(e.id) : e.applicants;
+    return n == null ? <span className="fs-dim">…</span> : <b>{n}</b>;
   };
 
   // 月の切り替え時は絞り込みと選択もリセットする。
