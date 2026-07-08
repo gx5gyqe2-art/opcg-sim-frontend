@@ -11,7 +11,7 @@ import {
   collectPosts, fetchLinkReview, linkApprove, setStoreSns,
 } from './resultsClient';
 import type {
-  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem, ReviewPost,
+  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, ResultEntry, SummaryItem, ReviewPost,
 } from './resultsClient';
 
 /**
@@ -77,11 +77,15 @@ function formatSynced(iso: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 一覧・詳細で使う優勝リーダーの表示名（辞書解決済みなら正規名、なければ raw）。 */
-function winnerLabel(item: SummaryItem | undefined): string | null {
-  const w = item?.winner;
-  if (!w) return null;
+/** 優勝リーダー1件の表示名（辞書解決済みなら正規名、なければ raw）。 */
+function oneWinnerName(w: ResultEntry): string | null {
   return w.leader ? w.leader.name : (w.leaderRaw ?? null);
+}
+
+/** 一覧・詳細で使う優勝リーダーの表示名。2優勝（定員64）は「A / B」で連結（§16.11）。 */
+function winnerLabel(item: SummaryItem | undefined): string | null {
+  const names = (item?.winners ?? []).map(oneWinnerName).filter((n): n is string => !!n);
+  return names.length ? names.join(' / ') : null;
 }
 
 export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
@@ -242,23 +246,27 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   }, []);
 
   // P4: 優勝リーダー分布。summary（月内の全開催期分＝優勝リーダー入り）を束ねるだけ。
+  // 定員64の2ブロック開催は優勝2件を各1件として計上する（§16.11）。割合は総優勝数を分母にする。
   const distribution = useMemo(() => {
     const byLeader = new Map<string, { name: string; color: string; count: number }>();
-    let withWinner = 0;
+    let withWinner = 0;    // 優勝ありの開催数（回収済の目安・表示用）
+    let totalWinners = 0;  // 優勝の総数（2優勝開催は2）＝割合の分母
     for (const it of summary.values()) {
-      const w = it.winner;
-      if (!w) continue;
+      if (it.winners.length === 0) continue;
       withWinner++;
-      const key = w.leaderCardNumber ?? `raw:${w.leaderRaw ?? ''}`;
-      const name = w.leader?.name ?? w.leaderRaw ?? '不明';
-      const color = w.leader?.color ?? '';
-      const cur = byLeader.get(key);
-      if (cur) cur.count += 1;
-      else byLeader.set(key, { name, color, count: 1 });
+      for (const w of it.winners) {
+        totalWinners++;
+        const key = w.leaderCardNumber ?? `raw:${w.leaderRaw ?? ''}`;
+        const name = w.leader?.name ?? w.leaderRaw ?? '不明';
+        const color = w.leader?.color ?? '';
+        const cur = byLeader.get(key);
+        if (cur) cur.count += 1;
+        else byLeader.set(key, { name, color, count: 1 });
+      }
     }
     const rows = [...byLeader.values()]
       .sort((a, b) => b.count - a.count)
-      .map((r) => ({ ...r, pct: withWinner ? Math.round((r.count / withWinner) * 1000) / 10 : 0 }));
+      .map((r) => ({ ...r, pct: totalWinners ? Math.round((r.count / totalWinners) * 1000) / 10 : 0 }));
     return { rows, withWinner };
   }, [summary]);
 
@@ -840,6 +848,18 @@ const DetailPanel: React.FC<{
   };
   const removeRow = (i: number) => setRows((rs) => rs.filter((_, j) => j !== i));
 
+  // 定員64は2ブロック制＝優勝2人（§16.11）。優勝行を最大2つまで許容する。
+  const twoWinners = (event.capacity ?? 0) >= 64;
+  const winnerCount = rows.filter((r) => r.placement === 1).length;
+  const addWinner = () => {
+    setRows((rs) => {
+      const at = rs.map((r) => r.placement).lastIndexOf(1) + 1;  // 既存の優勝の直後に挿入
+      const next = [...rs];
+      next.splice(at, 0, { placement: 1, cardNumber: '', raw: '' });
+      return next;
+    });
+  };
+
   const winnerFilled = rows.some((r) => r.placement === 1 && (r.cardNumber || r.raw.trim()));
 
   const save = async () => {
@@ -1061,31 +1081,43 @@ const DetailPanel: React.FC<{
                 {extractNote && <p className="fs-dim" style={{ margin: '2px 0 0', fontSize: 12 }}>{extractNote}</p>}
               </div>
 
-              {rows.map((r, i) => (
-                <div className="fs-form-row" key={i}>
-                  <span className="fs-place">{r.placement === 1 ? '優勝' : `${r.placement}位`}</span>
-                  <select
-                    aria-label={`${r.placement === 1 ? '優勝' : `${r.placement}位`}のリーダー`}
-                    value={r.cardNumber}
-                    onChange={(e) => setRow(i, { cardNumber: e.target.value })}
-                  >
-                    <option value="">（自由入力）</option>
-                    {leaders.map((l) => (
-                      <option key={l.cardNumber} value={l.cardNumber}>{l.name}（{l.color}・{l.cardNumber}）</option>
-                    ))}
-                  </select>
-                  {!r.cardNumber && (
-                    <input
-                      type="text" placeholder="リーダー名を入力"
-                      value={r.raw} onChange={(e) => setRow(i, { raw: e.target.value })}
-                    />
-                  )}
-                  {r.placement > 1 && (
-                    <button className="fs-row-del" aria-label="この行を削除" onClick={() => removeRow(i)}>✕</button>
-                  )}
-                </div>
-              ))}
+              {rows.map((r, i) => {
+                // 優勝が2件（定員64）のときは 優勝①/優勝② と区別。1件なら「優勝」。
+                const wIdx = rows.slice(0, i + 1).filter((x) => x.placement === 1).length;
+                const label = r.placement === 1
+                  ? (winnerCount > 1 ? `優勝${'①②'[wIdx - 1] ?? ''}` : '優勝')
+                  : `${r.placement}位`;
+                // 削除可: 入賞行、または優勝が2つあるときの優勝行（最後の1優勝は残す）。
+                const canDelete = r.placement > 1 || (r.placement === 1 && winnerCount > 1);
+                return (
+                  <div className="fs-form-row" key={i}>
+                    <span className="fs-place">{label}</span>
+                    <select
+                      aria-label={`${label}のリーダー`}
+                      value={r.cardNumber}
+                      onChange={(e) => setRow(i, { cardNumber: e.target.value })}
+                    >
+                      <option value="">（自由入力）</option>
+                      {leaders.map((l) => (
+                        <option key={l.cardNumber} value={l.cardNumber}>{l.name}（{l.color}・{l.cardNumber}）</option>
+                      ))}
+                    </select>
+                    {!r.cardNumber && (
+                      <input
+                        type="text" placeholder="リーダー名を入力"
+                        value={r.raw} onChange={(e) => setRow(i, { raw: e.target.value })}
+                      />
+                    )}
+                    {canDelete && (
+                      <button className="fs-row-del" aria-label="この行を削除" onClick={() => removeRow(i)}>✕</button>
+                    )}
+                  </div>
+                );
+              })}
               <div className="fs-form-actions">
+                {twoWinners && winnerCount < 2 && (
+                  <button className="fs-btn ghost" onClick={addWinner}>+ 優勝をもう1人（定員64・2ブロック）</button>
+                )}
                 <button className="fs-btn ghost" onClick={addRow} disabled={rows.length >= 8}>+ 入賞を追加</button>
                 <div className="fs-spacer" />
                 {hasResults && <button className="fs-btn danger" onClick={remove} disabled={busy}>結果を削除</button>}

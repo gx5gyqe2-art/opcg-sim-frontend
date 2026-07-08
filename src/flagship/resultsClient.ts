@@ -41,7 +41,8 @@ export interface SummaryItem {
   eventId: number;
   resultCount: number;
   postUrl: string | null;
-  winner: ResultEntry | null;
+  /** 優勝（placement=1）。通常1件、定員64の2ブロック開催は最大2件（§16.11）。 */
+  winners: ResultEntry[];
 }
 
 interface RawLeader { card_number: string; name: string; color: string; life: string }
@@ -313,13 +314,13 @@ export async function setStoreSns(store: string, snsUrl: string): Promise<string
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
-    items: Array<{ event_id: number; result_count: number; post_url: string | null; winner: RawEntry | null }>;
+    items: Array<{ event_id: number; result_count: number; post_url: string | null; winners: RawEntry[] }>;
   }>(`/results?series_id=${seriesId}`);
   return new Map(raw.items.map((it) => [it.event_id, {
     eventId: it.event_id,
     resultCount: it.result_count,
     postUrl: it.post_url,
-    winner: it.winner ? toEntry(it.winner) : null,
+    winners: (it.winners ?? []).map(toEntry),
   }]));
 }
 
