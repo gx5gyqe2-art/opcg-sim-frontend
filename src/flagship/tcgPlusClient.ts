@@ -27,6 +27,8 @@ export interface FlagshipEvent {
   capacity: number | null;
   /** 店舗の X アカウント URL（未登録なら空文字） */
   snsUrl: string;
+  /** 応募締切（RFC3339、無ければ空文字）。募集中＝now < applyEnd の判定に使う（§16.13）。 */
+  applyEnd: string;
 }
 
 /** TCG+ event/list の1件分（必要フィールドのみ）。 */
@@ -37,6 +39,7 @@ interface RawEvent {
   place?: string;
   max_join_count?: number | null;
   organizer_sns_url?: string | null;
+  apply_end_datetime?: string | null;
 }
 
 interface EventListResponse {
@@ -76,7 +79,24 @@ function normalize(raw: RawEvent): FlagshipEvent {
     pref: raw.place ?? '',
     capacity: typeof raw.max_join_count === 'number' ? raw.max_join_count : null,
     snsUrl: raw.organizer_sns_url ?? '',
+    applyEnd: raw.apply_end_datetime ?? '',
   };
+}
+
+/**
+ * 開催の現在の申込人数（抽選応募数）を TCG+ 詳細 API から直接取得する（`success.count_applicants`）。
+ * CORS 開放のためブラウザから直接呼べる。取れなければ null（→ 一覧は「-」）。best-effort・リトライなし。
+ */
+export async function fetchApplicantCount(eventId: number, signal?: AbortSignal): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/user/event/${eventId}`, { signal });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { success?: { count_applicants?: number | null } };
+    const n = data.success?.count_applicants;
+    return typeof n === 'number' ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

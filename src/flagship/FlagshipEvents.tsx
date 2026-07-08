@@ -6,12 +6,15 @@ import {
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
 import {
+  readApplicantCache, isApplicantCacheFresh, recruitingIds, fetchApplicantsFor, isRecruiting,
+} from './applicants';
+import {
   deleteEventResults, extractFromText, fetchEventResults, fetchLeaders, ingestFromUrl,
   fetchSeriesSummary, putEventResults, fetchDiscoverStatus, discoverPosts,
   collectPosts, fetchLinkReview, linkApprove, setStoreSns,
 } from './resultsClient';
 import type {
-  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, SummaryItem, ReviewPost,
+  DiscoveredCandidate, ExtractedEntry, FlagshipLeader, ResultEntry, SummaryItem, ReviewPost,
 } from './resultsClient';
 
 /**
@@ -62,6 +65,13 @@ function weekOf(date: string): string {
   return localDate(d);
 }
 
+/** 配列を n 件ずつに分割する（`from:` 検索のクエリ長対策で店アカウントをチャンクする）。 */
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
 /** 開催日ベースの状況（結果の有無は関与しない）。 */
 function baseStatus(date: string, today: string): 'missing' | 'today' | 'upcoming' {
   if (date < today) return 'missing';
@@ -77,11 +87,15 @@ function formatSynced(iso: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 一覧・詳細で使う優勝リーダーの表示名（辞書解決済みなら正規名、なければ raw）。 */
-function winnerLabel(item: SummaryItem | undefined): string | null {
-  const w = item?.winner;
-  if (!w) return null;
+/** 優勝リーダー1件の表示名（辞書解決済みなら正規名、なければ raw）。 */
+function oneWinnerName(w: ResultEntry): string | null {
   return w.leader ? w.leader.name : (w.leaderRaw ?? null);
+}
+
+/** 一覧・詳細で使う優勝リーダーの表示名。2優勝（定員64）は「A / B」で連結（§16.11）。 */
+function winnerLabel(item: SummaryItem | undefined): string | null {
+  const names = (item?.winners ?? []).map(oneWinnerName).filter((n): n is string => !!n);
+  return names.length ? names.join(' / ') : null;
 }
 
 export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
@@ -111,17 +125,42 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const error = fs.error ?? ex.error;
   const syncedAt = [fs.syncedAt, ex.syncedAt].filter((x): x is string => !!x).sort().pop() ?? null;
 
+  // §16.13: 申込人数（募集中の開催のみ・TCG+ 詳細を並列取得）。取得は開催マスターの取得に合わせる。
+  const [applicants, setApplicants] = useState<Map<number, number | null>>(
+    () => new Map(Object.entries(readApplicantCache()).map(([k, v]) => [Number(k), v])),
+  );
+  const applicantReqRef = useRef<Set<number>>(new Set());
+  const applicantAbortRef = useRef<AbortController | null>(null);
+  const loadApplicants = useCallback((force: boolean) => {
+    const now = new Date();
+    if (force) applicantReqRef.current = new Set();
+    const ids = recruitingIds(events, now).filter((id) => !applicantReqRef.current.has(id));
+    if (!ids.length) return;
+    ids.forEach((id) => applicantReqRef.current.add(id));
+    applicantAbortRef.current?.abort();
+    const controller = new AbortController();
+    applicantAbortRef.current = controller;
+    void fetchApplicantsFor(ids, now, (id, c) => setApplicants((m) => new Map(m).set(id, c)), controller.signal);
+  }, [events]);
+  // 開催が読めたら、募集中の未取得分を取得（キャッシュ鮮度切れなら全募集中を再取得）。
+  useEffect(() => {
+    if (!events.length) return;
+    loadApplicants(!isApplicantCacheFresh(new Date()));
+    return () => applicantAbortRef.current?.abort();
+  }, [events, loadApplicants]);
+
   useEffect(() => {
     let alive = true;
     refreshSeriesList().then((l) => { if (alive) setSeriesList(l); }).catch(() => { /* 静的設定で継続 */ });
     return () => { alive = false; };
   }, []);
 
-  // 手動「取得」は両種別の開催マスターに加えて開催期の発見も強制更新する。
+  // 手動「取得」は両種別の開催マスターに加えて開催期の発見・申込人数も強制更新する。
   const onRefetch = () => {
     fs.refetch();
     ex.refetch();
     refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
+    loadApplicants(true);
   };
 
   // 開催マスターのみ再取得（日次ガード無視）。店舗X 登録後に /events の overlay 済み sns を
@@ -192,6 +231,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return baseStatus(e.date, today);
   }, [summary, today]);
 
+  // 申込人数セル: 募集中の開催のみ数値（未取得は「…」）、募集中でない/取得不可は「-」（§16.13）。
+  const applicantCell = (e: MergedEvent): React.ReactNode => {
+    if (!isRecruiting(e, new Date())) return <span className="fs-dim">-</span>;
+    if (!applicants.has(e.id)) return <span className="fs-dim">…</span>;
+    const n = applicants.get(e.id);
+    return n == null ? <span className="fs-dim">-</span> : <b>{n}</b>;
+  };
+
   // 月の切り替え時は絞り込みと選択もリセットする。
   const changeMonth = (m: number) => {
     setMonth(m);
@@ -242,23 +289,27 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   }, []);
 
   // P4: 優勝リーダー分布。summary（月内の全開催期分＝優勝リーダー入り）を束ねるだけ。
+  // 定員64の2ブロック開催は優勝2件を各1件として計上する（§16.11）。割合は総優勝数を分母にする。
   const distribution = useMemo(() => {
     const byLeader = new Map<string, { name: string; color: string; count: number }>();
-    let withWinner = 0;
+    let withWinner = 0;    // 優勝ありの開催数（回収済の目安・表示用）
+    let totalWinners = 0;  // 優勝の総数（2優勝開催は2）＝割合の分母
     for (const it of summary.values()) {
-      const w = it.winner;
-      if (!w) continue;
+      if (it.winners.length === 0) continue;
       withWinner++;
-      const key = w.leaderCardNumber ?? `raw:${w.leaderRaw ?? ''}`;
-      const name = w.leader?.name ?? w.leaderRaw ?? '不明';
-      const color = w.leader?.color ?? '';
-      const cur = byLeader.get(key);
-      if (cur) cur.count += 1;
-      else byLeader.set(key, { name, color, count: 1 });
+      for (const w of it.winners) {
+        totalWinners++;
+        const key = w.leaderCardNumber ?? `raw:${w.leaderRaw ?? ''}`;
+        const name = w.leader?.name ?? w.leaderRaw ?? '不明';
+        const color = w.leader?.color ?? '';
+        const cur = byLeader.get(key);
+        if (cur) cur.count += 1;
+        else byLeader.set(key, { name, color, count: 1 });
+      }
     }
     const rows = [...byLeader.values()]
       .sort((a, b) => b.count - a.count)
-      .map((r) => ({ ...r, pct: withWinner ? Math.round((r.count / withWinner) * 1000) / 10 : 0 }));
+      .map((r) => ({ ...r, pct: totalWinners ? Math.round((r.count / totalWinners) * 1000) / 10 : 0 }));
     return { rows, withWinner };
   }, [summary]);
 
@@ -289,7 +340,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       const d = new Date(`${e.date}T00:00:00`);
       rows.push(
         <tr key={`h-${e.date}`} className="fs-datehead">
-          <td colSpan={8}>
+          <td colSpan={9}>
             {d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}){e.date === today ? ' — 本日' : ''}
           </td>
         </tr>,
@@ -304,6 +355,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <td><span className={`fs-kind ${e.kind === 'エクストラグランドバトル' ? 'fs-kind-ex' : 'fs-kind-fs'}`}>{kindShort(e.kind)}</span></td>
         <td className="fs-pref">{e.pref}</td>
         <td className="fs-cap">{e.capacity ?? '—'}</td>
+        <td className="fs-cap">{applicantCell(e)}</td>
         <td><span className={`fs-badge fs-${s}`}>{STATUS_LABEL[s]}</span></td>
         <td className="fs-winner">{winner ?? <span className="fs-dim">—</span>}</td>
         <td className="fs-links" onClick={(ev) => ev.stopPropagation()}>
@@ -394,7 +446,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         )}
 
         {view === 'link' && (
-          <LinkView events={events} seriesIds={seriesIds} onSaved={loadSummary} />
+          <LinkView events={events} seriesIds={seriesIds} summary={summary} today={today} onSaved={loadSummary} />
         )}
 
         {view === 'list' && <>
@@ -428,13 +480,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
               <thead>
                 <tr>
                   <th>開催日時</th><th>店舗</th><th>大会</th><th>都道府県</th><th style={{ textAlign: 'right' }}>定員</th>
+                  <th style={{ textAlign: 'right' }}>申込</th>
                   <th>状況</th><th>優勝リーダー</th><th style={{ textAlign: 'right' }}>リンク</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length > 0 ? rows : (
                   <tr>
-                    <td colSpan={8} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={9} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
                       {isLoading ? '開催データを取得中…' : '該当する開催がありません'}
                     </td>
                   </tr>
@@ -609,12 +662,16 @@ const AggregateView: React.FC<{
 };
 
 /**
- * §16.7: 紐付け（一括登録）ビュー。全国の優勝ポストを収集し、この月の開催へ照合した候補を
- * 突き合わせ表で出す。店アカウント一致(handle)は自動チェック、店名一致は要確認。選んで
- * 「一括登録」すると、既存の結果登録として保存され、集計・一覧・回収率に反映される。
+ * §16.7/§16.12: 紐付け（一括登録）ビュー。**未登録かつ開催済み（当日まで）で店舗X ありの開催**の
+ * 店アカウントに絞って優勝ポストを収集し（`from:店`・トークン節約）、この月の開催へ照合した候補を
+ * 突き合わせ表で出す。店アカウント一致(handle)は自動チェック、店名一致は要確認。選んで「一括登録」
+ * すると、既存の結果登録として保存され、集計・一覧・回収率に反映される。全国収集は廃止。
  */
-const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: () => void }>
-  = ({ events, seriesIds, onSaved }) => {
+const LinkView: React.FC<{
+  events: MergedEvent[]; seriesIds: number[];
+  summary: Map<number, SummaryItem>; today: string; onSaved: () => void;
+}>
+  = ({ events, seriesIds, summary, today, onSaved }) => {
     const [busy, setBusy] = useState(false);
     const [saving, setSaving] = useState(false);
     const [review, setReview] = useState<ReviewPost[] | null>(null);
@@ -622,10 +679,23 @@ const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: 
     const [note, setNote] = useState<string | null>(null);
     const eventById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
 
+    // 収集対象＝未登録（結果なし）× 開催済み（開催日≤今日）× 店舗X あり の店アカウント（重複除去）。
+    const targetAccounts = useMemo(() => [...new Set(
+      events.filter((e) => !summary.has(e.id) && e.date <= today && !!e.snsUrl).map((e) => e.snsUrl),
+    )], [events, summary, today]);
+
     const run = async () => {
+      if (targetAccounts.length === 0) {
+        setNote('収集対象がありません（未登録・開催済み・店舗X登録ありの開催が必要）。店舗X を登録すると対象に入ります。');
+        return;
+      }
       setBusy(true); setNote(null);
       try {
-        const collected = await collectPosts({ pages: 3 });
+        // 店アカウントを from: でまとめて検索（クエリ長対策でチャンク分割）。全国収集はしない。
+        let collected = 0;
+        for (const group of chunk(targetAccounts, 15)) {
+          collected += await collectPosts({ accounts: group, pages: 1 });
+        }
         const all = (await Promise.all(seriesIds.map((id) => fetchLinkReview(id)))).flat();
         const byId = new Map<string, ReviewPost>();
         for (const p of all) {
@@ -641,7 +711,7 @@ const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: 
           if (auto) s[p.tweetId] = auto.eventId;   // handle一致は自動チェック
         }
         setReview(withCand); setSel(s);
-        setNote(`収集 ${collected} 件 / この月の開催に一致 ${withCand.length} 件（候補なし ${posts.length - withCand.length} 件は個人ポスト等で対象外）`);
+        setNote(`未登録・開催済み ${targetAccounts.length} 店に絞って収集 ${collected} 件 / この月の開催に一致 ${withCand.length} 件（候補なし ${posts.length - withCand.length} 件は個人ポスト等で対象外）`);
       } catch (e) {
         setNote(e instanceof Error ? e.message : String(e));
       } finally {
@@ -688,12 +758,17 @@ const LinkView: React.FC<{ events: MergedEvent[]; seriesIds: number[]; onSaved: 
           <div className="fs-form-actions" style={{ margin: 0 }}>
             {note && <span className="fs-dim" style={{ fontSize: 12 }}>{note}</span>}
             <div className="fs-spacer" />
-            <button className="fs-btn" onClick={run} disabled={busy || saving}>{busy ? '収集中…' : review ? '再収集' : '収集して照合'}</button>
+            <button className="fs-btn" onClick={run} disabled={busy || saving || targetAccounts.length === 0}>
+              {busy ? '収集中…' : review ? '再収集' : `未登録を収集して照合（${targetAccounts.length}店）`}
+            </button>
           </div>
         </div>
         {!review && !busy && (
           <p className="fs-dim" style={{ margin: 0 }}>
-            「収集して照合」で全国の優勝ポストを集め、この月の開催に一致する候補を出します。店舗が投稿した結果は★handle一致で自動チェック、店名一致は要確認。選んで一括登録すると集計・一覧に反映されます。
+            <b>未登録かつ開催済み（当日まで）で店舗X 登録ありの開催 {targetAccounts.length} 店</b>の
+            アカウントに絞って（`from:店`）優勝ポストを収集し、この月の開催に一致する候補を出します。
+            トークン節約のため全国収集はしません。店舗が投稿した結果は★handle一致で自動チェック、店名一致は要確認。
+            選んで一括登録すると集計・一覧に反映されます。店舗X 未登録の開催は対象外（詳細/一覧から店舗X を登録すると入ります）。
           </p>
         )}
         {review && review.length > 0 && (
@@ -840,6 +915,18 @@ const DetailPanel: React.FC<{
   };
   const removeRow = (i: number) => setRows((rs) => rs.filter((_, j) => j !== i));
 
+  // 定員64は2ブロック制＝優勝2人（§16.11）。優勝行を最大2つまで許容する。
+  const twoWinners = (event.capacity ?? 0) >= 64;
+  const winnerCount = rows.filter((r) => r.placement === 1).length;
+  const addWinner = () => {
+    setRows((rs) => {
+      const at = rs.map((r) => r.placement).lastIndexOf(1) + 1;  // 既存の優勝の直後に挿入
+      const next = [...rs];
+      next.splice(at, 0, { placement: 1, cardNumber: '', raw: '' });
+      return next;
+    });
+  };
+
   const winnerFilled = rows.some((r) => r.placement === 1 && (r.cardNumber || r.raw.trim()));
 
   const save = async () => {
@@ -863,15 +950,25 @@ const DetailPanel: React.FC<{
   };
 
   // 抽出候補をフォームへ流し込み、確認メッセージ文面を返す（取り込み/手貼り共通）。
+  // 抽出は優勝を最大2件返し得る（§16.11）。定員64未満の開催は優勝1件に丸めてから流し込む。
   const applyResults = (results: ExtractedEntry[], prefix = ''): string => {
     if (results.length === 0) return `${prefix}リーダーを抽出できませんでした。手入力してください。`;
-    setRows(results.map((r) => ({
+    const maxWinners = (event.capacity ?? 0) >= 64 ? 2 : 1;
+    let winnerSeen = 0;
+    const capped = results.filter((r) => {
+      if (r.placement !== 1) return true;
+      winnerSeen += 1;
+      return winnerSeen <= maxWinners;
+    });
+    setRows(capped.map((r) => ({
       placement: r.placement,
       cardNumber: r.leaderCardNumber ?? '',
       raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
     })));
-    const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
-    return `${prefix}${results.length}件の候補を入れました。`
+    const winners = capped.filter((r) => r.placement === 1).length;
+    const ambiguous = capped.filter((r) => !r.leaderCardNumber).length;
+    return `${prefix}${capped.length}件の候補を入れました。`
+      + (winners > 1 ? `（優勝${winners}人＝定員64の2ブロック）` : '')
       + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
       + '確認・修正して保存してください。';
   };
@@ -1061,31 +1158,43 @@ const DetailPanel: React.FC<{
                 {extractNote && <p className="fs-dim" style={{ margin: '2px 0 0', fontSize: 12 }}>{extractNote}</p>}
               </div>
 
-              {rows.map((r, i) => (
-                <div className="fs-form-row" key={i}>
-                  <span className="fs-place">{r.placement === 1 ? '優勝' : `${r.placement}位`}</span>
-                  <select
-                    aria-label={`${r.placement === 1 ? '優勝' : `${r.placement}位`}のリーダー`}
-                    value={r.cardNumber}
-                    onChange={(e) => setRow(i, { cardNumber: e.target.value })}
-                  >
-                    <option value="">（自由入力）</option>
-                    {leaders.map((l) => (
-                      <option key={l.cardNumber} value={l.cardNumber}>{l.name}（{l.color}・{l.cardNumber}）</option>
-                    ))}
-                  </select>
-                  {!r.cardNumber && (
-                    <input
-                      type="text" placeholder="リーダー名を入力"
-                      value={r.raw} onChange={(e) => setRow(i, { raw: e.target.value })}
-                    />
-                  )}
-                  {r.placement > 1 && (
-                    <button className="fs-row-del" aria-label="この行を削除" onClick={() => removeRow(i)}>✕</button>
-                  )}
-                </div>
-              ))}
+              {rows.map((r, i) => {
+                // 優勝が2件（定員64）のときは 優勝①/優勝② と区別。1件なら「優勝」。
+                const wIdx = rows.slice(0, i + 1).filter((x) => x.placement === 1).length;
+                const label = r.placement === 1
+                  ? (winnerCount > 1 ? `優勝${'①②'[wIdx - 1] ?? ''}` : '優勝')
+                  : `${r.placement}位`;
+                // 削除可: 入賞行、または優勝が2つあるときの優勝行（最後の1優勝は残す）。
+                const canDelete = r.placement > 1 || (r.placement === 1 && winnerCount > 1);
+                return (
+                  <div className="fs-form-row" key={i}>
+                    <span className="fs-place">{label}</span>
+                    <select
+                      aria-label={`${label}のリーダー`}
+                      value={r.cardNumber}
+                      onChange={(e) => setRow(i, { cardNumber: e.target.value })}
+                    >
+                      <option value="">（自由入力）</option>
+                      {leaders.map((l) => (
+                        <option key={l.cardNumber} value={l.cardNumber}>{l.name}（{l.color}・{l.cardNumber}）</option>
+                      ))}
+                    </select>
+                    {!r.cardNumber && (
+                      <input
+                        type="text" placeholder="リーダー名を入力"
+                        value={r.raw} onChange={(e) => setRow(i, { raw: e.target.value })}
+                      />
+                    )}
+                    {canDelete && (
+                      <button className="fs-row-del" aria-label="この行を削除" onClick={() => removeRow(i)}>✕</button>
+                    )}
+                  </div>
+                );
+              })}
               <div className="fs-form-actions">
+                {twoWinners && winnerCount < 2 && (
+                  <button className="fs-btn ghost" onClick={addWinner}>+ 優勝をもう1人（定員64・2ブロック）</button>
+                )}
                 <button className="fs-btn ghost" onClick={addRow} disabled={rows.length >= 8}>+ 入賞を追加</button>
                 <div className="fs-spacer" />
                 {hasResults && <button className="fs-btn danger" onClick={remove} disabled={busy}>結果を削除</button>}

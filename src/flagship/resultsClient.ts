@@ -41,7 +41,8 @@ export interface SummaryItem {
   eventId: number;
   resultCount: number;
   postUrl: string | null;
-  winner: ResultEntry | null;
+  /** 優勝（placement=1）。通常1件、定員64の2ブロック開催は最大2件（§16.11）。 */
+  winners: ResultEntry[];
 }
 
 interface RawLeader { card_number: string; name: string; color: string; life: string }
@@ -96,7 +97,7 @@ export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promi
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as {
-    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null }>;
+    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null; apply_end?: string | null }>;
   };
   return data.events.map((e) => ({
     id: e.id,
@@ -106,6 +107,7 @@ export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promi
     pref: e.pref ?? '',
     capacity: e.capacity ?? null,
     snsUrl: e.sns_url ?? '',
+    applyEnd: e.apply_end ?? '',
   }));
 }
 
@@ -244,11 +246,18 @@ export async function discoverPosts(req: {
   };
 }
 
-/** 全国の優勝ポストを収集して DB に貯める（設計 §16.7）。件数を返す。 */
-export async function collectPosts(opts?: { maxResults?: number; pages?: number }): Promise<number> {
+/**
+ * 優勝ポストを**店アカウントに絞って**収集し DB に貯める（トークン節約・§16.12）。件数を返す。
+ * `accounts`（未登録・開催済み開催の店 X）で `(from:店…) (優勝 OR …)` 検索する。全国収集は廃止。
+ */
+export async function collectPosts(
+  opts: { accounts: string[]; maxResults?: number; pages?: number },
+): Promise<number> {
   const raw = await request<{ collected: number }>('/collect', {
     method: 'POST',
-    body: JSON.stringify({ max_results: opts?.maxResults ?? 100, pages: opts?.pages ?? 3 }),
+    body: JSON.stringify({
+      accounts: opts.accounts, max_results: opts.maxResults ?? 100, pages: opts.pages ?? 1,
+    }),
   });
   return raw.collected;
 }
@@ -313,13 +322,13 @@ export async function setStoreSns(store: string, snsUrl: string): Promise<string
 /** シリーズ内で結果を持つ開催のサマリ（eventId → SummaryItem）。 */
 export async function fetchSeriesSummary(seriesId: number): Promise<Map<number, SummaryItem>> {
   const raw = await request<{
-    items: Array<{ event_id: number; result_count: number; post_url: string | null; winner: RawEntry | null }>;
+    items: Array<{ event_id: number; result_count: number; post_url: string | null; winners: RawEntry[] }>;
   }>(`/results?series_id=${seriesId}`);
   return new Map(raw.items.map((it) => [it.event_id, {
     eventId: it.event_id,
     resultCount: it.result_count,
     postUrl: it.post_url,
-    winner: it.winner ? toEntry(it.winner) : null,
+    winners: (it.winners ?? []).map(toEntry),
   }]));
 }
 
