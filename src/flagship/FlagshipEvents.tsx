@@ -883,15 +883,25 @@ const DetailPanel: React.FC<{
   };
 
   // 抽出候補をフォームへ流し込み、確認メッセージ文面を返す（取り込み/手貼り共通）。
+  // 抽出は優勝を最大2件返し得る（§16.11）。定員64未満の開催は優勝1件に丸めてから流し込む。
   const applyResults = (results: ExtractedEntry[], prefix = ''): string => {
     if (results.length === 0) return `${prefix}リーダーを抽出できませんでした。手入力してください。`;
-    setRows(results.map((r) => ({
+    const maxWinners = (event.capacity ?? 0) >= 64 ? 2 : 1;
+    let winnerSeen = 0;
+    const capped = results.filter((r) => {
+      if (r.placement !== 1) return true;
+      winnerSeen += 1;
+      return winnerSeen <= maxWinners;
+    });
+    setRows(capped.map((r) => ({
       placement: r.placement,
       cardNumber: r.leaderCardNumber ?? '',
       raw: r.leaderCardNumber ? '' : (r.leaderRaw ?? ''),
     })));
-    const ambiguous = results.filter((r) => !r.leaderCardNumber).length;
-    return `${prefix}${results.length}件の候補を入れました。`
+    const winners = capped.filter((r) => r.placement === 1).length;
+    const ambiguous = capped.filter((r) => !r.leaderCardNumber).length;
+    return `${prefix}${capped.length}件の候補を入れました。`
+      + (winners > 1 ? `（優勝${winners}人＝定員64の2ブロック）` : '')
       + (ambiguous ? `うち${ambiguous}件は要確認（色違い等で一意化できず）。` : '')
       + '確認・修正して保存してください。';
   };
