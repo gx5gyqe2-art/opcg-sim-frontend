@@ -97,7 +97,7 @@ export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promi
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as {
-    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null; apply_end?: string | null }>;
+    events: Array<{ id: number; start_datetime: string; store: string; pref: string; capacity: number | null; sns_url: string | null; apply_end?: string | null; count_applicants?: number | null }>;
   };
   return data.events.map((e) => ({
     id: e.id,
@@ -108,7 +108,22 @@ export async function fetchEvents(seriesId: number, signal?: AbortSignal): Promi
     capacity: e.capacity ?? null,
     snsUrl: e.sns_url ?? '',
     applyEnd: e.apply_end ?? '',
+    applicants: e.count_applicants ?? null,
   }));
+}
+
+/**
+ * フロントが TCG+ から取得した申込人数を backend（開催マスター）へ保存する（§16.14）。
+ * 以降は `/events` の count_applicants として全端末で共有される。best-effort（失敗は握りつぶす）。
+ */
+export async function syncApplicants(counts: Record<number, number | null>): Promise<void> {
+  const items = Object.entries(counts).map(([id, c]) => ({ event_id: Number(id), count_applicants: c }));
+  if (!items.length) return;
+  try {
+    await request<{ updated: number }>('/events/applicants', {
+      method: 'POST', body: JSON.stringify({ items }),
+    });
+  } catch { /* 保存失敗は表示に影響させない（次回同期で再送） */ }
 }
 
 /** 抽出候補 1 件（設計 §13、LLM不使用の辞書マッチング結果）。 */
