@@ -236,14 +236,6 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                     }}
                     color="#e67e22"
                   />
-                  <MenuCard
-                    label="リプレイビューア"
-                    desc="CPU対戦の検討"
-                    onClick={() => {
-                      onReplay();
-                    }}
-                    color="#9b59b6"
-                  />
                 </div>
               </div>
 
@@ -285,6 +277,12 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                   desc="Rule · vs CPU"
                   onClick={() => { onStartCpu('learned'); }}
                   color="#e67e22"
+                />
+                <MenuCard
+                  label="リプレイビューア"
+                  desc="CPU対戦の検討"
+                  onClick={() => { onReplay(); }}
+                  color="#9b59b6"
                 />
               </div>
               <button style={styles.backBtn} onClick={() => setPlayStep('root')}>← 戻る</button>

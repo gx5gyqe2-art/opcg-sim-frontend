@@ -67,10 +67,11 @@ flowchart TD
     ruleMatch -->|CPU対戦| diff
     diff -->|onStartCpu| game
 
+    ruleMatch -->|リプレイビューア| replay["replay<br/>ReplayViewer"]
+
     start -->|デッキ作成/一覧| deck
     start -->|カードリスト| cardList
     start -->|CPU相手モデル| cpuTemplate
-    start -->|リプレイビューア| replay["replay<br/>ReplayViewer"]
 
     %% 戻り導線
     sandbox -.->|TOP（確認）| start
@@ -404,6 +405,7 @@ RoomLobby とほぼ同一構成。差分のみ示す：
 ## 7. リプレイビューア（replay / ReplayViewer）
 
 CPU対戦（`cpu_trace` 対局）を後から1手ずつ検討する画面。CPU 挙動改善の材料採取が主目的。
+導線は Play 階層（`playStep==='match'`）＝ソロプレイ／オンライン対戦／CPU対戦と並列に配置する。
 
 - **データ源**: `GET /api/game/{id}/replay/frames`（種＋アクション列＋CPU思考トレース＋盤面フレーム列）。
   読み込みは①「直近のCPU対戦」（`localStorage: opcg_last_cpu_game`・createGame(vsCpu) が保存）、
