@@ -24,6 +24,7 @@
 | `deck` | デッキビルダー | `screens/DeckBuilder.tsx` | デッキ作成・編集・一覧 |
 | `cardList` | カードリスト | `screens/DeckBuilder.tsx`（`viewOnly`） | 全カードの閲覧（編集不可） |
 | `cpuTemplate` | CPU相手モデル | `screens/DeckBuilder.tsx`（`templateMode`） | CPU 用テンプレデッキの登録・編集 |
+| `replay` | リプレイビューア | `screens/ReplayViewer.tsx` | CPU対戦の検討（盤面フレーム＋CPU思考トレースの閲覧・疑問手マーク） |
 
 ルートコンポーネント `src/App.tsx` が `mode` ステートで上記を切り替える。状態は `sessionStorage`
 で復元する（リロード／クラッシュ耐性）。最上位は固定全画面コンテナ（暗色背景）＋`ErrorBoundary`。
@@ -69,6 +70,7 @@ flowchart TD
     start -->|デッキ作成/一覧| deck
     start -->|カードリスト| cardList
     start -->|CPU相手モデル| cpuTemplate
+    start -->|リプレイビューア| replay["replay<br/>ReplayViewer"]
 
     %% 戻り導線
     sandbox -.->|TOP（確認）| start
@@ -80,6 +82,7 @@ flowchart TD
     deck -.->|TOP| start
     cardList -.->|完了/TOP| start
     cpuTemplate -.->|TOP| start
+    replay -.->|戻る| start
 ```
 
 - 実線＝前進遷移（メニュー選択・ロビー参加）、点線＝戻り導線。
@@ -395,6 +398,27 @@ RoomLobby とほぼ同一構成。差分のみ示す：
 |---|---|---|
 | `cardList` | `viewOnly` | 全カードのカタログ閲覧。枚数ボタン非表示、所有管理 UI（localStorage `opcg_owned_cards`）あり |
 | `cpuTemplate` | `templateMode` | CPU 用テンプレデッキ。保存先が `/api/cpu_template`、ラベル・保存挙動が変化 |
+
+---
+
+## 7. リプレイビューア（replay / ReplayViewer）
+
+CPU対戦（`cpu_trace` 対局）を後から1手ずつ検討する画面。CPU 挙動改善の材料採取が主目的。
+
+- **データ源**: `GET /api/game/{id}/replay/frames`（種＋アクション列＋CPU思考トレース＋盤面フレーム列）。
+  読み込みは①「直近のCPU対戦」（`localStorage: opcg_last_cpu_game`・createGame(vsCpu) が保存）、
+  ②game_id 入力、③保存済み JSON ファイル。サーバはメモリ常駐（揮発）のため「JSONを保存」で
+  ローカルへ書き出して恒久化する。
+- **盤面**: HTML の軽量読み取り専用表示（Pixi 非使用）。両陣営のリーダー/場/ステージ＋
+  手札/ライフ/トラッシュ（折りたたみ）＋各種カウント。レスト=90度回転、付与ドン=バッジ、
+  カードタップで拡大＋効果テキスト（カードDB `opcg_card_db` から補完）。
+- **ナビゲーション**: フレーム送り（|«/«/»/»|・スライダー）＋「← 判断 / 判断 →」で CPU の
+  意思決定があるフレームへジャンプ。
+- **CPU思考パネル**: hard=候補手（1-ply/深掘りスコア）・regret・J値成分内訳（折りたたみ）、
+  learned=候補手（訪問%・Q）・L1第二意見（不一致バッジ）。選択手はハイライト。
+- **疑問手マーク**: ⚠ボタンでメモ付きマーク → 「マーク書出」で対局メタ＋該当アクション＋
+  思考トレースを含む JSON をダウンロード（CPU改善タスクへの持ち込み材料）。マークは
+  「JSONを保存」にも同梱され、ファイル再読込で復元される。
 
 ---
 

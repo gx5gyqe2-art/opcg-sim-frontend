@@ -15,9 +15,10 @@ interface GameStartProps {
   onCardList: () => void;
   onRuleLobby: () => void;
   onFlagship: () => void;
+  onReplay: () => void;
 }
 
-const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onRuleLobby, onFlagship }) => {
+const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilder, onCardList, onRuleLobby, onFlagship, onReplay }) => {
   const [downloadProgress, setDownloadProgress] = useState<{current: number, total: number} | null>(null);
 
   // PLAYメニューの階層ナビ: root → match(ソロ/オンライン/CPU対戦)。フリーモード/難易度選択は廃止。
@@ -234,6 +235,14 @@ const GameStart: React.FC<GameStartProps> = ({ onStart, onStartCpu, onDeckBuilde
                       onCardList();
                     }}
                     color="#e67e22"
+                  />
+                  <MenuCard
+                    label="リプレイビューア"
+                    desc="CPU対戦の検討"
+                    onClick={() => {
+                      onReplay();
+                    }}
+                    color="#9b59b6"
                   />
                 </div>
               </div>

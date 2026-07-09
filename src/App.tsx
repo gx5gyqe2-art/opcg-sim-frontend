@@ -7,6 +7,7 @@ import { DeckBuilder } from './screens/DeckBuilder';
 import { RoomLobby } from './screens/RoomLobby';
 import { RuleLobby } from './screens/RuleLobby';
 import { FlagshipEvents } from './flagship/FlagshipEvents';
+import { ReplayViewer } from './screens/ReplayViewer';
 import { API_CONFIG } from './api/api.config';
 import { setImageVersion } from './utils/imageAssets';
 
@@ -47,7 +48,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'ruleLobby' | 'flagship';
+type AppMode = 'start' | 'game' | 'deck' | 'sandbox' | 'cardList' | 'lobby' | 'ruleLobby' | 'flagship' | 'replay';
 type SandboxOptions = { role: 'both' | 'p1' | 'p2'; gameId?: string; room_name?: string };
 // ルールモード・オンライン対戦の接続情報（null = ソロのルールモード）。
 type RuleOnlineOptions = { gameId: string; role: 'p1' | 'p2'; roomName?: string } | null;
@@ -157,10 +158,13 @@ export default function App() {
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#1a1a1a', overflow: 'hidden', position: 'fixed', top: 0, left: 0, touchAction: 'none' }}>
       <ErrorBoundary>
         {mode === 'start' && (
-          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onRuleLobby={() => setMode('ruleLobby')} onFlagship={() => setMode('flagship')} />
+          <GameStart onStart={handleStart} onStartCpu={startRuleCpu} onDeckBuilder={() => setMode('deck')} onCardList={() => setMode('cardList')} onRuleLobby={() => setMode('ruleLobby')} onFlagship={() => setMode('flagship')} onReplay={() => setMode('replay')} />
         )}
         {mode === 'flagship' && (
           <FlagshipEvents onBack={() => setMode('start')} />
+        )}
+        {mode === 'replay' && (
+          <ReplayViewer onBack={() => setMode('start')} />
         )}
         {mode === 'game' && (
           <RealGame

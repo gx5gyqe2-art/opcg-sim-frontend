@@ -72,6 +72,10 @@ export const apiClient = {
 
     if (gameId) {
       sessionManager.setSessionId(gameId);
+      // リプレイビューアの「直近のCPU対戦を読み込む」用（cpu_trace 対局のみ意味を持つ）。
+      if (opts?.vsCpu) {
+        try { localStorage.setItem('opcg_last_cpu_game', gameId); } catch { /* noop */ }
+      }
     }
 
     const stateKey = CONST.API_ROOT_KEYS.GAME_STATE as keyof typeof data;
