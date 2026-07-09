@@ -19,6 +19,7 @@
 | `lobby` | `screens/RoomLobby.tsx` | フリーモードのオンライン ルームロビー |
 | `ruleLobby` | `screens/RuleLobby.tsx` | **ルールモードのオンライン ルームロビー** |
 | `deck` / `cardList` | `screens/DeckBuilder.tsx` | デッキ作成・一覧／カード閲覧 |
+| `replay` | `screens/ReplayViewer.tsx` | **リプレイビューア**（CPU対戦の検討。盤面フレーム＋CPU思考トレース閲覧・疑問手マーク書出。詳細は [`screen-design.md`](screen-design.md) §7） |
 
 ### モード × 対戦形態のマトリクス
 ```
