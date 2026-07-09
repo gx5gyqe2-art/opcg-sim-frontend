@@ -29,6 +29,33 @@ export const SERIES: readonly FlagshipSeries[] = [
 /** 既定で選択するシリーズ ID。 */
 export const DEFAULT_SERIES_ID: number = SERIES[0].id;
 
+/** 大会種別の定義。表示（バッジ・短縮名）と発見（keyword）の単一の正本。 */
+export interface KindDef {
+  /** 正式な大会種別名。`event_series_title` の先頭・keyword 検索語・`SERIES.kind` と一致させる。 */
+  kind: string;
+  /** 一覧バッジ・KPI サブラベルの短縮表示。 */
+  short: string;
+  /** バッジのスタイル修飾（CSS クラス `fs-kind-<badge>`）。 */
+  badge: string;
+}
+
+/**
+ * 発見・表示対象の大会種別（この順で表示）。**種別を増やすときはここに1行足す**のが基本。
+ *
+ * 店舗予選（チャンピオンシップの店舗予選）は 10 月開催・9 月頃発表予定（現在 TCG+ に無し）。
+ * 名称/形式が確定したら下のコメントを有効化する（§16.15）。**店舗予選はシーズン制で
+ * 「<種別>（N月開催）」形式ではない**点に注意。有効化時に追加で必要な作業:
+ *   1) ここに `{ kind:'<正式名>', short:'店舗予選', badge:'qual' }` を追加
+ *   2) `seriesDiscovery.parseSeriesTitle` を店舗予選のタイトル形式へ対応（月は開催日から導出）
+ *   3) `FlagshipEvents` の月スロットを 2→3 にし `qualSeries` を追加
+ *   4) バッジ `.fs-kind-qual` は用意済み（CSS）
+ */
+export const KIND_DEFS: readonly KindDef[] = [
+  { kind: 'フラッグシップバトル', short: 'フラッグシップ', badge: 'fs' },
+  { kind: 'エクストラグランドバトル', short: 'エクストラ', badge: 'ex' },
+  // { kind: 'チャンピオンシップ… 店舗予選', short: '店舗予選', badge: 'qual' },  // §16.15（9月に確定）
+] as const;
+
 /**
  * 自動取得の鮮度しきい値（ミリ秒）。最終取得からこの時間を超えていれば
  * 画面表示時に自動再取得する。TCG+ API への礼儀（日次1回程度）に合わせて 24 時間。

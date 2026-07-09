@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FlagshipSeries } from './flagship.config';
 import {
-  groupByMonth, kindShort, loadSeriesList, pickDefaultMonth, refreshSeriesList,
+  groupByMonth, kindShort, kindBadge, loadSeriesList, pickDefaultMonth, refreshSeriesList,
 } from './seriesDiscovery';
 import { useFlagshipEvents } from './useFlagshipEvents';
 import type { FlagshipEvent } from './tcgPlusClient';
@@ -357,7 +357,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       <tr key={e.id} onClick={() => setSelected(e)}>
         <td className="fs-dt"><b>{e.startDatetime.slice(11, 16)}</b></td>
         <td className="fs-store"><span className="fs-name">{e.store}</span></td>
-        <td><span className={`fs-kind ${e.kind === 'エクストラグランドバトル' ? 'fs-kind-ex' : 'fs-kind-fs'}`}>{kindShort(e.kind)}</span></td>
+        <td><span className={`fs-kind fs-kind-${kindBadge(e.kind)}`}>{kindShort(e.kind)}</span></td>
         <td className="fs-pref">{e.pref}</td>
         <td className="fs-cap">{e.capacity ?? '—'}</td>
         <td className="fs-cap">{applicantCell(e)}</td>
@@ -1321,6 +1321,7 @@ const FlagshipStyles: React.FC = () => (
     .fs-kind { border: 1px solid #2e261c; border-radius: 4px; font-size: 11px; padding: 1px 7px; white-space: nowrap; }
     .fs-kind-fs { color: #d4b46a; }
     .fs-kind-ex { color: #8fb8d8; border-color: #27394a; }
+    .fs-kind-qual { color: #b491d4; border-color: #35294a; }  /* 店舗予選（§16.15・9月に有効化） */
     .fs-dim { color: #6f6553; }
     .fs-xlink { color: #a89a80; text-decoration: none; border: 1px solid #2e261c; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
     .fs-xlink:hover { color: #f1c40f; border-color: #8a6d0b; }
