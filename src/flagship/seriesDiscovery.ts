@@ -11,14 +11,14 @@
  * 開催期セレクタに現れる。発見に失敗してもキャッシュ＋静的設定で画面は成立する。
  */
 
-import { CACHE_KEY_PREFIX, CACHE_TTL_MS, SERIES } from './flagship.config';
+import { CACHE_KEY_PREFIX, CACHE_TTL_MS, KIND_DEFS, SERIES } from './flagship.config';
 import type { FlagshipSeries } from './flagship.config';
 
 const API_BASE = 'https://api.bandai-tcg-plus.com';
 /** ONE PIECE CARD GAME の game_title_id（event/list 応答の実測値） */
 const GAME_TITLE_ID = 8;
-/** 発見対象の大会種別（表示順もこの順） */
-export const KINDS = ['フラッグシップバトル', 'エクストラグランドバトル'] as const;
+/** 発見対象の大会種別（表示順もこの順）。正本は flagship.config の KIND_DEFS。 */
+export const KINDS: readonly string[] = KIND_DEFS.map((k) => k.kind);
 const PAGE_SIZE = 100;
 /** 種別ごとに先頭何ページまで見るか（新開催期は先頭に現れるため少数で足りる） */
 const PAGES = 2;
@@ -101,11 +101,14 @@ export function loadSeriesList(): FlagshipSeries[] {
   return merge([...SERIES], readCachedSeries());
 }
 
-/** 種別名の短縮表示（一覧のバッジ・KPI サブラベル用）。 */
+/** 種別名の短縮表示（一覧のバッジ・KPI サブラベル用）。正本は KIND_DEFS。 */
 export function kindShort(kind: string): string {
-  if (kind === 'フラッグシップバトル') return 'フラッグシップ';
-  if (kind === 'エクストラグランドバトル') return 'エクストラ';
-  return kind;
+  return KIND_DEFS.find((k) => k.kind === kind)?.short ?? kind;
+}
+
+/** 種別のバッジスタイル修飾（CSS クラス `fs-kind-<badge>`）。未知種別は fs にフォールバック。 */
+export function kindBadge(kind: string): string {
+  return KIND_DEFS.find((k) => k.kind === kind)?.badge ?? 'fs';
 }
 
 /** 同じ月のフラッグシップ+エクストラをまとめた開催期セレクタの1項目。 */
