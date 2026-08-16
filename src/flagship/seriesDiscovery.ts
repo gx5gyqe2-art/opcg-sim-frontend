@@ -29,23 +29,41 @@ const KEY_SERIES_SYNCED = `${CACHE_KEY_PREFIX}_series_synced_at`;
 interface RawEvent {
   event_series_id?: number | string;
   event_series_title?: string;
+  start_datetime?: string;
 }
 
 interface EventListResponse {
   success?: { event_list?: RawEvent[]; total?: number };
 }
 
-/** 「<種別>（N月開催）」（全角/半角括弧どちらも）に一致したら種別と月を返す。 */
-function parseSeriesTitle(title: string): { kind: string; month: number } | null {
-  for (const kind of KINDS) {
-    const m = title.match(new RegExp(`^${kind}[（(](\\d{1,2})月開催[）)]$`));
-    if (m) return { kind, month: Number(m[1]) };
+/**
+ * シリーズ名から種別・月・表示ラベルを取り出す（`KIND_DEFS.titleForm` で形式を切り替える）。
+ *
+ * - `monthly`  … 「<種別>（N月開催）」（全角/半角括弧どちらも）に完全一致。月はタイトルから
+ * - `seasonal` … タイトルが種別名を含む（シーズン制・月表記なし）。**月は開催イベントの日付から
+ *                導出**し、ラベルはタイトルそのまま（例: チャンピオンシップ26-27 Season 2 店舗予選）
+ *
+ * `seasonal` の月はそのシリーズで最初に見たイベントの月になる。実データ（series 7757）は
+ * 全2550件が単月に収まるが、将来シーズンが月をまたぐ場合は月統合の外に出す判断が要る（§16.17）。
+ */
+function parseSeriesTitle(
+  title: string, startDatetime: string,
+): { kind: string; month: number; label: string } | null {
+  for (const def of KIND_DEFS) {
+    if (def.titleForm === 'monthly') {
+      const m = title.match(new RegExp(`^${def.kind}[（(](\\d{1,2})月開催[）)]$`));
+      if (m) return { kind: def.kind, month: Number(m[1]), label: `${def.kind}(${m[1]}月開催)` };
+    } else if (title.includes(def.kind)) {
+      const month = Number(startDatetime.slice(5, 7));   // "2026-09-01T10:00:00" → 9
+      if (month >= 1 && month <= 12) return { kind: def.kind, month, label: title };
+    }
   }
   return null;
 }
 
-/** ラベル中の「(N月開催)」から月を取り出す（静的設定エントリ用）。 */
+/** 開催月。発見時に確定した `month` を優先し、無ければラベルの「(N月開催)」から読む。 */
 function monthOf(s: FlagshipSeries): number | null {
+  if (typeof s.month === 'number' && s.month >= 1 && s.month <= 12) return s.month;
   const m = s.label.match(/[（(](\d{1,2})月開催[）)]/);
   return m ? Number(m[1]) : null;
 }
@@ -63,9 +81,9 @@ async function fetchDiscovered(signal?: AbortSignal): Promise<FlagshipSeries[]> 
       const list = data.success?.event_list ?? [];
       for (const e of list) {
         const id = Number(e.event_series_id);
-        const parsed = parseSeriesTitle(e.event_series_title ?? '');
+        const parsed = parseSeriesTitle(e.event_series_title ?? '', e.start_datetime ?? '');
         if (id && parsed) {
-          found.set(id, { id, label: `${parsed.kind}(${parsed.month}月開催)`, kind: parsed.kind });
+          found.set(id, { id, label: parsed.label, kind: parsed.kind, month: parsed.month });
         }
       }
       const total = data.success?.total ?? 0;
@@ -90,7 +108,9 @@ function readCachedSeries(): FlagshipSeries[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as FlagshipSeries[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((s) => typeof s?.id === 'number' && typeof s?.label === 'string' && typeof s?.kind === 'string');
+    return parsed
+      .filter((s) => typeof s?.id === 'number' && typeof s?.label === 'string' && typeof s?.kind === 'string')
+      .map((s) => (typeof s.month === 'number' ? s : { id: s.id, label: s.label, kind: s.kind }));
   } catch {
     return [];
   }

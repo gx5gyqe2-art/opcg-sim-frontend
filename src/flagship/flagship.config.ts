@@ -16,6 +16,12 @@ export interface FlagshipSeries {
   label: string;
   /** 大会種別名（画面見出しに使う。例: フラッグシップバトル） */
   kind: string;
+  /**
+   * 開催月（1-12）。タイトルに月表記が無い種別（店舗予選＝シーズン制）は開催イベントの
+   * 日付から導出するため、ラベル解析に頼らずここに持つ（§16.17）。
+   * 未設定の古いキャッシュ・静的設定はラベルから読む（`seriesDiscovery.monthOf`）。
+   */
+  month?: number;
 }
 
 /** 対象の開催期。先頭が既定選択。 */
@@ -31,29 +37,37 @@ export const DEFAULT_SERIES_ID: number = SERIES[0].id;
 
 /** 大会種別の定義。表示（バッジ・短縮名）と発見（keyword）の単一の正本。 */
 export interface KindDef {
-  /** 正式な大会種別名。`event_series_title` の先頭・keyword 検索語・`SERIES.kind` と一致させる。 */
+  /** 大会種別名。keyword 検索語・`SERIES.kind`・一覧の種別セレクタの値になる。 */
   kind: string;
   /** 一覧バッジ・KPI サブラベルの短縮表示。 */
   short: string;
   /** バッジのスタイル修飾（CSS クラス `fs-kind-<badge>`）。 */
   badge: string;
+  /**
+   * `event_series_title` の形式＝シリーズの判定方法と月の取り方（§16.17）。
+   *
+   * - `monthly`  … `<kind>（N月開催）` に完全一致。月はタイトルから取る
+   *                （フラッグシップバトル／エクストラグランドバトル）
+   * - `seasonal` … タイトルが `<kind>` を含む。シーズン制で月表記が無いため
+   *                **月は開催イベントの日付から導出**し、ラベルはタイトルをそのまま使う
+   *                （例: `チャンピオンシップ26-27 Season 2 店舗予選`）
+   */
+  titleForm: 'monthly' | 'seasonal';
 }
 
 /**
  * 発見・表示対象の大会種別（この順で表示）。**種別を増やすときはここに1行足す**のが基本。
  *
- * 店舗予選（チャンピオンシップの店舗予選）は 10 月開催・9 月頃発表予定（現在 TCG+ に無し）。
- * 名称/形式が確定したら下のコメントを有効化する（§16.15）。**店舗予選はシーズン制で
- * 「<種別>（N月開催）」形式ではない**点に注意。有効化時に追加で必要な作業:
- *   1) ここに `{ kind:'<正式名>', short:'店舗予選', badge:'qual' }` を追加
- *   2) `seriesDiscovery.parseSeriesTitle` を店舗予選のタイトル形式へ対応（月は開催日から導出）
- *   3) `FlagshipEvents` の月スロットを 2→3 にし `qualSeries` を追加
- *   4) バッジ `.fs-kind-qual` は用意済み（CSS）
+ * 種別を増やしたら `FlagshipEvents` の**開催期スロットも1つ増やす**こと（React のフックは
+ * 数を固定する必要があるため、種別ごとに `useFlagshipEvents` を静的に並べている）。
+ *
+ * 店舗予選は `チャンピオンシップ26-27 Season 2 店舗予選`（series 7757・2026-09、実測 2026-08-16）。
+ * シーズン制で「（N月開催）」表記が無いため `titleForm: 'seasonal'`（月は開催日から導出）。
  */
 export const KIND_DEFS: readonly KindDef[] = [
-  { kind: 'フラッグシップバトル', short: 'フラッグシップ', badge: 'fs' },
-  { kind: 'エクストラグランドバトル', short: 'エクストラ', badge: 'ex' },
-  // { kind: 'チャンピオンシップ… 店舗予選', short: '店舗予選', badge: 'qual' },  // §16.15（9月に確定）
+  { kind: 'フラッグシップバトル', short: 'フラッグシップ', badge: 'fs', titleForm: 'monthly' },
+  { kind: 'エクストラグランドバトル', short: 'エクストラ', badge: 'ex', titleForm: 'monthly' },
+  { kind: '店舗予選', short: '店舗予選', badge: 'qual', titleForm: 'seasonal' },
 ] as const;
 
 /**
