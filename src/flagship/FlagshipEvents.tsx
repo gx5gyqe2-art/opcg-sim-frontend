@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { KIND_DEFS } from './flagship.config';
 import type { FlagshipSeries } from './flagship.config';
 import {
   groupByMonth, kindShort, kindBadge, loadSeriesList, pickDefaultMonth, refreshSeriesList,
@@ -41,6 +42,15 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
+
+/**
+ * 申込人数を1回の取得で問い合わせる上限（表示中の行の先頭から）。TCG+ の開催詳細は
+ * 1開催=1リクエストで、店舗予選を含む月は開催が約3600件あるため上限で抑える（§16.17）。
+ */
+const APPLICANT_FETCH_LIMIT = 60;
+
+/** 一覧に一度に描画する行数（「さらに表示」で加算）。3600件を一度に DOM へ出さないための上限。 */
+const ROW_LIMIT_STEP = 400;
 
 /** 種別タグ付きの開催。同月のフラッグシップ+エクストラを1つの一覧に統合するための形。 */
 interface MergedEvent extends FlagshipEvent {
@@ -107,55 +117,37 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const [month, setMonth] = useState<number>(() => pickDefaultMonth(groupByMonth(loadSeriesList()), new Date()));
   const current = months.find((m) => m.month === month) ?? months[0];
 
-  // 種別ごとの開催期スロット（無い月は null → フックは何もしない）
-  const fsSeries = current?.series.find((s) => s.kind === 'フラッグシップバトル') ?? null;
-  const exSeries = current?.series.find((s) => s.kind === 'エクストラグランドバトル') ?? null;
+  // 種別ごとの開催期スロット（無い月は null → フックは何もしない）。フックは数を固定する必要が
+  // あるため KIND_DEFS の並び順に静的に並べる＝**種別を1つ増やしたらここも1つ増やす**（§16.17）。
+  const seriesOfKind = (i: number) => current?.series.find((s) => s.kind === KIND_DEFS[i]?.kind) ?? null;
+  const fsSeries = seriesOfKind(0);   // フラッグシップバトル
+  const exSeries = seriesOfKind(1);   // エクストラグランドバトル
+  const qlSeries = seriesOfKind(2);   // 店舗予選（チャンピオンシップ・シーズン制）
   const fs = useFlagshipEvents(fsSeries?.id ?? null);
   const ex = useFlagshipEvents(exSeries?.id ?? null);
+  const ql = useFlagshipEvents(qlSeries?.id ?? null);
 
   // 統合一覧（開催日時順）。各行に seriesId / kind をタグ付けする。
   const events: MergedEvent[] = useMemo(() => {
     const tag = (list: FlagshipEvent[], series: FlagshipSeries | null): MergedEvent[] =>
       series ? list.map((e) => ({ ...e, seriesId: series.id, kind: series.kind })) : [];
-    return [...tag(fs.events, fsSeries), ...tag(ex.events, exSeries)]
+    return [...tag(fs.events, fsSeries), ...tag(ex.events, exSeries), ...tag(ql.events, qlSeries)]
       .sort((a, b) => a.startDatetime.localeCompare(b.startDatetime));
-  }, [fs.events, ex.events, fsSeries, exSeries]);
+  }, [fs.events, ex.events, ql.events, fsSeries, exSeries, qlSeries]);
 
-  const isLoading = fs.isLoading || ex.isLoading;
-  const isRefetching = fs.isRefetching || ex.isRefetching;
-  const error = fs.error ?? ex.error;
-  const syncedAt = [fs.syncedAt, ex.syncedAt].filter((x): x is string => !!x).sort().pop() ?? null;
+  const isLoading = fs.isLoading || ex.isLoading || ql.isLoading;
+  const isRefetching = fs.isRefetching || ex.isRefetching || ql.isRefetching;
+  const error = fs.error ?? ex.error ?? ql.error;
+  const syncedAt = [fs.syncedAt, ex.syncedAt, ql.syncedAt]
+    .filter((x): x is string => !!x).sort().pop() ?? null;
 
   // §16.13/§16.14: 申込人数。ベースは backend 保存分（各開催の applicants＝/events 由来）。募集中は
   // TCG+ から並列取得して override へ反映し、結果を backend へ sync（全端末で共有・保存役は backend）。
   const [applicantOverride, setApplicantOverride] = useState<Map<number, number>>(new Map());
   const applicantReqRef = useRef<Set<number>>(new Set());
   const applicantAbortRef = useRef<AbortController | null>(null);
-  const loadApplicants = useCallback((force: boolean) => {
-    const now = new Date();
-    if (force) applicantReqRef.current = new Set();
-    // 募集中で、未リクエスト かつ（force か backend にまだ値が無い）開催を取得対象にする。
-    const ids = events
-      .filter((e) => isRecruiting(e, now) && !applicantReqRef.current.has(e.id)
-        && (force || e.applicants == null))
-      .map((e) => e.id);
-    if (!ids.length) return;
-    ids.forEach((id) => applicantReqRef.current.add(id));
-    applicantAbortRef.current?.abort();
-    const controller = new AbortController();
-    applicantAbortRef.current = controller;
-    void fetchApplicantsFor(
-      ids,
-      (id, c) => { if (c != null) setApplicantOverride((m) => new Map(m).set(id, c)); },
-      controller.signal,
-    ).then((counts) => { if (!controller.signal.aborted) void syncApplicants(counts); });
-  }, [events]);
-  // 開催が読めたら、募集中で backend にまだ無い分を取得。「取得」ボタンでは全募集中を再取得（force）。
-  useEffect(() => {
-    if (!events.length) return;
-    loadApplicants(false);
-    return () => applicantAbortRef.current?.abort();
-  }, [events, loadApplicants]);
+  // 取得の実処理は `filtered`（表示中の行）が決まったあとに定義する。§16.17 で対象を
+  // 「一覧全件」から「表示中の行の先頭 APPLICANT_FETCH_LIMIT 件」へ絞ったため。
 
   useEffect(() => {
     let alive = true;
@@ -163,19 +155,12 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return () => { alive = false; };
   }, []);
 
-  // 手動「取得」は両種別の開催マスターに加えて開催期の発見・申込人数も強制更新する。
-  const onRefetch = () => {
-    fs.refetch();
-    ex.refetch();
-    refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
-    loadApplicants(true);
-  };
-
   // 開催マスターのみ再取得（日次ガード無視）。店舗X 登録後に /events の overlay 済み sns を
   // 一覧＋キャッシュへ流し込むために使う（キャッシュ任せだと登録が反映されずリロードで消えて見える）。
   const refetchEvents = () => {
     fs.refetch();
     ex.refetch();
+    ql.refetch();
   };
 
   const [q, setQ] = useState('');
@@ -363,6 +348,55 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     );
   }, [events, q, prefSet, week, status, statusOf, kindFilter]);
 
+  /**
+   * §16.13/§16.14/§16.17: 申込人数の取得。**表示中の行の先頭 APPLICANT_FETCH_LIMIT 件だけ**を
+   * 対象にする（開催日時の昇順＝直近から）。店舗予選の追加で1か月の開催が約3600件になり、
+   * 「募集中の全件」を対象にすると TCG+ の開催詳細を数千回叩くことになるため（要件 §4.1）。
+   * 絞り込めば見たい開催の値は埋まる。取得済み id は session 内で再要求しない。
+   */
+  const loadApplicants = useCallback((targets: MergedEvent[], force: boolean) => {
+    const now = new Date();
+    if (force) applicantReqRef.current = new Set();
+    const ids: number[] = [];
+    for (const e of targets) {
+      if (ids.length >= APPLICANT_FETCH_LIMIT) break;
+      if (!isRecruiting(e, now)) continue;
+      if (applicantReqRef.current.has(e.id)) continue;
+      if (!force && e.applicants != null) continue;
+      ids.push(e.id);
+    }
+    if (!ids.length) return;
+    ids.forEach((id) => applicantReqRef.current.add(id));
+    applicantAbortRef.current?.abort();
+    const controller = new AbortController();
+    applicantAbortRef.current = controller;
+    void fetchApplicantsFor(
+      ids,
+      (id, c) => { if (c != null) setApplicantOverride((m) => new Map(m).set(id, c)); },
+      controller.signal,
+    ).then((counts) => { if (!controller.signal.aborted) void syncApplicants(counts); });
+  }, []);
+
+  // 表示中の行が変わったら（初回ロード・絞り込み変更）その先頭ぶんを取得する。
+  useEffect(() => {
+    if (!filtered.length) return;
+    loadApplicants(filtered, false);
+    return () => applicantAbortRef.current?.abort();
+  }, [filtered, loadApplicants]);
+
+  // 手動「取得」は全種別の開催マスターに加えて開催期の発見・申込人数も強制更新する。
+  const onRefetch = () => {
+    fs.refetch();
+    ex.refetch();
+    ql.refetch();
+    refreshSeriesList(true).then(setSeriesList).catch(() => { /* 静的設定で継続 */ });
+    loadApplicants(filtered, true);
+  };
+
+  // 絞り込み・データが変わったら描画上限を初期値へ戻す。
+  const [rowLimit, setRowLimit] = useState(ROW_LIMIT_STEP);
+  useEffect(() => { setRowLimit(ROW_LIMIT_STEP); }, [filtered]);
+
   const chipDefs: Array<[Status | '', string]> = [
     ['', 'すべて'],
     ['missing', '未回収'],
@@ -371,10 +405,12 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     ['upcoming', '開催前'],
   ];
 
-  // 日付見出しを挟んで行を構築。
+  // 日付見出しを挟んで行を構築。描画は ROW_LIMIT_STEP 件ずつ（店舗予選込みの月は約3600件あり、
+  // 全件を一度に DOM へ出すとスマートフォンで重いため。件数表示・書き出しは絞り込み全体が対象）。
+  const visible = filtered.slice(0, rowLimit);
   const rows: React.ReactNode[] = [];
   let lastDate = '';
-  for (const e of filtered) {
+  for (const e of visible) {
     if (e.date !== lastDate) {
       lastDate = e.date;
       const d = new Date(`${e.date}T00:00:00`);
@@ -544,6 +580,13 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
               </tbody>
             </table>
           </div>
+          {filtered.length > visible.length && (
+            <div className="fs-more">
+              <button className="fs-btn ghost" onClick={() => setRowLimit((n) => n + ROW_LIMIT_STEP)}>
+                さらに表示（残り {filtered.length - visible.length} 件）
+              </button>
+            </div>
+          )}
         </div>
 
         {picked.size > 0 && (
@@ -1353,6 +1396,7 @@ const FlagshipStyles: React.FC = () => (
       margin-top: 12px; padding: 10px 14px; border: 1px solid #8a6d0b; border-radius: 8px;
       background: #16120e; box-shadow: 0 6px 20px rgba(0,0,0,.55);
     }
+    .fs-more { display: flex; justify-content: center; padding: 10px; border-top: 1px solid #241e16; }
     .fs-pickcount { font-size: 13px; color: #a89a80; }
     .fs-pickcount b { color: #f1c40f; font-size: 16px; font-variant-numeric: tabular-nums; }
     .fs-dt { white-space: nowrap; font-variant-numeric: tabular-nums; color: #a89a80; }
