@@ -14,6 +14,9 @@ import {
 import type {
   DiscoveredCandidate, ExtractedEntry, FlagshipLeader, ResultEntry, SummaryItem, ReviewPost,
 } from './resultsClient';
+import {
+  buildPickedHtml, downloadPickedHtml, openPickedHtml, pickedFilename,
+} from './exportPicked';
 
 /**
  * フラッグシップバトル 開催一覧（P1）+ 結果登録・閲覧（P2）。
@@ -183,6 +186,15 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const [kindFilter, setKindFilter] = useState('');
   const [selected, setSelected] = useState<MergedEvent | null>(null);
 
+  // 出場候補のチェック。**保存しない**（画面内の一時状態・ユーザ決定 2026-08-16）。
+  // 開催期（月）を切り替えたら破棄する＝一覧に無い開催が選択に残らないようにする。
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const togglePick = (id: number) => setPicked((prev) => {
+    const next = new Set(prev);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
+
   // P2: 結果オーバーレイ（eventId → サマリ）とリーダー辞書。不達時は backendOk=false で P1 表示。
   const [summary, setSummary] = useState<Map<number, SummaryItem>>(new Map());
   const [leaders, setLeaders] = useState<FlagshipLeader[]>([]);
@@ -244,6 +256,27 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return n == null ? <span className="fs-dim">…</span> : <b>{n}</b>;
   };
 
+  // 出場候補の書き出し。絞り込みで隠れている選択も含めて（＝月内の全選択を）対象にし、
+  // 申込人数は画面と同じ解決（今回取得の override 優先 → backend 保存分）で埋める。
+  const [exportMsg, setExportMsg] = useState('');
+  const buildExport = (): string => buildPickedHtml(
+    events.filter((e) => picked.has(e.id)).map((e) => ({
+      ...e,
+      applicants: applicantOverride.has(e.id) ? (applicantOverride.get(e.id) ?? null) : e.applicants,
+      snsUrl: (snsOverrides.has(e.store) ? snsOverrides.get(e.store) : e.snsUrl) ?? '',
+    })),
+    { monthLabel: current?.label ?? '', now: new Date() },
+  );
+  const onExportOpen = () => {
+    setExportMsg(openPickedHtml(buildExport())
+      ? ''
+      : '新しいタブを開けなかった（ポップアップブロック）。「HTMLを保存」を使う。');
+  };
+  const onExportSave = () => {
+    downloadPickedHtml(buildExport(), pickedFilename(new Date()));
+    setExportMsg('');
+  };
+
   // 月の切り替え時は絞り込みと選択もリセットする。
   const changeMonth = (m: number) => {
     setMonth(m);
@@ -253,6 +286,8 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     setStatus('');
     setKindFilter('');
     setSelected(null);
+    setPicked(new Set());
+    setExportMsg('');
   };
 
   useEffect(() => {
@@ -345,7 +380,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       const d = new Date(`${e.date}T00:00:00`);
       rows.push(
         <tr key={`h-${e.date}`} className="fs-datehead">
-          <td colSpan={9}>
+          <td colSpan={10}>
             {d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}){e.date === today ? ' — 本日' : ''}
           </td>
         </tr>,
@@ -355,6 +390,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     const winner = winnerLabel(summary.get(e.id));
     rows.push(
       <tr key={e.id} onClick={() => setSelected(e)}>
+        <td className="fs-pick" onClick={(ev) => ev.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={picked.has(e.id)}
+            onChange={() => togglePick(e.id)}
+            aria-label={`${e.store} を出場候補にする`}
+          />
+        </td>
         <td className="fs-dt"><b>{e.startDatetime.slice(11, 16)}</b></td>
         <td className="fs-store"><span className="fs-name">{e.store}</span></td>
         <td><span className={`fs-kind fs-kind-${kindBadge(e.kind)}`}>{kindShort(e.kind)}</span></td>
@@ -484,6 +527,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
             <table>
               <thead>
                 <tr>
+                  <th className="fs-pick"><span className="fs-sr">出場候補</span></th>
                   <th>開催日時</th><th>店舗</th><th>大会</th><th>都道府県</th><th style={{ textAlign: 'right' }}>定員</th>
                   <th style={{ textAlign: 'right' }}>申込</th>
                   <th>状況</th><th>優勝リーダー</th><th style={{ textAlign: 'right' }}>リンク</th>
@@ -492,7 +536,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
               <tbody>
                 {rows.length > 0 ? rows : (
                   <tr>
-                    <td colSpan={9} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={10} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
                       {isLoading ? '開催データを取得中…' : '該当する開催がありません'}
                     </td>
                   </tr>
@@ -502,8 +546,19 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
           </div>
         </div>
 
+        {picked.size > 0 && (
+          <div className="fs-pickbar">
+            <span className="fs-pickcount">出場候補 <b>{picked.size}</b> 件</span>
+            <button className="fs-btn" onClick={onExportOpen}>エクスポート（新しいタブ）</button>
+            <button className="fs-btn ghost" onClick={onExportSave}>HTMLを保存</button>
+            <button className="fs-linklike" onClick={() => { setPicked(new Set()); setExportMsg(''); }}>選択を解除</button>
+            {exportMsg && <span className="fs-msg-err">{exportMsg}</span>}
+          </div>
+        )}
+
         <p className="fs-footnote">
           開催データは BANDAI TCG+ から取得した実データ（「取得」ボタンで再取得、自動取得は前回から24時間経過時）。
+          行の左端のチェックで出場候補を選び、スマートフォン向けの単体 HTML に書き出せる（選択は保存されない）。
           同じ月のフラッグシップバトルとエクストラグランドバトルを統合表示している（「大会」列・種別セレクタで区別）。
           結果（優勝リーダー・回収状況）は開催の行をクリックして登録・修正できる。結果ポスト本文からの候補生成（無料）にも対応。
         </p>
@@ -1285,11 +1340,21 @@ const FlagshipStyles: React.FC = () => (
     .fs-count { margin-left: auto; font-size: 12px; color: #6f6553; font-variant-numeric: tabular-nums; }
     .fs-tablewrap { border: 1px solid #2e261c; border-radius: 8px; overflow: hidden; background: #16120e; }
     .fs-scroller { overflow-x: auto; }
-    .fs-root table { border-collapse: collapse; width: 100%; min-width: 720px; }
+    .fs-root table { border-collapse: collapse; width: 100%; min-width: 760px; }
     .fs-root thead th { text-align: left; font-size: 11px; letter-spacing: .1em; color: #a89a80; font-weight: 600; padding: 9px 12px; border-bottom: 1px solid #2e261c; background: #1e1812; position: sticky; top: 0; }
     .fs-root tbody td { padding: 8px 12px; border-bottom: 1px solid #241e16; vertical-align: middle; }
     .fs-root tbody tr:not(.fs-datehead) { cursor: pointer; }
     .fs-root tbody tr:not(.fs-datehead):hover { background: rgba(241,196,15,.05); }
+    .fs-pick { width: 34px; padding-right: 0 !important; text-align: center; }
+    .fs-pick input { width: 17px; height: 17px; accent-color: #f1c40f; cursor: pointer; vertical-align: middle; }
+    .fs-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .fs-pickbar {
+      position: sticky; bottom: 8px; z-index: 6; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-top: 12px; padding: 10px 14px; border: 1px solid #8a6d0b; border-radius: 8px;
+      background: #16120e; box-shadow: 0 6px 20px rgba(0,0,0,.55);
+    }
+    .fs-pickcount { font-size: 13px; color: #a89a80; }
+    .fs-pickcount b { color: #f1c40f; font-size: 16px; font-variant-numeric: tabular-nums; }
     .fs-dt { white-space: nowrap; font-variant-numeric: tabular-nums; color: #a89a80; }
     .fs-dt b { color: #f0e6d2; font-weight: 600; }
     .fs-store { max-width: 300px; }
