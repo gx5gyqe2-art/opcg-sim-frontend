@@ -90,6 +90,19 @@ function baseStatus(date: string, today: string): 'missing' | 'today' | 'upcomin
   return 'upcoming';
 }
 
+/**
+ * 申込締切（`apply_end`・RFC3339）を「9/5(土) 23:59（締切済）」の形にする（詳細パネル用）。
+ * TCG+ は UTC オフセット付きで返すため、表示は端末のローカル時刻（＝JST 運用）になる。
+ */
+function formatApplyEnd(applyEnd: string): string {
+  if (!applyEnd) return '—';
+  const d = new Date(applyEnd);
+  if (Number.isNaN(d.getTime())) return '—';
+  const p = (n: number) => n.toString().padStart(2, '0');
+  const s = `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]}) ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return d.getTime() <= Date.now() ? `${s}（締切済）` : s;
+}
+
 function formatSynced(iso: string | null): string {
   if (!iso) return '未取得';
   const d = new Date(iso);
@@ -239,6 +252,18 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     if (!isRecruiting(e, new Date())) return <span className="fs-dim">-</span>;
     const n = applicantOverride.has(e.id) ? applicantOverride.get(e.id) : e.applicants;
     return n == null ? <span className="fs-dim">…</span> : <b>{n}</b>;
+  };
+
+  // 申込締切セル: これから開催される開催だけ表示する（終了した開催の締切は情報価値が無い）。
+  // 締切を過ぎていれば淡色＋「締切」。データは backend の開催マスター（apply_end・§16.13）。
+  const applyEndCell = (e: MergedEvent): React.ReactNode => {
+    if (!e.applyEnd || e.date < today) return <span className="fs-dim">—</span>;
+    const d = new Date(e.applyEnd);
+    if (Number.isNaN(d.getTime())) return <span className="fs-dim">—</span>;
+    const label = `${d.getMonth() + 1}/${d.getDate()}`;
+    return d.getTime() <= Date.now()
+      ? <span className="fs-dim">{label} 締切</span>
+      : <b>{label}</b>;
   };
 
   // 出場候補の書き出し。絞り込みで隠れている選択も含めて（＝月内の全選択を）対象にし、
@@ -416,7 +441,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
       const d = new Date(`${e.date}T00:00:00`);
       rows.push(
         <tr key={`h-${e.date}`} className="fs-datehead">
-          <td colSpan={10}>
+          <td colSpan={11}>
             {d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}){e.date === today ? ' — 本日' : ''}
           </td>
         </tr>,
@@ -440,6 +465,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
         <td className="fs-pref">{e.pref}</td>
         <td className="fs-cap">{e.capacity ?? '—'}</td>
         <td className="fs-cap">{applicantCell(e)}</td>
+        <td className="fs-deadline">{applyEndCell(e)}</td>
         <td><span className={`fs-badge fs-${s}`}>{STATUS_LABEL[s]}</span></td>
         <td className="fs-winner">{winner ?? <span className="fs-dim">—</span>}</td>
         <td className="fs-links" onClick={(ev) => ev.stopPropagation()}>
@@ -566,13 +592,14 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
                   <th className="fs-pick"><span className="fs-sr">出場候補</span></th>
                   <th>開催日時</th><th>店舗</th><th>大会</th><th>都道府県</th><th style={{ textAlign: 'right' }}>定員</th>
                   <th style={{ textAlign: 'right' }}>申込</th>
+                  <th style={{ textAlign: 'right' }}>締切</th>
                   <th>状況</th><th>優勝リーダー</th><th style={{ textAlign: 'right' }}>リンク</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length > 0 ? rows : (
                   <tr>
-                    <td colSpan={10} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
+                    <td colSpan={11} className="fs-dim" style={{ padding: 20, textAlign: 'center' }}>
                       {isLoading ? '開催データを取得中…' : '該当する開催がありません'}
                     </td>
                   </tr>
@@ -1177,6 +1204,7 @@ const DetailPanel: React.FC<{
           <dd>{d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}) {event.startDatetime.slice(11, 16)}</dd>
           <dt>都道府県</dt><dd>{event.pref}</dd>
           <dt>定員</dt><dd>{event.capacity ?? '—'} 名</dd>
+          <dt>申込締切</dt><dd>{formatApplyEnd(event.applyEnd)}</dd>
           <dt>店舗X</dt>
           <dd>{shownSns && !snsEditing ? (
             <span className="fs-sns">
@@ -1383,8 +1411,8 @@ const FlagshipStyles: React.FC = () => (
     .fs-count { margin-left: auto; font-size: 12px; color: #6f6553; font-variant-numeric: tabular-nums; }
     .fs-tablewrap { border: 1px solid #2e261c; border-radius: 8px; overflow: hidden; background: #16120e; }
     .fs-scroller { overflow-x: auto; }
-    .fs-root table { border-collapse: collapse; width: 100%; min-width: 760px; }
-    .fs-root thead th { text-align: left; font-size: 11px; letter-spacing: .1em; color: #a89a80; font-weight: 600; padding: 9px 12px; border-bottom: 1px solid #2e261c; background: #1e1812; position: sticky; top: 0; }
+    .fs-root table { border-collapse: collapse; width: 100%; min-width: 830px; }
+    .fs-root thead th { text-align: left; font-size: 11px; letter-spacing: .1em; color: #a89a80; font-weight: 600; padding: 9px 12px; border-bottom: 1px solid #2e261c; background: #1e1812; position: sticky; top: 0; white-space: nowrap; }
     .fs-root tbody td { padding: 8px 12px; border-bottom: 1px solid #241e16; vertical-align: middle; }
     .fs-root tbody tr:not(.fs-datehead) { cursor: pointer; }
     .fs-root tbody tr:not(.fs-datehead):hover { background: rgba(241,196,15,.05); }
@@ -1405,6 +1433,7 @@ const FlagshipStyles: React.FC = () => (
     .fs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; max-width: 300px; }
     .fs-pref { white-space: nowrap; color: #a89a80; }
     .fs-cap { text-align: right; font-variant-numeric: tabular-nums; color: #a89a80; }
+    .fs-deadline { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: #a89a80; }
     .fs-winner, .fs-links { white-space: nowrap; }
     .fs-links { text-align: right; }
     .fs-datehead td { background: #1e1812; color: #f1c40f; font-size: 12px; font-weight: 700; letter-spacing: .06em; padding: 6px 12px; border-bottom: 1px solid #2e261c; position: sticky; top: 34px; }
