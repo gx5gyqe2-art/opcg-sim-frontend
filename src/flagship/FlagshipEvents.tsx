@@ -34,6 +34,14 @@ interface FlagshipEventsProps {
 
 type Status = 'collected' | 'missing' | 'today' | 'upcoming';
 
+/** 一覧の並び順（§16.19）。`date`＝開催日時順（既定）／`deadline`＝申込締切が近い順。 */
+type SortKey = 'date' | 'deadline';
+
+const SORT_LABEL: Record<SortKey, string> = {
+  date: '開催日時順',
+  deadline: '締切が近い順',
+};
+
 const STATUS_LABEL: Record<Status, string> = {
   collected: '回収済',
   missing: '未回収',
@@ -182,6 +190,7 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   const [week, setWeek] = useState('');
   const [status, setStatus] = useState<Status | ''>('');
   const [kindFilter, setKindFilter] = useState('');
+  const [sort, setSort] = useState<SortKey>('date');
   const [selected, setSelected] = useState<MergedEvent | null>(null);
 
   // 出場候補のチェック。**保存しない**（画面内の一時状態・ユーザ決定 2026-08-16）。
@@ -363,15 +372,42 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
     return { rows, withWinner };
   }, [summary]);
 
-  const filtered = useMemo(() => {
-    return events.filter((e) =>
+  /**
+   * 絞り込み＋並び替え（§16.19）。
+   *
+   * `deadline`（締切が近い順）は「**これから締め切られる開催を近い順に先頭へ**、締切済み・締切なしは
+   * その後ろ（開催日時順）」。単純な締切の昇順にすると、もう申し込めない開催が先頭を占めて
+   * 「締切が近い順」の目的（申し込み逃しを防ぐ）を果たさないため。
+   *
+   * 判定に使った時刻（`nowMs`）は日付見出しの区切りにも使う（memo と見出しで境界がズレないように、
+   * 都度 `Date.now()` を呼ばず同じ値を持ち回る）。
+   */
+  const { list: filtered, nowMs: sortNowMs } = useMemo(() => {
+    const list = events.filter((e) =>
       (!q || e.store.includes(q)) &&
       (prefSet.size === 0 || prefSet.has(e.pref)) &&
       (!week || weekOf(e.date) === week) &&
       (!status || statusOf(e) === status) &&
       (!kindFilter || e.kind === kindFilter),
     );
-  }, [events, q, prefSet, week, status, statusOf, kindFilter]);
+    const nowMs = Date.now();
+    if (sort === 'date') return { list, nowMs };   // events は既に開催日時順
+    const upcomingDeadline = (e: MergedEvent): number | null => {
+      const t = e.applyEnd ? new Date(e.applyEnd).getTime() : NaN;
+      return Number.isNaN(t) || t <= nowMs ? null : t;
+    };
+    const sorted = [...list].sort((a, b) => {
+      const ka = upcomingDeadline(a);
+      const kb = upcomingDeadline(b);
+      if (ka !== null && kb !== null) {
+        return ka - kb || a.startDatetime.localeCompare(b.startDatetime);
+      }
+      if (ka !== null) return -1;
+      if (kb !== null) return 1;
+      return a.startDatetime.localeCompare(b.startDatetime);
+    });
+    return { list: sorted, nowMs };
+  }, [events, q, prefSet, week, status, statusOf, kindFilter, sort]);
 
   /**
    * §16.13/§16.14/§16.17: 申込人数の取得。**表示中の行の先頭 APPLICANT_FETCH_LIMIT 件だけ**を
@@ -433,17 +469,34 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
   // 日付見出しを挟んで行を構築。描画は ROW_LIMIT_STEP 件ずつ（店舗予選込みの月は約3600件あり、
   // 全件を一度に DOM へ出すとスマートフォンで重いため。件数表示・書き出しは絞り込み全体が対象）。
   const visible = filtered.slice(0, rowLimit);
+
+  // 見出しの区切りは並び順に合わせる（開催日時順＝開催日で、締切順＝締切日で区切る）。
+  const groupOf = (e: MergedEvent): { key: string; label: string } => {
+    if (sort === 'deadline') {
+      const t = e.applyEnd ? new Date(e.applyEnd) : null;
+      if (t && !Number.isNaN(t.getTime()) && t.getTime() > sortNowMs) {
+        const key = localDate(t);
+        const suffix = key === today ? ' — 本日締切' : '';
+        return { key: `dl-${key}`, label: `締切 ${t.getMonth() + 1}月${t.getDate()}日(${WD[t.getDay()]})${suffix}` };
+      }
+      return { key: 'dl-none', label: '締切済み・締切なし' };
+    }
+    const d = new Date(`${e.date}T00:00:00`);
+    return {
+      key: `h-${e.date}`,
+      label: `${d.getMonth() + 1}月${d.getDate()}日(${WD[d.getDay()]})${e.date === today ? ' — 本日' : ''}`,
+    };
+  };
+
   const rows: React.ReactNode[] = [];
-  let lastDate = '';
+  let lastGroup = '';
   for (const e of visible) {
-    if (e.date !== lastDate) {
-      lastDate = e.date;
-      const d = new Date(`${e.date}T00:00:00`);
+    const g = groupOf(e);
+    if (g.key !== lastGroup) {
+      lastGroup = g.key;
       rows.push(
-        <tr key={`h-${e.date}`} className="fs-datehead">
-          <td colSpan={11}>
-            {d.getMonth() + 1}月{d.getDate()}日({WD[d.getDay()]}){e.date === today ? ' — 本日' : ''}
-          </td>
+        <tr key={g.key} className="fs-datehead">
+          <td colSpan={11}>{g.label}</td>
         </tr>,
       );
     }
@@ -459,7 +512,11 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
             aria-label={`${e.store} を出場候補にする`}
           />
         </td>
-        <td className="fs-dt"><b>{e.startDatetime.slice(11, 16)}</b></td>
+        <td className="fs-dt">
+          {/* 締切順のときは見出しが締切日になるため、開催日を列側に出す（時刻だけだと何日か分からない）。 */}
+          {sort === 'deadline' && <span>{Number(e.date.slice(5, 7))}/{Number(e.date.slice(8, 10))} </span>}
+          <b>{e.startDatetime.slice(11, 16)}</b>
+        </td>
         <td className="fs-store"><span className="fs-name">{e.store}</span></td>
         <td><span className={`fs-kind fs-kind-${kindBadge(e.kind)}`}>{kindShort(e.kind)}</span></td>
         <td className="fs-pref">{e.pref}</td>
@@ -570,6 +627,11 @@ export const FlagshipEvents: React.FC<FlagshipEventsProps> = ({ onBack }) => {
               const f = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
               return <option key={w} value={w}>第{i + 1}週 ({f(new Date(`${w}T00:00:00`))}〜{f(end)})</option>;
             })}
+          </select>
+          <select aria-label="並び替え" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+              <option key={k} value={k}>{SORT_LABEL[k]}</option>
+            ))}
           </select>
           <div className="fs-chips" role="group" aria-label="状況で絞り込み">
             {chipDefs.map(([v, label]) => (
