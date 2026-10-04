@@ -235,7 +235,7 @@ export const buildBoardItems = (
 
   // レストドン
   const donRestCount = (p.don_rested || []).length;
-  const donRestCard = { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true, card_id: 'DON' } as VirtualZoneCard;
+  const donRestCard = { uuid: `donrest-${p.player_id}`, name: 'Don!! Rest', is_rest: true, card_id: 'DON', don_frozen: p.don_frozen ?? 0 } as VirtualZoneCard;
   pushVirtual(
     donRestCard,
     smallCW,
