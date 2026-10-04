@@ -19,6 +19,7 @@ import { ActionLog } from '../ui/ActionLog';
 import { EffectToast, type EffectToastItem } from '../ui/EffectToast';
 import { CoinFlip } from '../ui/CoinFlip';
 import { PhaseBanner } from '../ui/banners/PhaseBanner';
+import { GameResultOverlay } from '../ui/GameResultOverlay';
 import { getBattleDecisionMeta } from '../ui/banners/battleDecision';
 import { BattleDecisionBar } from '../ui/banners/BattleDecisionBar';
 import { ConfirmActionBar } from '../ui/banners/ConfirmActionBar';
@@ -199,6 +200,7 @@ export const RealGame = ({
   myPlayerId = 'both',
   roomName,
   onForceBack,
+  onExitToTop,
   vsCpu = false,
   cpuDifficulty = 'hard',
 }: {
@@ -210,6 +212,8 @@ export const RealGame = ({
   myPlayerId?: 'both' | 'p1' | 'p2',
   roomName?: string,
   onForceBack?: () => void,
+  // 決着後の結果画面「トップに戻る」（確認なしでトップへ。未指定なら onBack）
+  onExitToTop?: () => void,
   // ▼ CPU 対戦用（人間=p1 固定・REST＋/api/game/cpu/step ポーリング・WS 不使用）
   vsCpu?: boolean,
   cpuDifficulty?: 'learned' | 'hard',
@@ -306,6 +310,8 @@ export const RealGame = ({
   const [selectingDeckFor, setSelectingDeckFor] = useState<'p1' | 'p2' | null>(null);
   const [eventLog, setEventLog] = useState<ActionEvent[]>([]);
   const [showLog, setShowLog] = useState(false);
+  // 決着後の結果画面を閉じて盤面を見ているか
+  const [resultDismissed, setResultDismissed] = useState(false);
   // ログ採取（クリップボードコピーが不可な環境向けのフォールバック表示用）。
   const [captureText, setCaptureText] = useState<string | null>(null);
   const [effectToasts, setEffectToasts] = useState<EffectToastItem[]>([]);
@@ -2122,6 +2128,24 @@ export const RealGame = ({
       {/* 効果適用の一時的な視覚フィードバック（KO/ドロー/バウンス等） */}
       <EffectToast toasts={effectToasts} />
       <PhaseBanner banner={phaseBanner} />
+
+      {/* 決着: フルスクリーンの結果画面（「盤面を見る」で閉じ、右上のボタンから再表示） */}
+      {gameState?.turn_info?.winner && (resultDismissed ? (
+        <button
+          onClick={() => setResultDismissed(false)}
+          style={{ position: 'absolute', top: '40px', right: '10px', zIndex: Z_INDEX.OVERLAY + 20, background: 'rgba(41,128,185,0.92)', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+        >
+          結果画面へ
+        </button>
+      ) : (
+        <GameResultOverlay
+          gameState={gameState}
+          winner={gameState.turn_info.winner}
+          viewerId={fixedViewer ? selfId : null}
+          onBackToTop={onExitToTop ?? onBack}
+          onViewBoard={() => setResultDismissed(true)}
+        />
+      ))}
 
       {/* CPU 対戦: 手番/勝敗の表示と CPU 思考中インジケータ */}
       {vsCpu && (
