@@ -2506,6 +2506,7 @@ export const RealGame = ({
         location={selectedCard.location}
         isMyTurn={selectedCard.isMyTurn}
         activeDonCount={activeDonCount}
+        turnCount={gameState?.turn_info?.turn_count}
         onAction={handleAction}
         onClose={() => {
           setIsDetailMode(false);

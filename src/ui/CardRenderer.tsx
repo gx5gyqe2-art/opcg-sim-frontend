@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import type { VirtualZoneCard } from '../game/types';
+import { getStatusViews, hasStatus, STATUS_TONE_COLOR } from '../game/cardStatus';
 import { LAYOUT_CONSTANTS, LAYOUT_PARAMS } from '../layout/layout.config';
 import { GAME_UI_CONFIG } from '../game/game.config';
 import { getCardImageUrl, getBackImageUrl } from '../utils/imageAssets';
@@ -44,6 +45,53 @@ export interface CardContainer extends PIXI.Container {
  * 描画ロジックは createCardContainer と単一。再利用時に古い表示が残らないよう、
  * rotation 等の外側プロパティも既定へ戻す。選択グローは可能なら子を保持して脈動位相を維持。
  */
+// 効果による増減の色（増=緑・減=赤・なし=既定色）。
+const modColor = (mod: number | undefined, base: number | string) =>
+  (mod ?? 0) > 0 ? 0x4cd964 : (mod ?? 0) < 0 ? 0xff6b6b : base;
+
+// カード下端の状態ラベルは最大この段数（超過時は最後の段を「+N」にする）。
+const MAX_CHIPS = 3;
+
+/**
+ * 状態ラベルを、カードの**画面上の**下端から上へ 1 段ずつ積む（レストで横向きでも文字は正立）。
+ * 盤面のカードは細いので横並びにせず縦に積み、1 段が幅を超えるときは文字を縮める。
+ * `sw`/`sh` は画面上のカードの幅/高さ（レスト時は cw/ch が入れ替わる）。
+ */
+const drawStatusChips = (
+  container: PIXI.Container,
+  sw: number,
+  sh: number,
+  items: { text: string; color: number }[],
+) => {
+  const strip = new PIXI.Container();
+  const fontSize = Math.max(8, Math.min(11, sw * 0.12));
+  const padX = fontSize * 0.35;
+  const chipH = fontSize + 4;
+  const gap = 2;
+  const maxW = sw - 4;
+  items.forEach((it, i) => {
+    const t = new PIXI.Text(it.text, { fontSize, fill: 0xffffff, fontWeight: 'bold' });
+    const textW = Math.min(t.width, maxW - padX * 2);
+    if (t.width > textW) t.scale.set(textW / t.width);
+    const w = textW + padX * 2;
+    const y = -(i + 1) * chipH - i * gap; // 下端から上へ
+    const bg = new PIXI.Graphics()
+      .lineStyle(1, 0xffffff, 0.6)
+      .beginFill(it.color, 0.92)
+      .drawRoundedRect(-w / 2, y, w, chipH, chipH / 2)
+      .endFill();
+    t.anchor.set(0.5);
+    t.position.set(0, y + chipH / 2);
+    strip.addChild(bg, t);
+  });
+  // 画面基準で配置: カードの回転を打ち消し、画面上の下端・中央へ
+  // （ローカル座標で「画面下方向」は回転の逆向き）。
+  strip.rotation = -container.rotation;
+  const bottom = sh / 2 - 2;
+  strip.position.set(Math.sin(container.rotation) * bottom, Math.cos(container.rotation) * bottom);
+  container.addChild(strip);
+};
+
 export const drawCardVisuals = (
   container: CardContainer,
   card: VirtualZoneCard,
@@ -212,7 +260,7 @@ export const drawCardVisuals = (
         .drawCircle(cx, cy, SHAPE.CORNER_RADIUS_BADGE)
         .endFill();
       container.addChild(costBadge);
-      addText(`${card.cost}`, { fontSize: SIZES.FONT_COST, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, cx, cy, 'screen');
+      addText(`${card.cost}`, { fontSize: SIZES.FONT_COST, fill: modColor(card.cost_mod, COLORS.TEXT_LIGHT), fontWeight: 'bold' }, cx, cy, 'screen');
     }
 
     // 2. パワー表示 (カードサイズ比率で自動計算)
@@ -255,7 +303,8 @@ export const drawCardVisuals = (
 
       const pText = new PIXI.Text(`${card.power}`, {
         fontSize: baseFontSize,
-        fill: 0xFFFFFF,
+        // 効果でパワーが増減している間は色で示す（付与ドン!!の +1000 は含めない）。
+        fill: modColor(card.power_mod, 0xFFFFFF),
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center'
@@ -334,24 +383,47 @@ export const drawCardVisuals = (
   }
 
   // --- 状態オーバーレイ (FREEZE / NEGATE) ---
-  if (card?.is_frozen) {
+  // 状態は盤面が届くたびに描き直す＝状態が続く間は出続け、切れた次の盤面で消える。
+  const isFrozen = !!card?.is_frozen || hasStatus(card, 'FREEZE');
+  const isNegated = !!card?.ability_disabled || hasStatus(card, 'EFFECTS_DISABLED');
+  if (isFrozen) {
     const overlay = new PIXI.Graphics();
-    overlay.beginFill(COLORS.BADGE_FROZEN_BG, 0.3);
+    overlay.lineStyle(Math.max(2, cw * 0.04), 0x9fdcff, 0.95);
+    overlay.beginFill(COLORS.BADGE_FROZEN_BG, 0.35);
     overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     overlay.endFill();
     container.addChild(overlay);
-    const labelY = card?.ability_disabled ? -ch * 0.12 : 0;
-    addText('凍結', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
+    const labelY = isNegated ? -ch * 0.12 : 0;
+    addText('❄ 凍結', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
   }
 
-  if (card?.ability_disabled) {
+  if (isNegated) {
     const overlay = new PIXI.Graphics();
     overlay.beginFill(COLORS.BADGE_NEGATE_BG, 0.3);
     overlay.drawRoundedRect(-cw / 2, -ch / 2, cw, ch, cardRadius);
     overlay.endFill();
     container.addChild(overlay);
-    const labelY = card?.is_frozen ? ch * 0.12 : 0;
+    const labelY = isFrozen ? ch * 0.12 : 0;
     addText('効果無効', { fontSize: SIZES.FONT_COUNT, fill: COLORS.TEXT_LIGHT, fontWeight: 'bold' }, 0, labelY, 'screen');
+  }
+
+  // 凍結ドン!!（レストのドン!!置き場）: 枚数をラベルで出す。
+  if ((card?.don_frozen ?? 0) > 0) {
+    drawStatusChips(container, isRest ? ch : cw, isRest ? cw : ch, [
+      { text: `凍結${card.don_frozen}`, color: STATUS_TONE_COLOR.freeze.hex },
+    ]);
+  }
+
+  // その他の継続中の状態: カード下端（画面基準）に色分けの小ラベルを並べる。
+  if (!isBack && !isEmpty) {
+    const chips = getStatusViews(card).filter(v => !v.overlay);
+    if (chips.length > 0) {
+      const overflow = chips.length > MAX_CHIPS;
+      const shown = overflow ? chips.slice(0, MAX_CHIPS - 1) : chips;
+      const items = shown.map(v => ({ text: v.short, color: STATUS_TONE_COLOR[v.tone].hex }));
+      if (overflow) items.push({ text: `+${chips.length - shown.length}`, color: 0x34495e });
+      drawStatusChips(container, isRest ? ch : cw, isRest ? cw : ch, items);
+    }
   }
 
   // 選択可能ハイライト: 脈動するゴールドグロー（共有 ticker 駆動）。

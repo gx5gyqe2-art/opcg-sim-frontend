@@ -1,3 +1,10 @@
+// 継続中の状態（API が場のカードへ付ける。code/duration は src/game/cardStatus.ts で表示名へ）。
+export interface CardStatus {
+  code: string;
+  duration: string;
+  expire_turn?: number;
+}
+
 export interface BaseCard {
   uuid: string;
   card_id: string;
@@ -19,6 +26,12 @@ export interface BaseCard {
   trigger_text?: string;
   ability_disabled?: boolean;
   is_frozen?: boolean;
+  // ▼ 継続中の状態（場のカードのみ）と効果によるパワー/コスト増減（付与ドン!!は含まない）
+  statuses?: CardStatus[];
+  power_mod?: number;
+  cost_mod?: number;
+  // ▼ 仮想カード（レストのドン!!）に載せる凍結枚数
+  don_frozen?: number;
   // ▼ ドン!!カードが付与されている対象キャラの uuid（未付与/解除時は null/undefined）
   attached_to?: string | null;
 }
@@ -100,6 +113,8 @@ export interface PlayerState {
   don_rested: CardInstance[];
   don_attached: CardInstance[];
   don_deck_count: number;
+  // レストのうち次のリフレッシュでアクティブにならないドン!!の枚数
+  don_frozen?: number;
 }
 
 // RealGame.tsx のエラー解消用

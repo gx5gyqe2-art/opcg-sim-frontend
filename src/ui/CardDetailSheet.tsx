@@ -7,17 +7,20 @@ import type { CardInstance, BoardCard, LeaderCard } from '../game/types';
 import { getAvailableActions, type CardActionKey } from '../game/cardActions';
 import { ModalShell } from './common/ModalShell';
 import { ModalButton, type ModalButtonVariant } from './common/ModalButton';
+import { getStatusViews, STATUS_TONE_COLOR } from '../game/cardStatus';
 
 interface CardDetailSheetProps {
   card: CardInstance & { cards?: CardInstance[] };
   location: string;
   isMyTurn: boolean;
   activeDonCount?: number;
+  /** 現在のターン数（状態の期間表示「このターン終了まで／次のターン終了まで」に使う） */
+  turnCount?: number;
   onAction: (type: string, payload: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }
 
-export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, activeDonCount = 0, onAction, onClose }) => {
+export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location, isMyTurn, activeDonCount = 0, turnCount, onAction, onClose }) => {
   const { COLORS } = LAYOUT_CONSTANTS;
   const { UI_DETAILS, SHAPE, MODAL } = LAYOUT_PARAMS;
 
@@ -29,6 +32,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
   }, [card.name, card.uuid, location]);
 
   const ACTIONS = CONST.c_to_s_interface.GAME_ACTIONS.TYPES;
+  const statusViews = getStatusViews(card, turnCount);
+  // 効果による増減（例: 「(+2000)」）。付与ドン!!は含まない。
+  const modLabel = (mod?: number) => (mod ? (
+    <span style={{ color: mod > 0 ? '#4cd964' : '#ff6b6b', marginLeft: '4px' }}>({mod > 0 ? '+' : ''}{mod})</span>
+  ) : null);
 
   const handleExecute = async (type: string, extra: Record<string, unknown> = {}) => {
     await onAction(type, { uuid: card.uuid, extra });
@@ -161,9 +169,18 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             {'traits' in card && card.traits && card.traits.map((trait: string, idx: number) => (
               <span key={idx} style={badgeStyle(COLORS.BADGE_TRAIT)}>{trait}</span>
             ))}
-            {card.is_frozen && <span style={badgeStyle(COLORS.BADGE_FROZEN_CSS)}>凍結</span>}
-            {card.ability_disabled && <span style={badgeStyle(COLORS.BADGE_NEGATE_CSS)}>効果無効</span>}
           </div>
+          {statusViews.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px', textAlign: 'left' }}>
+              {statusViews.map(v => (
+                <div key={v.code} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                  <span style={{ ...badgeStyle(STATUS_TONE_COLOR[v.tone].css), flexShrink: 0 }}>{v.short}</span>
+                  <span style={{ color: MODAL.TEXT_PRIMARY }}>{v.label}</span>
+                  {v.duration && <span style={{ color: MODAL.TEXT_MUTED, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{v.duration}</span>}
+                </div>
+              ))}
+            </div>
+          )}
           <p style={{ fontSize: '0.9rem', color: MODAL.TEXT_PRIMARY, lineHeight: '1.6', whiteSpace: 'pre-wrap', textAlign: 'left' }}>
             {'text' in card ? card.text : ''}
           </p>
@@ -173,8 +190,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ card, location
             </p>
           )}
           <div style={{ marginTop: '15px', fontWeight: 'bold', color: MODAL.TEXT_PRIMARY, display: 'flex', gap: '20px', borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: '10px', justifyContent: 'center' }}>
-            {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}</span>}
-            {'cost' in card && <span>COST: {(card as BoardCard).cost}</span>}
+            {'power' in card && <span>POWER: {(card as LeaderCard | BoardCard).power}{modLabel(card.power_mod)}</span>}
+            {'cost' in card && <span>COST: {(card as BoardCard).cost}{modLabel(card.cost_mod)}</span>}
             {'counter' in card && (card as BoardCard).counter !== undefined && (card as BoardCard).counter! > 0 && (
               <span>COUNTER: +{(card as BoardCard).counter}</span>
             )}
