@@ -178,6 +178,7 @@ export default function App() {
             cpuDifficulty={ruleCpu?.difficulty}
             onBack={() => { if (confirm("終了しますか？")) { setRuleOnline(null); setRuleCpu(null); setMode('start'); } }}
             onForceBack={() => { setRuleOnline(null); setMode('ruleLobby'); }}
+            onExitToTop={() => { setRuleOnline(null); setRuleCpu(null); setMode('start'); }}
           />
         )}
         {mode === 'sandbox' && (
