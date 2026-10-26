@@ -107,7 +107,9 @@ export const apiClient = {
   // 堅牢化: 失敗（504/コールドスタート/競合スパイク/クライアントタイムアウト）でもすぐ諦めずバックオフ再試行する。
   // cpu/step は同一局面で冪等的に再計算でき、かつ初回でサーバ側の思考が完了すると plan_cache が温まるため、
   // 再試行は高確率で即ヒット（キャッシュ replay）して返る。1 回のスパイクが即フリーズになるのを防ぐ。
-  async cpuStep(gameId: string, opts?: { retries?: number; timeoutMs?: number }): Promise<CpuStepResult> {
+  // waitSec: サーバが思考の終わりを待つ上限秒（省略＝サーバ既定 0.8 秒）。間に合わなければ
+  // cpu_thinking（経過秒）つきで即座に返る＝呼び直して続きを待つ。
+  async cpuStep(gameId: string, opts?: { retries?: number; timeoutMs?: number; waitSec?: number }): Promise<CpuStepResult> {
     const retries = opts?.retries ?? 4;
     const timeoutMs = opts?.timeoutMs ?? 25000;
     let lastErr: unknown;
@@ -115,7 +117,7 @@ export const apiClient = {
       try {
         const res = await fetchWithLog(`${BASE_URL}/api/game/cpu/step`, {
           method: 'POST',
-          body: JSON.stringify({ game_id: gameId }),
+          body: JSON.stringify(opts?.waitSec != null ? { game_id: gameId, wait_sec: opts.waitSec } : { game_id: gameId }),
         }, timeoutMs);
         const data = await res.json();
         if (!res.ok || data.success === false) {
