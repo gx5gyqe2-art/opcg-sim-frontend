@@ -94,4 +94,6 @@ export interface CpuStepResult extends GameActionResult {
   cpu_acted?: boolean;
   cpu_event?: ActionEvent | null;
   waiting_for?: CpuWaitingFor;
+  // CPU がまだ考えている間だけ入る（経過秒）。考え終えて手を返した応答・CPU の番でない応答は null。
+  cpu_thinking?: { elapsed_sec: number } | null;
 }

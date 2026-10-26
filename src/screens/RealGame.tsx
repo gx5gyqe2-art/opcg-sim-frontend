@@ -240,6 +240,8 @@ export const RealGame = ({
   const [wsConnected, setWsConnected] = useState(false);
   // CPU 対戦: CPU 思考中フラグ（人間操作ロック表示用）と多重ポーリング防止。
   const [cpuThinking, setCpuThinking] = useState(false);
+  // CPU がサーバで考えている経過秒（cpu/step の cpu_thinking）。考えていない間は null。
+  const [cpuThinkSec, setCpuThinkSec] = useState<number | null>(null);
   const cpuBusyRef = useRef(false);
   // WebSocket 再接続管理
   const wsRef = useRef<WebSocket | null>(null);
@@ -536,6 +538,14 @@ export const RealGame = ({
           setPendingRequest(resp.pending_request ?? null);
           if (resp.action_events?.length) addEventLog(resp.action_events);
           if (resp.waiting_for !== 'cpu') break;
+          if (resp.cpu_thinking) {
+            // まだ考えている（1 コアのサーバで長い局面は十数秒かかる）: 経過秒を出し、1 秒ごとに状況を取り直す。
+            // サーバは最大 1 秒だけ思考の終わりを待って返す＝考え終えた手はすぐ届き、まだなら 1 秒後の経過秒が届く。
+            setCpuThinkSec(resp.cpu_thinking.elapsed_sec);
+            respPromise = apiClient.cpuStep(gid, { waitSec: 1 });
+            continue;
+          }
+          setCpuThinkSec(null);
           // 次手の計算を「1 手の見せ時間(700ms)」と並走させる＝思考を演出の裏に隠す（直列の待ちを消す）。
           respPromise = apiClient.cpuStep(gid);
           await sleep(700);
@@ -544,7 +554,7 @@ export const RealGame = ({
         if (isMountedRef.current) setErrorToast(`CPUエラー: ${(e as Error).message}`);
       } finally {
         cpuBusyRef.current = false;
-        if (isMountedRef.current) setCpuThinking(false);
+        if (isMountedRef.current) { setCpuThinking(false); setCpuThinkSec(null); }
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- CPU 駆動は手番/要求/勝敗の変化で再評価。ref で多重起動を防止
@@ -2157,7 +2167,7 @@ export const RealGame = ({
             {gameState?.turn_info?.winner
               ? (gameState.turn_info.winner === selfId ? '🏆 勝利' : '敗北')
               : cpuThinking
-              ? 'CPU 思考中...'
+              ? (cpuThinkSec != null && cpuThinkSec >= 1 ? `CPU 思考中... ${Math.floor(cpuThinkSec)}秒` : 'CPU 思考中...')
               : isMyTurn
               ? (isMyDecision || !pendingRequest ? 'あなたの番' : '選択してください')
               : 'CPU の番'}
