@@ -469,7 +469,7 @@ const DeckDistributionModal = ({ deck, allCards, onClose }: { deck: DeckData, al
   );
 };
 
-const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, entityLabel = 'デッキ' }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, entityLabel?: string }) => {
+const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, onDuplicate, entityLabel = 'デッキ' }: { decks: DeckData[], onSelectDeck: (deck: DeckData) => void, onCreateNew: () => void, onBack: () => void, onDelete: (id: string) => void, onDuplicate: (deck: DeckData) => void, entityLabel?: string }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#222', color: '#eee' }}>
       <div style={{ padding: '15px', background: '#333', borderBottom: '1px solid #444', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -493,6 +493,20 @@ const DeckListView = ({ decks, onSelectDeck, onCreateNew, onBack, onDelete, enti
                     <div style={{ fontSize: '12px', color: '#888' }}>{deck.card_uuids.length}枚</div>
                     {deck.id && deck.id.startsWith('local-') && <div style={{ fontSize: '10px', color: '#e67e22' }}>Local Draft</div>}
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDuplicate(deck);
+                  }}
+                  title={`${entityLabel}を複製`}
+                  style={{
+                    padding: '8px 12px', marginLeft: '10px',
+                    background: '#2980b9', border: 'none', borderRadius: '4px',
+                    color: 'white', cursor: 'pointer', fontSize: '14px'
+                  }}
+                >
+                  📄
+                </button>
                 <button 
                   onClick={(e) => {
                     e.stopPropagation(); 
@@ -1035,67 +1049,88 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
     fetchData();
   }, [mode, viewOnly, ep.listUrl, ep.listKey]);
 
-  const handleSaveDeck = async () => {
-    if (!currentDeck) return;
-    
-    const deckData = { ...currentDeck };
-    const oldId = deckData.id; 
-    
+  // デッキをサーバーへ保存し、localStorage / 一覧 state を更新する。保存後のデッキを返す（失敗時は例外）。
+  const persistDeck = async (deck: DeckData): Promise<DeckData> => {
+    const deckData = { ...deck };
+    const oldId = deckData.id;
+
     if (oldId && oldId.startsWith('local-')) {
         delete deckData.id;
     }
 
+    let data;
     try {
       const res = await fetch(`${API_CONFIG.BASE_URL}${ep.base}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(deckData)
       });
-      const data = await res.json();
-
-      if (data.success) {
-         const serverId = data[ep.saveIdKey];
-         const finalDeck = { ...deckData, id: serverId };
-
-         const leaderCard = allCards.find(c => c.uuid === finalDeck.leader_id);
-         const cardObjects = finalDeck.card_uuids.map(uuid => allCards.find(c => c.uuid === uuid)).filter(Boolean);
-         const sandboxFormat = {
-            deck: { 
-                leader: leaderCard ? [leaderCard] : [],
-                cards: cardObjects
-            },
-            ...finalDeck
-         };
-         localStorage.setItem(`opcg_deck_${serverId}`, JSON.stringify(sandboxFormat));
-         
-         const currentIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
-         
-         const newIds = currentIds.filter((id: string) => id !== oldId);
-         
-         if (!newIds.includes(serverId)) {
-            newIds.push(serverId);
-         }
-
-         if (oldId && oldId.startsWith('local-') && oldId !== serverId) {
-            localStorage.removeItem(`opcg_deck_${oldId}`);
-            fetch(`${API_CONFIG.BASE_URL}/api/deck/${oldId}`, { method: 'DELETE' }).catch(() => {});
-         }
-         
-         localStorage.setItem('opcg_local_deck_ids', JSON.stringify(newIds));
-
-         setDecks(prev => {
-            const filtered = prev.filter(d => d.id !== oldId && d.id !== serverId);
-            return [finalDeck, ...filtered];
-         });
-         
-         setCurrentDeck(finalDeck);
-         alert('保存しました');
-      } else {
-         alert(`保存に失敗しました: ${data.error}`);
-      }
+      data = await res.json();
     } catch {
-              alert('サーバー通信エラーが発生しました。保存できません。'); 
-          }
+      throw new Error('サーバー通信エラーが発生しました。保存できません。');
+    }
+    if (!data.success) throw new Error(`保存に失敗しました: ${data.error}`);
+
+    const serverId = data[ep.saveIdKey];
+    const finalDeck = { ...deckData, id: serverId };
+
+    const leaderCard = allCards.find(c => c.uuid === finalDeck.leader_id);
+    const cardObjects = finalDeck.card_uuids.map(uuid => allCards.find(c => c.uuid === uuid)).filter(Boolean);
+    const sandboxFormat = {
+       deck: {
+           leader: leaderCard ? [leaderCard] : [],
+           cards: cardObjects
+       },
+       ...finalDeck
+    };
+    localStorage.setItem(`opcg_deck_${serverId}`, JSON.stringify(sandboxFormat));
+
+    const currentIds = JSON.parse(localStorage.getItem('opcg_local_deck_ids') || '[]');
+    const newIds = currentIds.filter((id: string) => id !== oldId);
+    if (!newIds.includes(serverId)) {
+       newIds.push(serverId);
+    }
+
+    if (oldId && oldId.startsWith('local-') && oldId !== serverId) {
+       localStorage.removeItem(`opcg_deck_${oldId}`);
+       fetch(`${API_CONFIG.BASE_URL}/api/deck/${oldId}`, { method: 'DELETE' }).catch(() => {});
+    }
+
+    localStorage.setItem('opcg_local_deck_ids', JSON.stringify(newIds));
+
+    setDecks(prev => {
+       const filtered = prev.filter(d => d.id !== oldId && d.id !== serverId);
+       return [finalDeck, ...filtered];
+    });
+
+    return finalDeck;
+  };
+
+  const handleSaveDeck = async () => {
+    if (!currentDeck) return;
+    try {
+      const finalDeck = await persistDeck(currentDeck);
+      setCurrentDeck(finalDeck);
+      alert('保存しました');
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
+  // デッキを複製して新規デッキとして保存する（ID は付けず、サーバー側で新規採番させる）。
+  const handleDuplicateDeck = async (deck: DeckData) => {
+    const copy: DeckData = {
+      name: `${deck.name || ep.label} のコピー`,
+      leader_id: deck.leader_id,
+      card_uuids: [...(deck.card_uuids || [])],
+      don_uuids: [...(deck.don_uuids || [])],
+    };
+    try {
+      await persistDeck(copy);
+      alert(`「${copy.name}」を作成しました`);
+    } catch (e) {
+      alert((e as Error).message);
+    }
   };
 
   const handleDeleteDeck = async (deckId: string) => {
@@ -1121,7 +1156,7 @@ export const DeckBuilder = ({ onBack, viewOnly = false }: { onBack: () => void, 
           }
   };
 
-  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} entityLabel={ep.label} />;
+  if (mode === 'list') return <DeckListView decks={decks} onSelectDeck={(d) => { setCurrentDeck(d); setMode('edit'); }} onCreateNew={() => { setCurrentDeck({ name: 'New Deck', leader_id: null, card_uuids: [], don_uuids: [] }); setMode('edit'); }} onBack={onBack} onDelete={handleDeleteDeck} onDuplicate={handleDuplicateDeck} entityLabel={ep.label} />;
   if (mode === 'edit' && currentDeck) return <DeckEditorView deck={currentDeck} allCards={allCards} onUpdateDeck={setCurrentDeck} onSave={handleSaveDeck} onBack={() => setMode('list')} onOpenCatalog={(m) => { setCatalogMode(m); setMode('catalog'); }} />;
   if (mode === 'catalog' && currentDeck) return <CardCatalogScreen allCards={allCards} mode={catalogMode} currentDeck={currentDeck} onUpdateDeck={setCurrentDeck} onClose={() => viewOnly ? onBack() : setMode('edit')} viewOnly={viewOnly} />;
   return <div>Loading...</div>;
