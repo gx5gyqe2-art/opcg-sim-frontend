@@ -364,6 +364,12 @@ const FilterModal = ({ initialFilters, onApply, traitList, setList, blockIconLis
             <FilterBtn label="+2000" active={localFilters.counter.includes('2000')} onClick={() => toggle('counter', '2000')} />
           </div>
 
+          <SectionTitle>トリガー (TRIGGER)</SectionTitle>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <FilterBtn label="トリガーあり" active={localFilters.trigger.includes('HAS')} onClick={() => toggle('trigger', 'HAS')} color="#f1c40f" />
+            <FilterBtn label="トリガーなし" active={localFilters.trigger.includes('NONE')} onClick={() => toggle('trigger', 'NONE')} />
+          </div>
+
           <SectionTitle onSelectAll={() => setLocalFilters({...localFilters, attribute: ['打', '斬', '特', '射', '知']})}>属性 (ATTRIBUTE)</SectionTitle>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['打', '斬', '特', '射', '知'].map(attr => (
@@ -780,7 +786,7 @@ const CardCatalogScreen = ({ allCards, mode, currentDeck, onUpdateDeck, onClose,
       });
     }
     if (filters.trigger.length > 0) {
-      res = res.filter(c => filters.trigger.includes(c.trigger_text ? 'HAS' : 'NONE'));
+      res = res.filter(c => filters.trigger.includes(c.trigger_text && c.trigger_text.trim() ? 'HAS' : 'NONE'));
     }
     if (filters.sets.length > 0) {
       res = res.filter(c => filters.sets.some(s => c.uuid.startsWith(s)));
